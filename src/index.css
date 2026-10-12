@@ -1,0 +1,63 @@
+/* ECHO GARDEN — Laboratory Styling */
+
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-main: #0c0a09;
+    --border-color: #292524;
+    --accent-emerald: #10b981;
+    --accent-cyan: #06b6d4;
+  }
+
+  body {
+    background-color: var(--bg-main);
+    color: #f5f5f4;
+    font-family: 'JetBrains Mono', monospace;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+  }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #1c1917;
+}
+::-webkit-scrollbar-thumb {
+  background: #292524;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #10b981;
+}
+
+/* Range input styling */
+input[type="range"] {
+  -webkit-appearance: none;
+  background: #1c1917;
+  border-radius: 4px;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 14px;
+  width: 14px;
+  border-radius: 50%;
+  background: #10b981;
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.5);
+  transition: transform 0.1s ease;
+}
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+/* 16-column grid for step sequencer previews */
+.grid-cols-16 {
+  display: grid;
+  grid-template-columns: repeat(16, minmax(0, 1fr));
+}

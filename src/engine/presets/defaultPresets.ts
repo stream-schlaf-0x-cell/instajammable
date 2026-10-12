@@ -1,0 +1,247 @@
+// Curated Musical Presets for ECHO GARDEN
+
+import { ProjectState } from '../../types';
+
+export const PRESET_WARM_ANALOG_DRONE: ProjectState = {
+  id: 'preset_warm_analog',
+  name: 'Warm Analog Meditation',
+  bpm: 84,
+  swing: 0.12,
+  seed: 142857,
+  drumParams: {
+    kick: { pitch: 50, decay: 0.42, tone: 0.3, drive: 0.25, volume: 0.85, pan: 0, midiNote: 36 },
+    snare: { pitch: 175, decay: 0.2, tone: 0.45, drive: 0.1, volume: 0.7, pan: -0.15, midiNote: 38 },
+    hihat: { pitch: 62, decay: 0.06, tone: 0.5, drive: 0, volume: 0.65, pan: 0.25, midiNote: 42 },
+    perc: { pitch: 58, decay: 0.14, tone: 0.6, drive: 0.1, volume: 0.75, pan: -0.3, midiNote: 37 },
+  },
+  ambientParams: {
+    rootNote: 36, // C2 deep base
+    scale: 'dorian',
+    osc1Wave: 'sawtooth',
+    osc2Wave: 'sawtooth',
+    osc3Wave: 'triangle',
+    detuneSpread: 18,
+    subLevel: 0.4,
+    filterCutoff: 1200,
+    filterResonance: 3.2,
+    filterEnvAmount: 0.35,
+    attack: 2.2,
+    decay: 3.0,
+    sustain: 0.85,
+    release: 4.5,
+    lfoRate: 0.12,
+    lfoDepth: 0.3,
+    driftAmount: 0.4,
+    volume: 0.8,
+  },
+  effectsParams: {
+    delayTime: 0.375, // dotted eighth
+    delayFeedback: 0.55,
+    delayMix: 0.35,
+    delayFlutter: 0.25,
+    reverbSize: 0.85,
+    reverbDecay: 4.8,
+    reverbMix: 0.4,
+    masterDrive: 0.2,
+  },
+  layers: [
+    {
+      id: 'layer_kick',
+      name: 'Sub Kick',
+      type: 'drum',
+      drumVoice: 'kick',
+      muted: false,
+      solo: false,
+      volume: 0.9,
+      midiChannel: 10,
+      algorithmType: 'euclidean',
+      settings: { steps: 16, pulses: 4, rotation: 0, velocity: 105, accentVelocity: 125, accentSteps: [0], density: 1, probability: 1 },
+      boundaries: {
+        pulses: { min: 2, max: 7, allowMutation: true, mutationProbability: 0.3, mutationMagnitude: 0.25, speed: 1, locked: false },
+        rotation: { min: 0, max: 15, allowMutation: true, mutationProbability: 0.25, mutationMagnitude: 0.2, speed: 1, locked: false },
+        density: { min: 0.5, max: 1.0, allowMutation: true, mutationProbability: 0.3, mutationMagnitude: 0.2, speed: 1, locked: false },
+      },
+      locked: false,
+      frozen: false,
+    },
+    {
+      id: 'layer_snare',
+      name: 'Organic Rim / Snare',
+      type: 'drum',
+      drumVoice: 'snare',
+      muted: false,
+      solo: false,
+      volume: 0.75,
+      midiChannel: 10,
+      algorithmType: 'probabilistic',
+      settings: {
+        stepProbabilities: [0, 0, 0, 0, 0.9, 0, 0.1, 0, 0, 0, 0, 0, 0.95, 0.05, 0.2, 0],
+        density: 0.8,
+        accentProbability: 0.3,
+        ghostProbability: 0.25,
+        velocity: 95,
+        accentVelocity: 120,
+        humanizeJitter: 0.005,
+      },
+      boundaries: {
+        density: { min: 0.4, max: 1.0, allowMutation: true, mutationProbability: 0.35, mutationMagnitude: 0.25, speed: 1, locked: false },
+      },
+      locked: false,
+      frozen: false,
+    },
+    {
+      id: 'layer_hat',
+      name: 'Micro Hat',
+      type: 'drum',
+      drumVoice: 'hihat',
+      muted: false,
+      solo: false,
+      volume: 0.7,
+      midiChannel: 10,
+      algorithmType: 'polymetric',
+      settings: { loopLength: 7, activeHits: [0, 2, 4, 6], phaseOffset: 0, velocity: 88, accentVelocity: 110, density: 0.85 },
+      boundaries: {
+        loopLength: { min: 3, max: 13, allowMutation: true, mutationProbability: 0.3, mutationMagnitude: 0.3, speed: 1, locked: false },
+        density: { min: 0.4, max: 1.0, allowMutation: true, mutationProbability: 0.4, mutationMagnitude: 0.2, speed: 1, locked: false },
+      },
+      locked: false,
+      frozen: false,
+    },
+    {
+      id: 'layer_perc',
+      name: 'Organic Droplets',
+      type: 'drum',
+      drumVoice: 'perc',
+      muted: false,
+      solo: false,
+      volume: 0.8,
+      midiChannel: 10,
+      algorithmType: 'densityBurst',
+      settings: { baseDensity: 0.3, burstChance: 0.35, burstDecay: 0.75, restLikelihood: 0.45, velocity: 90 },
+      boundaries: {
+        baseDensity: { min: 0.1, max: 0.7, allowMutation: true, mutationProbability: 0.4, mutationMagnitude: 0.3, speed: 1, locked: false },
+      },
+      locked: false,
+      frozen: false,
+    },
+    {
+      id: 'layer_ambient_drone',
+      name: 'Harmonic Drone',
+      type: 'ambient',
+      muted: false,
+      solo: false,
+      volume: 0.85,
+      midiChannel: 1,
+      algorithmType: 'harmonicDrone',
+      settings: { rootNote: 36, scale: 'dorian', chordDegree: 0, voiceSpread: 2, density: 0.9, holdBars: 4, inversion: 0, velocity: 85 },
+      boundaries: {
+        rootNote: { min: 24, max: 48, allowMutation: true, mutationProbability: 0.2, mutationMagnitude: 0.2, speed: 1, locked: false },
+        scale: { min: 0, max: 7, allowMutation: true, mutationProbability: 0.15, mutationMagnitude: 0.2, speed: 1, locked: false },
+      },
+      locked: false,
+      frozen: false,
+    },
+  ],
+  modRoutes: [
+    { id: 'mod_1', source: 'drumDensity', destination: 'ambientCutoff', depth: 0.65, enabled: true },
+    { id: 'mod_2', source: 'rhythmicAccent', destination: 'reverbMix', depth: 0.4, enabled: true },
+    { id: 'mod_3', source: 'ambientBrightness', destination: 'drumProbability', depth: 0.3, enabled: true },
+    { id: 'mod_4', source: 'globalChaos', destination: 'delayFeedback', depth: 0.45, enabled: true },
+  ],
+  macros: [
+    {
+      id: 'macro_1',
+      name: 'Harmonic Tension',
+      value: 0.35,
+      mappings: [
+        { target: 'ambient.filterCutoff', min: 250, max: 4500 },
+        { target: 'ambient.filterResonance', min: 1.0, max: 6.5 },
+      ],
+    },
+    {
+      id: 'macro_2',
+      name: 'Rhythmic Entropy',
+      value: 0.4,
+      mappings: [
+        { target: 'layers.density', min: 0.2, max: 1.0 },
+      ],
+    },
+    {
+      id: 'macro_3',
+      name: 'Spatial Infinity',
+      value: 0.45,
+      mappings: [
+        { target: 'effects.reverbMix', min: 0.1, max: 0.75 },
+        { target: 'effects.delayFeedback', min: 0.2, max: 0.88 },
+      ],
+    },
+    {
+      id: 'macro_4',
+      name: 'Organic Drift',
+      value: 0.3,
+      mappings: [
+        { target: 'ambient.driftAmount', min: 0.05, max: 0.8 },
+        { target: 'effects.delayFlutter', min: 0.05, max: 0.6 },
+      ],
+    },
+  ],
+  globalEvolveActive: false,
+  globalEvolveRate: 0.25,
+};
+
+export const PRESET_IDM_POLYMETRIC: ProjectState = {
+  ...PRESET_WARM_ANALOG_DRONE,
+  id: 'preset_idm_polymetric',
+  name: 'Autechre / IDM Complexities',
+  bpm: 124,
+  swing: 0.28,
+  seed: 987654,
+  drumParams: {
+    kick: { pitch: 62, decay: 0.24, tone: 0.6, drive: 0.5, volume: 0.9, pan: 0, midiNote: 36 },
+    snare: { pitch: 210, decay: 0.16, tone: 0.8, drive: 0.3, volume: 0.8, pan: 0.2, midiNote: 38 },
+    hihat: { pitch: 70, decay: 0.04, tone: 0.75, drive: 0, volume: 0.75, pan: -0.35, midiNote: 42 },
+    perc: { pitch: 68, decay: 0.08, tone: 0.85, drive: 0.4, volume: 0.85, pan: 0.4, midiNote: 37 },
+  },
+  ambientParams: {
+    ...PRESET_WARM_ANALOG_DRONE.ambientParams,
+    rootNote: 43, // G2
+    scale: 'phrygian',
+    filterCutoff: 2200,
+    filterResonance: 5.5,
+    attack: 0.4,
+    release: 2.2,
+  },
+};
+
+export const PRESET_DARK_CINEMATIC: ProjectState = {
+  ...PRESET_WARM_ANALOG_DRONE,
+  id: 'preset_dark_cinematic',
+  name: 'Sub-Zero Dark Atmosphere',
+  bpm: 68,
+  swing: 0.05,
+  seed: 314159,
+  ambientParams: {
+    ...PRESET_WARM_ANALOG_DRONE.ambientParams,
+    rootNote: 33, // A1 sub rumble
+    scale: 'hirajoshi',
+    detuneSpread: 28,
+    subLevel: 0.6,
+    filterCutoff: 750,
+    filterResonance: 4.8,
+    attack: 3.5,
+    release: 6.0,
+    driftAmount: 0.6,
+  },
+  effectsParams: {
+    ...PRESET_WARM_ANALOG_DRONE.effectsParams,
+    reverbMix: 0.55,
+    delayMix: 0.45,
+    delayFeedback: 0.7,
+  },
+};
+
+export const DEFAULT_PRESETS: ProjectState[] = [
+  PRESET_WARM_ANALOG_DRONE,
+  PRESET_IDM_POLYMETRIC,
+  PRESET_DARK_CINEMATIC,
+];
