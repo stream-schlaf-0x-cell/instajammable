@@ -469,6 +469,16 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
                     <Sliders size={14} />
                     <span>Alle Spuren als Stems herunterladen</span>
                   </button>
+                  <a
+                    href="./templates/InstaJammable_Studio_Catch.als"
+                    download="InstaJammable_Studio_Catch.als"
+                    className="button"
+                    style={{ textDecoration: 'none' }}
+                    title="Live-Routing-Vorlage für Ableton Live 12 mit vorkonfiguriertem IAC-Empfang für DS Kick & Xpand!2"
+                  >
+                    <Download size={14} />
+                    <span>Ableton Catch Template (.als)</span>
+                  </a>
                 </div>
               </div>
 
