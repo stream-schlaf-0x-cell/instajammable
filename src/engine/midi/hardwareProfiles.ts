@@ -1,32 +1,41 @@
-// Hardware Controller Profiles (Behringer DeepMind 6 & Akai APC40)
+// Verified Hardware Controller Profiles (Behringer DeepMind 6 & Akai APC40)
 
 export interface HardwareControlMapping {
   name: string;
   cc: number;
   min: number;
   max: number;
+  defaultValue: number;
   description: string;
+}
+
+export interface DeepMindHardwareState {
+  enabled: boolean;
+  midiChannel: number;
+  sendRateLimitMs: number; // rate-limit CC transmission to avoid MIDI buffer saturation
+  lastSentValues: Record<number, number>;
+  lastSentTimestamps: Record<number, number>;
 }
 
 export const DEEPMIND_6_PROFILE = {
   name: 'Behringer DeepMind 6',
   type: 'Analog Synthesizer',
   defaultMidiChannel: 1,
+  manualCitation: 'Behringer DeepMind 6 User Manual, pp. 132–133 (CC Mode)',
   description:
-    '6-voice true analog synthesizer with dual DCOs, 2-pole/4-pole resonant analog lowpass filter, 3 ADSR envelopes, and 2 LFOs.',
-  bestUsage:
-    'Ideal for warm analog drones, slowly modulating pad soundscapes, resonant filter sweeps, and polyphonic harmonic foundation.',
+    '6-voice true analog synthesizer. When DeepMind 6 is set to MIDI CC Mode in Global Settings, these standard CCs control the actual analog filters and VCAs.',
+  connectionNote:
+    'Connect DeepMind 6 directly via USB to Mac (or via a dedicated MIDI interface). A standard Scarlett 2i2 has no 5-pin MIDI jacks; connect DeepMind analog audio outputs to Scarlett audio inputs 1 & 2.',
+  // Verified from DeepMind 6 Manual pp. 132-133:
   controls: [
-    { name: 'Mod Wheel / Vibrato', cc: 1, min: 0, max: 127, description: 'LFO to Pitch Depth' },
-    { name: 'Portamento Time', cc: 5, min: 0, max: 127, description: 'Glide time between notes' },
-    { name: 'VCF Cutoff', cc: 74, min: 0, max: 127, description: 'Analog Filter Cutoff frequency' },
-    { name: 'VCF Resonance', cc: 71, min: 0, max: 127, description: 'Analog Filter Resonance (Q)' },
-    { name: 'VCF Env Depth', cc: 73, min: 0, max: 127, description: 'Envelope modulation to cutoff' },
-    { name: 'VCF LFO Depth', cc: 75, min: 0, max: 127, description: 'LFO 1/2 modulation to cutoff' },
-    { name: 'VCA Decay', cc: 79, min: 0, max: 127, description: 'Amplifier Envelope Decay time' },
-    { name: 'VCA Release', cc: 72, min: 0, max: 127, description: 'Amplifier Envelope Release time' },
-    { name: 'FX Param 1', cc: 12, min: 0, max: 127, description: 'Digital FX slot 1 primary mix' },
-    { name: 'FX Param 2', cc: 13, min: 0, max: 127, description: 'Digital FX slot 2 primary mix' },
+    { name: 'VCF Frequency / Cutoff', cc: 29, min: 0, max: 127, defaultValue: 64, description: 'Analog Lowpass Filter Cutoff (Manual p. 132)' },
+    { name: 'VCF Resonance', cc: 30, min: 0, max: 127, defaultValue: 20, description: 'Analog Filter Resonance (Q) (Manual p. 132)' },
+    { name: 'VCF Env Mod Depth', cc: 31, min: 0, max: 127, defaultValue: 40, description: 'VCF Envelope Modulation Depth (Manual p. 132)' },
+    { name: 'VCF LFO Mod Depth', cc: 33, min: 0, max: 127, defaultValue: 15, description: 'LFO to VCF Cutoff Depth (Manual p. 132)' },
+    { name: 'VCA Env Decay', cc: 39, min: 0, max: 127, defaultValue: 70, description: 'VCA Envelope Decay Time (Manual p. 133)' },
+    { name: 'VCA Env Release', cc: 41, min: 0, max: 127, defaultValue: 80, description: 'VCA Envelope Release Time (Manual p. 133)' },
+    { name: 'Modulation Wheel', cc: 1, min: 0, max: 127, defaultValue: 0, description: 'Pitch LFO Vibrato Depth' },
+    { name: 'Portamento Time', cc: 5, min: 0, max: 127, defaultValue: 0, description: 'Polyphonic Portamento Glide Speed' },
   ] as HardwareControlMapping[],
 };
 
@@ -34,11 +43,11 @@ export const APC40_PROFILE = {
   name: 'Akai APC40',
   type: 'Performance MIDI Controller',
   description:
-    'Grid matrix and fader controller. Adaptable for toggling layer mute/solo, triggering mutations, and macro fader control.',
+    'Physical controller mapping for live performance manipulation in ECHO GARDEN.',
   mappings: [
-    { name: 'Track Faders 1-4', cc: 7, description: 'Layer Volumes (Kick, Snare, Hats, Perc)' },
-    { name: 'Master Fader', cc: 14, description: 'Master Output Level' },
-    { name: 'Device Control Knobs 1-4', cc: 16, description: 'ECHO GARDEN Macros 1 to 4' },
-    { name: 'Clip Stop / Mute Buttons', note: 50, description: 'Freeze / Mutate layer trigger' },
+    { name: 'Track Faders 1-5', cc: 7, description: 'Channel volumes for Kick, Snare, Hats, Perc, Drone' },
+    { name: 'Master Fader', cc: 14, description: 'Master Output Volume' },
+    { name: 'Device Knobs 1-4', cc: 16, description: 'Performance Macros 1 to 4' },
+    { name: 'Track Stop Buttons', note: 52, description: 'Toggle Layer Freeze' },
   ],
 };

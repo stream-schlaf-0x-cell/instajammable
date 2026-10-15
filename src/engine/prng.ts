@@ -1,10 +1,12 @@
-// Deterministic Mulberry32 Pseudo-Random Number Generator
+// Deterministic Mulberry32 Pseudo-Random Number Generator with Independent Streams & State Preservation
 
 export class PRNG {
   private state: number;
 
-  constructor(seed: number = Date.now()) {
-    this.state = seed >>> 0;
+  constructor(seed?: number) {
+    // Explicitly support seed 0 without falling back to Date.now()
+    const initialSeed = seed !== undefined ? seed : Date.now();
+    this.state = initialSeed >>> 0;
   }
 
   public setSeed(seed: number): void {
@@ -13,6 +15,24 @@ export class PRNG {
 
   public getSeed(): number {
     return this.state;
+  }
+
+  public getState(): number {
+    return this.state;
+  }
+
+  public setState(savedState: number): void {
+    this.state = savedState >>> 0;
+  }
+
+  // Fork an independent deterministic sub-stream for a specific layer or algorithm
+  public fork(streamIndex: number): PRNG {
+    // SplitMix32 style hash of current state + stream index
+    let z = (this.state + Math.imul(streamIndex + 1, 0x9e3779b9)) >>> 0;
+    z = Math.imul(z ^ (z >>> 16), 0x21f0aaad);
+    z = Math.imul(z ^ (z >>> 15), 0x735a2d97);
+    z = (z ^ (z >>> 15)) >>> 0;
+    return new PRNG(z);
   }
 
   // Returns pseudo-random float between 0 (inclusive) and 1 (exclusive)
@@ -35,6 +55,8 @@ export class PRNG {
 
   // Boolean with specified probability [0, 1]
   public chance(probability: number): boolean {
+    if (probability <= 0) return false;
+    if (probability >= 1) return true;
     return this.next() < probability;
   }
 
@@ -50,6 +72,7 @@ export class PRNG {
 
   // Pick random element from array
   public pick<T>(arr: T[]): T {
+    if (arr.length === 0) return undefined as any;
     const idx = Math.floor(this.next() * arr.length);
     return arr[idx];
   }

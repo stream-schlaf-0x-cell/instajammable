@@ -1,13 +1,19 @@
 {
-  "name": "echo-garden",
+  "name": "instajammable",
   "private": true,
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "typecheck": "tsc -b",
+    "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "tsx src/test/verifyEngine.ts"
+    "test": "node --import tsx --test src/test/*.test.ts",
+    "test:legacy": "node --import tsx src/test/verifyEngine.ts",
+    "audio:check": "node --import tsx scripts/audio-check.mts"
   },
   "dependencies": {
     "lucide-react": "^1.16.0",
@@ -16,6 +22,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.1",
+    "@types/node": "^22.13.9",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",
@@ -23,5 +30,6 @@
     "tsx": "^4.19.3",
     "typescript": "^5.7.3",
     "vite": "^6.2.0"
-  }
+  },
+  "description": "A browser instrument for generative ambient and lo-fi jams, with rolling MIDI capture and a piano-roll editor."
 }

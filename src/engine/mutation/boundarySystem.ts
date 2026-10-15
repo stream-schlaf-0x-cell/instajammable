@@ -1,4 +1,4 @@
-// Bounded Randomness & Mutation System
+// Bounded Randomness & Mutation System with Typed Parameter Constraints & Boundary Adherence
 
 import { ProjectState, LayerState, ParameterBoundary } from '../../types';
 import { PRNG } from '../prng';
@@ -6,7 +6,7 @@ import { PRNG } from '../prng';
 export class BoundarySystem {
   private prng: PRNG;
 
-  constructor(seed: number = Date.now()) {
+  constructor(seed: number = 42) {
     this.prng = new PRNG(seed);
   }
 
@@ -14,7 +14,7 @@ export class BoundarySystem {
     this.prng.setSeed(seed);
   }
 
-  // Mutates a single numeric value bounded by its ParameterBoundary
+  // Mutates a numeric value strictly bounded by its ParameterBoundary
   public mutateValue(current: number, boundary: ParameterBoundary, intensity: number = 0.5): number {
     if (!boundary.allowMutation || boundary.locked) {
       return current;
@@ -25,44 +25,47 @@ export class BoundarySystem {
     }
 
     const range = boundary.max - boundary.min;
-    const maxDelta = range * boundary.mutationMagnitude * intensity;
-    const delta = (this.prng.next() * 2 - 1) * maxDelta;
-    const candidate = current + delta;
+    if (range <= 0) return boundary.min;
 
-    return Math.max(boundary.min, Math.min(boundary.max, candidate));
+    const maxDelta = range * (boundary.mutationMagnitude || 0.2) * Math.max(0.05, Math.min(1.0, intensity));
+    const delta = (this.prng.next() * 2.0 - 1.0) * maxDelta;
+    let candidate = current + delta;
+
+    candidate = Math.max(boundary.min, Math.min(boundary.max, candidate));
+
+    // Enforce integer constraint for steps, pulses, lengths, MIDI pitches
+    if (boundary.isInteger) {
+      candidate = Math.round(candidate);
+    }
+
+    return candidate;
   }
 
-  // Apply discrete mutation to an entire project state
+  // Apply bounded mutation across unlocked ambient, effects, and layer parameters
   public mutateProject(state: ProjectState, intensity: number = 0.5): ProjectState {
     const nextState: ProjectState = JSON.parse(JSON.stringify(state));
 
-    // Mutate ambient synth parameters
+    // 1. Mutate Ambient Synth parameters using editable project boundaries
     const amb = nextState.ambientParams;
-    const ambBoundaries: Record<string, ParameterBoundary> = {
-      filterCutoff: { min: 60, max: 8000, allowMutation: true, mutationProbability: 0.6, mutationMagnitude: 0.25, speed: 1, locked: false },
-      filterResonance: { min: 0.5, max: 9.0, allowMutation: true, mutationProbability: 0.4, mutationMagnitude: 0.2, speed: 1, locked: false },
-      detuneSpread: { min: 2, max: 35, allowMutation: true, mutationProbability: 0.5, mutationMagnitude: 0.2, speed: 1, locked: false },
-      attack: { min: 0.1, max: 4.0, allowMutation: true, mutationProbability: 0.3, mutationMagnitude: 0.25, speed: 1, locked: false },
-    };
+    const ambBounds = nextState.ambientBoundaries || {};
 
-    amb.filterCutoff = this.mutateValue(amb.filterCutoff, ambBoundaries.filterCutoff, intensity);
-    amb.filterResonance = this.mutateValue(amb.filterResonance, ambBoundaries.filterResonance, intensity);
-    amb.detuneSpread = this.mutateValue(amb.detuneSpread, ambBoundaries.detuneSpread, intensity);
-    amb.attack = this.mutateValue(amb.attack, ambBoundaries.attack, intensity);
+    Object.entries(ambBounds).forEach(([paramName, boundary]) => {
+      if (paramName in amb && typeof (amb as any)[paramName] === 'number') {
+        (amb as any)[paramName] = this.mutateValue((amb as any)[paramName], boundary, intensity);
+      }
+    });
 
-    // Mutate effects parameters
+    // 2. Mutate Effects parameters using editable project boundaries
     const fx = nextState.effectsParams;
-    const fxBoundaries: Record<string, ParameterBoundary> = {
-      delayFeedback: { min: 0.1, max: 0.85, allowMutation: true, mutationProbability: 0.4, mutationMagnitude: 0.15, speed: 1, locked: false },
-      delayMix: { min: 0.1, max: 0.6, allowMutation: true, mutationProbability: 0.3, mutationMagnitude: 0.2, speed: 1, locked: false },
-      reverbMix: { min: 0.15, max: 0.7, allowMutation: true, mutationProbability: 0.4, mutationMagnitude: 0.2, speed: 1, locked: false },
-    };
+    const fxBounds = nextState.effectsBoundaries || {};
 
-    fx.delayFeedback = this.mutateValue(fx.delayFeedback, fxBoundaries.delayFeedback, intensity);
-    fx.delayMix = this.mutateValue(fx.delayMix, fxBoundaries.delayMix, intensity);
-    fx.reverbMix = this.mutateValue(fx.reverbMix, fxBoundaries.reverbMix, intensity);
+    Object.entries(fxBounds).forEach(([paramName, boundary]) => {
+      if (paramName in fx && typeof (fx as any)[paramName] === 'number') {
+        (fx as any)[paramName] = this.mutateValue((fx as any)[paramName], boundary, intensity);
+      }
+    });
 
-    // Mutate individual layers that are not frozen or locked
+    // 3. Mutate Unfrozen & Unlocked layers
     nextState.layers.forEach((layer) => {
       if (layer.frozen || layer.locked) return;
 
@@ -76,17 +79,15 @@ export class BoundarySystem {
     return nextState;
   }
 
-  // Gradual evolution step (called periodically over bars when 'evolve' is active)
-  public evolveStep(state: ProjectState, evolveRate: number = 0.2): ProjectState {
-    return this.mutateProject(state, evolveRate * 0.4);
+  // Gradual evolution step
+  public evolveStep(state: ProjectState, evolveRate: number = 0.25): ProjectState {
+    return this.mutateProject(state, evolveRate * 0.35);
   }
 
-  // Freeze layer
   public setLayerFrozen(layer: LayerState, frozen: boolean): void {
     layer.frozen = frozen;
   }
 
-  // Lock layer
   public setLayerLocked(layer: LayerState, locked: boolean): void {
     layer.locked = locked;
   }

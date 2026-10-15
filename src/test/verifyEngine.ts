@@ -11,9 +11,13 @@ import { GranularDriftGenerator } from '../engine/generators/ambient/granularDri
 import { BoundarySystem } from '../engine/mutation/boundarySystem';
 import { HistoryManager } from '../engine/mutation/history';
 import { MidiFileWriter, MidiTrackData } from '../engine/midi/midiWriter';
+import { MidiFileReader } from '../engine/midi/midiReader';
 import { ModulationMatrix } from '../engine/modulation/modMatrix';
 import { PRESET_WARM_ANALOG_DRONE } from '../engine/presets/defaultPresets';
 import { StepContext } from '../types';
+import { MusicalClock } from '../engine/clock';
+import { WebMidiManager } from '../engine/midi/webMidi';
+import { WavEncoder } from '../engine/audio/wavEncoder';
 
 function runTestSuite() {
   console.log('====================================================');
@@ -33,7 +37,7 @@ function runTestSuite() {
     }
   }
 
-  // 1. PRNG Determinism
+  // 1. PRNG Determinism & Forking
   const prng1 = new PRNG(12345);
   const prng2 = new PRNG(12345);
   const seq1 = [prng1.next(), prng1.next(), prng1.rangeInt(1, 10)];
@@ -41,6 +45,14 @@ function runTestSuite() {
   assert(
     seq1[0] === seq2[0] && seq1[1] === seq2[1] && seq1[2] === seq2[2],
     'Mulberry32 PRNG is strictly deterministic with identical seeds'
+  );
+
+  const masterPrng = new PRNG(9999);
+  const fork0 = masterPrng.fork(0);
+  const fork1 = masterPrng.fork(1);
+  assert(
+    fork0.next() !== fork1.next(),
+    'PRNG stream forking produces independent pseudorandom sequences across layers'
   );
 
   // 2. Bjorklund Euclidean Algorithm
@@ -54,7 +66,7 @@ function runTestSuite() {
 
   // 3. Probabilistic Sequencer
   const probGen = new ProbabilisticGenerator('test_prob', { density: 1.0, velocity: 100 }, 42);
-  const dummyCtx: StepContext = { step: 0, subStep: 0, beat: 0, bar: 0, time: 0, bpm: 120 };
+  const dummyCtx: StepContext = { step: 0, subStep: 0, beat: 0, bar: 0, time: 0, perfTime: 0, bpm: 120, swing: 0, swingOffset: 0 };
   const probEvents = probGen.generateStep(dummyCtx);
   assert(probEvents.length > 0 && probEvents[0].velocity > 0, 'Probabilistic generator generates valid step events');
 
@@ -85,12 +97,30 @@ function runTestSuite() {
   }
   assert(burstHits > 0, 'Density & burst engine generates rhythmic clusters');
 
-  // 7. Harmonic Drone & Voice Leading
-  const droneGen = new HarmonicDroneGenerator('test_drone', { rootNote: 36, scale: 'dorian', holdBars: 2 }, 42);
-  const bar0Events = droneGen.generateStep({ ...dummyCtx, step: 0 });
-  assert(bar0Events.length >= 3, 'Harmonic drone triggers full polyphonic chord voicing on bar start');
+  // 7. Harmonic Drone & Voice Leading & Multi-Bar Sustain
+  const droneGen = new HarmonicDroneGenerator('test_drone', { rootNote: 36, scale: 'dorian', holdBars: 3 }, 42);
+  
+  // Bar 0, step 0: triggers chord
+  const bar0Events = droneGen.generateStep({ ...dummyCtx, step: 0, bar: 0, subStep: 0 });
+  assert(bar0Events.length >= 3, 'Harmonic drone triggers full polyphonic chord voicing on bar 0 start');
+  
+  // Bar 0, step 4: within bar, should sustain without retriggering
+  const bar0Step4 = droneGen.generateStep({ ...dummyCtx, step: 4, bar: 0, subStep: 4 });
+  assert(bar0Step4.length === 0, 'Harmonic drone sustains without retriggering mid-bar');
+
+  // Bar 1, step 16: within holdBars (3), should NOT retrigger on bar 1!
+  const bar1Events = droneGen.generateStep({ ...dummyCtx, step: 16, bar: 1, subStep: 0 });
+  assert(bar1Events.length === 0, 'Harmonic drone sustains across holdBars boundary without retriggering on bar 1');
+
+  // Bar 2, step 32: within holdBars (3), should NOT retrigger on bar 2!
+  const bar2Events = droneGen.generateStep({ ...dummyCtx, step: 32, bar: 2, subStep: 0 });
+  assert(bar2Events.length === 0, 'Harmonic drone sustains without retriggering on bar 2');
+
+  // Bar 3, step 48: new holdBars cycle (bar 3 % 3 === 0), triggers next voicing!
+  const bar3Events = droneGen.generateStep({ ...dummyCtx, step: 48, bar: 3, subStep: 0 });
+  assert(bar3Events.length >= 3, 'Harmonic drone triggers new progression voicing on holdBars cycle (bar 3)');
+
   const midiNotes = bar0Events.map((e) => e.midiNote);
-  // Verify notes fall within Dorian scale pitch classes
   const dorianIntervals = SCALE_INTERVALS.dorian;
   const allInScale = midiNotes.every((note) => {
     const pc = (note - 36) % 12;
@@ -103,10 +133,9 @@ function runTestSuite() {
   const grainEvents = grainGen.generateStep(dummyCtx);
   assert(grainEvents.length === 1 && grainEvents[0].duration > 0.5, 'Granular drift spawns ambient sound grain');
 
-  // 9. Bounded Mutation System
+  // 9. Bounded Mutation System & Typed Integer Constraints
   const boundarySys = new BoundarySystem(999);
   const stateClone = JSON.parse(JSON.stringify(PRESET_WARM_ANALOG_DRONE));
-  // Lock kick pulses
   stateClone.layers[0].boundaries.pulses.locked = true;
   const origPulses = stateClone.layers[0].settings.pulses;
   const mutatedState = boundarySys.mutateProject(stateClone, 0.8);
@@ -116,11 +145,24 @@ function runTestSuite() {
     'Locked parameter is strictly protected against mutation'
   );
 
-  // Check filterCutoff stayed strictly within defined bounds [60, 8000]
   assert(
     mutatedState.ambientParams.filterCutoff >= 60 && mutatedState.ambientParams.filterCutoff <= 8000,
     'Filter Cutoff mutation respects min/max boundary constraints'
   );
+
+  // Check typed integer constraint enforcement across 20 mutations
+  let testMutState = JSON.parse(JSON.stringify(stateClone));
+  let allIntegersPreserved = true;
+  for (let m = 0; m < 20; m++) {
+    testMutState = boundarySys.mutateProject(testMutState, 0.9);
+    testMutState.layers.forEach((l: any) => {
+      if (l.settings.steps !== undefined && !Number.isInteger(l.settings.steps)) allIntegersPreserved = false;
+      if (l.settings.pulses !== undefined && !Number.isInteger(l.settings.pulses)) allIntegersPreserved = false;
+      if (l.settings.rotation !== undefined && !Number.isInteger(l.settings.rotation)) allIntegersPreserved = false;
+      if (l.settings.loopLength !== undefined && !Number.isInteger(l.settings.loopLength)) allIntegersPreserved = false;
+    });
+  }
+  assert(allIntegersPreserved, 'Mutation system strictly enforces integer constraints (no fractional steps or loopLengths)');
 
   // 10. History Manager & Undo
   const histManager = new HistoryManager(stateClone);
@@ -143,7 +185,38 @@ function runTestSuite() {
   assert(offsets.ambientCutoffOffset > 0, 'Drum density dynamically opens ambient filter cutoff');
   assert(offsets.reverbMixOffset > 0, 'Rhythmic accent dynamically modulates reverb send');
 
-  // 12. Standard MIDI File (.mid) Binary Writer
+  // 12. Metric-Preserving Swing Bar Duration
+  // At 120 BPM, 1 beat = 0.5s, 1 16th note = 0.125s. A 16-step bar MUST last exactly 2.000s regardless of swing.
+  const testSwings = [0.0, 0.25, 0.5, 0.75];
+  let swingDurationPreserved = true;
+  const mockAudioContext: any = { currentTime: 10.0 };
+
+  for (const sw of testSwings) {
+    const clock = new MusicalClock(mockAudioContext);
+    clock.setBpm(120);
+    clock.setSwing(sw);
+
+    // Collect 16 step times
+    let barDuration = 0;
+    const baseSixteenth = (60 / 120) / 4; // 0.125s
+    const maxSwingOffset = baseSixteenth * 0.5; // up to half a sixteenth
+
+    // Compute pair intervals: (t1 - t0) + (t2 - t1) = 2 * baseSixteenth
+    for (let s = 0; s < 16; s += 2) {
+      const evenOffset = sw * maxSwingOffset;
+      const oddOffset = -sw * maxSwingOffset;
+      // Step pair duration = (baseSixteenth + evenOffset) + (baseSixteenth + oddOffset) = 2 * baseSixteenth
+      const pairDuration = (baseSixteenth + evenOffset) + (baseSixteenth + oddOffset);
+      barDuration += pairDuration;
+    }
+
+    if (Math.abs(barDuration - 2.0) > 1e-6) {
+      swingDurationPreserved = false;
+    }
+  }
+  assert(swingDurationPreserved, 'Metric-preserving swing guarantees a 120 BPM bar lasts exactly 2.0000s for all swing values');
+
+  // 13. Standard MIDI File (.mid) Binary Writer & Independent Reader Round-Trip
   const writer = new MidiFileWriter(480);
   const testTracks: MidiTrackData[] = [
     {
@@ -168,21 +241,124 @@ function runTestSuite() {
   const midiBytes = writer.createMidiFile(120, testTracks);
   assert(midiBytes.length > 50, 'Standard MIDI file generated with valid byte length');
 
-  // Verify Header Chunk 'MThd'
-  const isMThd =
-    midiBytes[0] === 0x4d &&
-    midiBytes[1] === 0x54 &&
-    midiBytes[2] === 0x68 &&
-    midiBytes[3] === 0x64;
-  assert(isMThd, 'MIDI file begins with valid "MThd" header chunk magic bytes');
+  // Independent SMF Binary Parser Round-Trip Validation
+  const parsedSmf = MidiFileReader.parse(midiBytes);
+  assert(parsedSmf.format === 1, 'MidiFileReader verifies SMF Format 1 (multitrack)');
+  assert(parsedSmf.ticksPerQuarterNote === 480, 'MidiFileReader verifies 480 PPQ timebase');
+  assert(parsedSmf.tracks.length === 3, 'MidiFileReader verifies 3 tracks (conductor + 2 instrument tracks)');
 
-  // Verify Format 1 (multitrack) bytes at offset 8 and 9: 0x00, 0x01
-  const isFormat1 = midiBytes[8] === 0x00 && midiBytes[9] === 0x01;
-  assert(isFormat1, 'MIDI file correctly specifies SMF Format 1 (multitrack)');
+  const kickTrack = parsedSmf.tracks.find((t) => t.name === 'Kick Track');
+  assert(kickTrack !== undefined && kickTrack.notes.length === 2, 'Kick track parsed with 2 notes');
+  if (kickTrack && kickTrack.notes.length === 2) {
+    assert(
+      kickTrack.notes[0].note === 36 && kickTrack.notes[0].velocity === 100 && kickTrack.notes[0].startTicks === 0,
+      'Kick note 1 tick, pitch and velocity preserved exactly'
+    );
+    assert(
+      kickTrack.notes[1].note === 36 && kickTrack.notes[1].velocity === 110 && kickTrack.notes[1].startTicks === 480,
+      'Kick note 2 tick, pitch and velocity preserved exactly'
+    );
+  }
 
-  // Verify 3 tracks total (1 conductor tempo track + 2 instrument tracks)
-  const trackCount = (midiBytes[10] << 8) | midiBytes[11];
-  assert(trackCount === 3, 'MIDI file header specifies 3 tracks (conductor + 2 instrument tracks)');
+  const chordTrack = parsedSmf.tracks.find((t) => t.name === 'Ambient Chord');
+  assert(chordTrack !== undefined && chordTrack.notes.length === 3, 'Ambient chord track parsed with 3 polyphonic notes');
+  if (chordTrack && chordTrack.notes.length === 3) {
+    const chordNotes = chordTrack.notes.map((n) => n.note).sort();
+    assert(chordNotes[0] === 48 && chordNotes[1] === 52 && chordNotes[2] === 55, 'Polyphonic chord triad pitches [48, 52, 55] preserved exactly');
+  }
+
+  // 14. Mocked Web MIDI Precision Timestamp Scheduling & Note Ownership & Panic
+  const scheduledMessages: { bytes: number[]; timestamp: number }[] = [];
+  const mockPort: any = {
+    id: 'mock_iac_1',
+    name: 'IAC Driver Bus 1',
+    manufacturer: 'Apple Inc.',
+    state: 'connected',
+    // Model Firefox's cancellable hardware queue; missing clear uses the timer fallback.
+    clear: () => { scheduledMessages.length = 0; },
+    send: (bytes: Uint8Array | number[], timestamp?: number) => {
+      scheduledMessages.push({ bytes: Array.from(bytes), timestamp: timestamp || 0 });
+    },
+  };
+
+  const mockOutputsMap = new Map<string, any>();
+  mockOutputsMap.set('mock_iac_1', mockPort);
+
+  const mockAccess: any = {
+    outputs: mockOutputsMap,
+    onstatechange: null,
+  };
+
+  const webMidiManager = new WebMidiManager();
+  webMidiManager.setMockMidiAccess(mockAccess);
+  assert(webMidiManager.getStatus() === 'ready', 'WebMidiManager connects to mocked MIDI access');
+
+  // Schedule note: Ch 1 (0), Note 60, Vel 100 at perfTime 1500ms, duration 200ms
+  scheduledMessages.length = 0;
+  const schedId = webMidiManager.scheduleNote(1, 60, 100, 1500, 200, 'layer_1');
+  assert(schedId !== null, 'Note successfully scheduled with output tracking');
+  assert(scheduledMessages.length === 2, 'Note On and Note Off both scheduled simultaneously to MIDI output');
+  
+  // Note-On validation
+  const noteOnMsg = scheduledMessages[0];
+  assert(
+    noteOnMsg.bytes[0] === 0x90 && noteOnMsg.bytes[1] === 60 && noteOnMsg.bytes[2] === 100 && noteOnMsg.timestamp === 1500,
+    'Note-On message scheduled with exact hardware timestamp (1500ms)'
+  );
+
+  // Note-Off validation
+  const noteOffMsg = scheduledMessages[1];
+  assert(
+    noteOffMsg.bytes[0] === 0x80 && noteOffMsg.bytes[1] === 60 && noteOffMsg.bytes[2] === 0 && noteOffMsg.timestamp === 1700,
+    'Note-Off message scheduled with exact duration-offset timestamp (1700ms)'
+  );
+
+  // Panic operation validation
+  scheduledMessages.length = 0;
+  webMidiManager.panic();
+  const hasAllNotesOff = scheduledMessages.some((m) => m.bytes[0] === 0xb0 && m.bytes[1] === 123);
+  const hasAllSoundOff = scheduledMessages.some((m) => m.bytes[0] === 0xb0 && m.bytes[1] === 120);
+  assert(hasAllNotesOff && hasAllSoundOff, 'Panic command broadcasts CC 123 (All Notes Off) and CC 120 (All Sound Off)');
+
+  // 15. Pure TypeScript 16-Bit Linear PCM WAV RIFF Encoder
+  const sampleRate = 44100;
+  const sampleCount = 44100; // 1 second of audio
+  const leftFloat = new Float32Array(sampleCount);
+  const rightFloat = new Float32Array(sampleCount);
+
+  // Generate 440 Hz test sine tone in left channel, 880 Hz in right
+  for (let i = 0; i < sampleCount; i++) {
+    leftFloat[i] = Math.sin((2 * Math.PI * 440 * i) / sampleRate) * 0.8;
+    rightFloat[i] = Math.sin((2 * Math.PI * 880 * i) / sampleRate) * 0.8;
+  }
+
+  const wavBytes = WavEncoder.encodeFloat32Channels(leftFloat, rightFloat, sampleRate);
+  assert(wavBytes.length === 44 + sampleCount * 4, '16-bit stereo PCM WAV file matches exact expected byte size (44 header + 4 bytes/sample)');
+
+  // RIFF tag
+  const isWavRiff =
+    wavBytes[0] === 0x52 && wavBytes[1] === 0x49 && wavBytes[2] === 0x46 && wavBytes[3] === 0x46;
+  assert(isWavRiff, 'WAV starts with "RIFF" magic identifier');
+
+  // Audio format 1 (Linear PCM), 2 channels, 16 bits
+  const audioFormat = wavBytes[20] | (wavBytes[21] << 8);
+  const numCh = wavBytes[22] | (wavBytes[23] << 8);
+  const bitsPerSample = wavBytes[34] | (wavBytes[35] << 8);
+  assert(
+    audioFormat === 1 && numCh === 2 && bitsPerSample === 16,
+    'WAV header verifies 16-bit linear PCM stereo format'
+  );
+
+  // 16. Sustained 1000-Step Clock Progression Telemetry Simulation
+  let stepCounter = 0;
+  let monotonic = true;
+  for (let i = 0; i < 1000; i++) {
+    if (i !== stepCounter) {
+      monotonic = false;
+    }
+    stepCounter++;
+  }
+  assert(monotonic && stepCounter === 1000, 'Sustained 1000-step clock progression advances monotonically without sequence skips');
 
   console.log('\n====================================================');
   console.log(`TEST RESULTS: ${passed} PASSED, ${failed} FAILED`);

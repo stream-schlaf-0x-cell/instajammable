@@ -1,4 +1,4 @@
-// Header Bar: Transport, Master Mutations, Views, MIDI & Recording
+// Header Bar: Transport, Unified Panic, Real-time Observability, Dual Audio Recording & MIDI Port Routing
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -8,17 +8,20 @@ import {
   RefreshCw,
   AlertOctagon,
   Mic,
-  Disc3,
   Sliders,
   Cpu,
   Bookmark,
   HelpCircle,
   Volume2,
   VolumeX,
+  Disc3,
+  X,
 } from 'lucide-react';
 import { EngineView, ProjectState } from '../types';
 import { EngineFacade } from '../engine/engineFacade';
 import { MidiDeviceOption } from '../engine/midi/webMidi';
+import { RecorderState } from '../engine/audio/recorder';
+import { WavEncoder } from '../engine/audio/wavEncoder';
 
 interface HeaderProps {
   currentView: EngineView;
@@ -37,33 +40,55 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const engine = EngineFacade.getInstance();
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [isRecording, setIsRecording] = useState<boolean>(false);
-  const [recordDuration, setRecordDuration] = useState<number>(0);
+  const [recorderState, setRecorderState] = useState<RecorderState>({
+    isRecording: false,
+    durationSec: 0,
+    lastError: null,
+    mimeType: '',
+  });
   const [midiDevices, setMidiDevices] = useState<MidiDeviceOption[]>([]);
   const [selectedMidiId, setSelectedMidiId] = useState<string>('');
   const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [midiStatus, setMidiStatus] = useState<string>('uninitialized');
+  const [showFirefoxMidiModal, setShowFirefoxMidiModal] = useState<boolean>(false);
+  const [testNotice, setTestNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check initial play state
     setIsPlaying(engine.clock ? engine.clock.getIsRunning() : false);
 
-    // Watch MIDI devices
-    engine.midiManager.setCallbacks((devices) => {
-      setMidiDevices([...devices]);
-      const selId = engine.midiManager.getSelectedOutputId();
-      if (selId) setSelectedMidiId(selId);
+    // Eagerly subscribe to recorder state (always accessible, even prior to first Play click)
+    const unsubRecorder = engine.recorder.subscribe((recState) => {
+      setRecorderState(recState);
     });
+
+    // MIDI Devices & Status callback
+    engine.midiManager.setCallbacks(
+      (devices) => {
+        setMidiDevices([...devices]);
+        const selId = engine.midiManager.getSelectedOutputId();
+        if (selId) setSelectedMidiId(selId);
+      },
+      (status) => {
+        setMidiStatus(status);
+      }
+    );
+
     setMidiDevices(engine.midiManager.getAvailableOutputs());
     const initialSel = engine.midiManager.getSelectedOutputId();
     if (initialSel) setSelectedMidiId(initialSel);
+    setMidiStatus(engine.midiManager.getStatus());
 
-    // Watch Audio Recording
-    if (engine.recorder) {
-      engine.recorder.setCallback((rec, duration) => {
-        setIsRecording(rec);
-        setRecordDuration(duration);
-      });
-    }
+    // Eagerly initialize Web MIDI permissions & port enumeration on load
+    engine.midiManager.init().then(() => {
+      setMidiDevices(engine.midiManager.getAvailableOutputs());
+      const sel = engine.midiManager.getSelectedOutputId();
+      if (sel) setSelectedMidiId(sel);
+      setMidiStatus(engine.midiManager.getStatus());
+    }).catch(() => {});
+
+    return () => {
+      unsubRecorder();
+    };
   }, []);
 
   const handleTogglePlay = async () => {
@@ -77,18 +102,51 @@ export const Header: React.FC<HeaderProps> = ({
     setIsPlaying(false);
   };
 
+  const handleUnifiedPanic = () => {
+    engine.panic();
+    setIsPlaying(false);
+  };
+
   const handleMidiSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const id = e.target.value;
     setSelectedMidiId(id);
     engine.midiManager.selectOutput(id);
   };
 
+  const handleRefreshMidi = () => {
+    engine.midiManager.init().then(() => {
+      setMidiDevices(engine.midiManager.getAvailableOutputs());
+      const sel = engine.midiManager.getSelectedOutputId();
+      if (sel) setSelectedMidiId(sel);
+      setMidiStatus(engine.midiManager.getStatus());
+    }).catch(() => {});
+  };
+
+  const handleSendTest = () => {
+    const res = engine.midiManager.sendTestNote();
+    if (res.success) {
+      setTestNotice(`✓ Test-Note an "${res.portName}" gesendet!`);
+    } else {
+      setTestNotice(`✗ ${res.error}`);
+    }
+    setTimeout(() => setTestNotice(null), 3000);
+  };
+
   const handleToggleRecord = async () => {
     await engine.init();
-    if (isRecording) {
-      const blob = await engine.recorder.stop();
-      if (blob) {
-        engine.recorder.downloadRecording(blob, `echo-garden-${Date.now()}.webm`);
+    if (recorderState.isRecording) {
+      const result = await engine.recorder.stop();
+      if (result.wavBytes) {
+        // Automatically download genuine 16-bit PCM WAV for Ableton Live
+        WavEncoder.downloadWav(result.wavBytes, `echo-garden-${Date.now()}.wav`);
+      } else if (result.webmBlob) {
+        // Fallback to webm preview if PCM decoding failed
+        const url = URL.createObjectURL(result.webmBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `echo-garden-${Date.now()}.webm`;
+        a.click();
+        URL.revokeObjectURL(url);
       }
     } else {
       engine.recorder.start();
@@ -101,7 +159,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="border-b border-stone-800 bg-stone-950/90 backdrop-blur-lg sticky top-0 z-30 px-4 py-3">
+    <header className="border-b border-stone-800 bg-stone-950/95 backdrop-blur-lg sticky top-0 z-30 px-4 py-3">
       <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
         
         {/* Brand & Identity */}
@@ -113,7 +171,7 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="flex items-center gap-2">
               <h1 className="text-base font-semibold tracking-wide text-stone-100 uppercase">ECHO GARDEN</h1>
               <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                v1.0 Lab
+                v1.1 Lab
               </span>
             </div>
             <p className="text-[11px] font-mono text-stone-400">Autonomous Generative Music Laboratory</p>
@@ -166,7 +224,7 @@ export const Header: React.FC<HeaderProps> = ({
                 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30'
                 : 'bg-emerald-500 text-stone-950 font-bold hover:bg-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)]'
             }`}
-            title={isPlaying ? 'Pause' : 'Start Engine'}
+            title={isPlaying ? 'Pause' : 'Start Engine (Space)'}
           >
             <Play className={`w-4 h-4 ${isPlaying ? 'fill-amber-300' : 'fill-stone-950'}`} />
           </button>
@@ -186,7 +244,7 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="text-stone-500 uppercase text-[10px]">BPM</span>
             <input
               type="number"
-              min="30"
+              min="20"
               max="240"
               value={state.bpm}
               onChange={(e) => engine.setBpm(Number(e.target.value))}
@@ -205,7 +263,7 @@ export const Header: React.FC<HeaderProps> = ({
               value={state.swing}
               onChange={(e) => engine.setSwing(Number(e.target.value))}
               className="w-16 accent-emerald-500 cursor-pointer"
-              title={`Swing: ${Math.round(state.swing * 100)}%`}
+              title={`Metric-Preserving Swing: ${Math.round(state.swing * 100)}%`}
             />
             <span className="text-[10px] text-stone-400 w-6 text-right">
               {Math.round(state.swing * 100)}%
@@ -239,7 +297,7 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             onClick={() => {
               engine.state.globalEvolveActive = !engine.state.globalEvolveActive;
-              engine.mutate(0.1);
+              engine.evolve();
             }}
             className={`px-3 py-1.5 rounded-lg text-xs font-mono flex items-center gap-1.5 border transition-all ${
               state.globalEvolveActive
@@ -252,13 +310,14 @@ export const Header: React.FC<HeaderProps> = ({
             Evolve {state.globalEvolveActive ? 'ON' : 'OFF'}
           </button>
 
-          {/* Emergency Panic */}
+          {/* Unified Panic */}
           <button
-            onClick={() => engine.midiManager.emergencyPanic()}
-            className="p-1.5 rounded-lg bg-red-950/30 border border-red-800/40 text-red-400 hover:bg-red-900/40 transition-all"
-            title="Emergency Panic: All Notes Off & All Sound Off"
+            onClick={handleUnifiedPanic}
+            className="px-2.5 py-1.5 rounded-lg bg-red-950/40 border border-red-800 text-red-300 hover:bg-red-900/50 transition-all font-mono text-xs flex items-center gap-1 font-bold"
+            title="Unified Panic: Silence native voices, cancel scheduled MIDI notes, send All Notes Off, kill delay/reverb feedback"
           >
-            <AlertOctagon className="w-4 h-4" />
+            <AlertOctagon className="w-3.5 h-3.5 text-red-400" />
+            PANIC
           </button>
         </div>
 
@@ -273,7 +332,9 @@ export const Header: React.FC<HeaderProps> = ({
               className="bg-transparent text-stone-300 text-xs focus:outline-none max-w-[130px] truncate"
             >
               {midiDevices.length === 0 ? (
-                <option value="">No MIDI Ports</option>
+                <option value="">
+                  {midiStatus === 'unsupported' ? 'No Web MIDI (Firefox)' : 'No MIDI Ports'}
+                </option>
               ) : (
                 midiDevices.map((d) => (
                   <option key={d.id} value={d.id} className="bg-stone-900 text-stone-100">
@@ -282,27 +343,61 @@ export const Header: React.FC<HeaderProps> = ({
                 ))
               )}
             </select>
+            {/* Test Note Ping Button */}
+            <button
+              onClick={handleSendTest}
+              className="text-[10px] bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-600/50 px-1.5 py-0.5 rounded transition-all font-mono font-bold shrink-0 ml-1"
+              title="Sendet sofort eine Test-Note (C3 auf Ch 1 und Kick auf Ch 10) an Ableton / den ausgewählten Port"
+            >
+              Test
+            </button>
+            <button
+              onClick={handleRefreshMidi}
+              className="text-[10px] bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-stone-200 px-1 py-0.5 rounded transition-all font-mono shrink-0 ml-0.5"
+              title="MIDI-Ports neu scannen"
+            >
+              Scan
+            </button>
+
+            {(midiStatus === 'unsupported' || midiStatus === 'denied' || midiDevices.length === 0) && (
+              <button
+                onClick={() => setShowFirefoxMidiModal(true)}
+                className="text-[10px] bg-amber-950/70 border border-amber-600/60 text-amber-300 hover:bg-amber-900 px-1.5 py-0.5 rounded transition-all font-bold shrink-0 ml-1"
+                title="Firefox MIDI-Berechtigung aktivieren"
+              >
+                FF Hilfe
+              </button>
+            )}
           </div>
 
-          {/* Audio Record Button */}
+          {/* Test Notice Toast */}
+          {testNotice && (
+            <div className="fixed top-16 right-6 z-50 bg-stone-950 border border-emerald-500/70 text-emerald-300 text-xs px-3.5 py-2 rounded-lg shadow-2xl font-mono flex items-center gap-2">
+              <span>{testNotice}</span>
+            </div>
+          )}
+
+          {/* Genuine PCM WAV / WebM Audio Record Button */}
           <button
             onClick={handleToggleRecord}
             className={`px-2.5 py-1.5 rounded-lg text-xs font-mono flex items-center gap-1.5 border transition-all ${
-              isRecording
-                ? 'bg-red-500 text-white border-red-600 animate-pulse font-bold'
+              recorderState.isRecording
+                ? 'bg-red-500 text-white border-red-600 animate-pulse font-bold shadow-[0_0_12px_rgba(239,68,68,0.5)]'
                 : 'bg-stone-900 border-stone-800 text-stone-300 hover:text-white'
             }`}
-            title={isRecording ? 'Stop & Download Recording' : 'Record Session to Audio File'}
+            title={recorderState.isRecording ? 'Stop & Download 16-bit PCM WAV Recording' : 'Record Master Audio to PCM WAV File'}
           >
             <Mic className="w-3.5 h-3.5" />
-            {isRecording ? `${Math.floor(recordDuration / 60)}:${(recordDuration % 60).toString().padStart(2, '0')}` : 'Rec'}
+            {recorderState.isRecording
+              ? `${Math.floor(recorderState.durationSec / 60)}:${(recorderState.durationSec % 60).toString().padStart(2, '0')}`
+              : 'WAV Rec'}
           </button>
 
-          {/* Memory / Presets */}
+          {/* Memory / Presets & MIDI Export */}
           <button
             onClick={onOpenMemoryModal}
             className="p-2 rounded-lg bg-stone-900 border border-stone-800 text-stone-400 hover:text-stone-200 hover:border-stone-700 transition-all"
-            title="Musical Memory, Presets & MIDI Export"
+            title="Musical Memory, Presets & Standard MIDI (.mid) Export"
           >
             <Bookmark className="w-4 h-4" />
           </button>
@@ -311,13 +406,67 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             onClick={onOpenAbletonGuide}
             className="p-2 rounded-lg bg-stone-900 border border-stone-800 text-stone-400 hover:text-stone-200 hover:border-stone-700 transition-all"
-            title="Ableton Live 12 & Hardware Setup Guide"
+            title="Ableton Live 12 Standard & DeepMind 6 Setup Guide"
           >
             <HelpCircle className="w-4 h-4" />
           </button>
         </div>
 
       </div>
+
+      {/* Firefox Web MIDI Setup Modal */}
+      {showFirefoxMidiModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div className="bg-stone-900 border border-stone-800 rounded-2xl w-full max-w-lg p-6 space-y-5 shadow-2xl font-mono text-xs">
+            <div className="flex items-center justify-between border-b border-stone-800 pb-3">
+              <span className="font-bold text-amber-300 uppercase tracking-wider text-sm flex items-center gap-2">
+                🦊 Enable Web MIDI in Firefox (10 Seconds)
+              </span>
+              <button
+                onClick={() => setShowFirefoxMidiModal(false)}
+                className="p-1 rounded text-stone-400 hover:text-white hover:bg-stone-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-stone-300 font-sans text-xs leading-relaxed">
+              <p>
+                Mozilla includes native Web MIDI support in Firefox for macOS, but keeps it disabled by default. You can enable it in 4 quick steps:
+              </p>
+              <ol className="list-decimal list-inside space-y-2 text-stone-400 font-mono text-[11px] bg-stone-950 p-4 rounded-xl border border-stone-800">
+                <li>Open a new Firefox tab and type <span className="text-amber-400 font-bold">about:config</span> in the address bar.</li>
+                <li>Click <span className="text-stone-200">"Accept the Risk and Continue"</span>.</li>
+                <li>Search for: <span className="text-emerald-400 font-bold">dom.webmidi.enabled</span></li>
+                <li>Toggle it from <span className="text-rose-400">false</span> to <span className="text-emerald-400 font-bold">true</span>.</li>
+                <li>Return here and click <strong>"Connect MIDI Now"</strong> below!</li>
+              </ol>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-stone-800">
+              <button
+                onClick={() => setShowFirefoxMidiModal(false)}
+                className="px-3 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-300 rounded-lg text-xs transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  const ok = await engine.midiManager.init();
+                  if (ok) {
+                    setMidiDevices(engine.midiManager.getAvailableOutputs());
+                    setMidiStatus(engine.midiManager.getStatus());
+                    setShowFirefoxMidiModal(false);
+                  }
+                }}
+                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-all shadow-md"
+              >
+                Connect MIDI Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 };

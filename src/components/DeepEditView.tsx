@@ -1,9 +1,10 @@
-// Deep Edit View: Full Parameter Access, Synth Architectures, Effects & Boundary Tuning
+// Deep Edit View: Full Parameter Access, Synth Architectures, DeepMind 6 Hardware & Editable Boundaries
 
 import React, { useState } from 'react';
 import { ProjectState, MusicalScale } from '../types';
 import { EngineFacade } from '../engine/engineFacade';
-import { Sliders, Activity, Disc, Sparkles, Layers } from 'lucide-react';
+import { DEEPMIND_6_PROFILE } from '../engine/midi/hardwareProfiles';
+import { Sliders, Activity, Disc, Sparkles, Layers, Cpu } from 'lucide-react';
 
 interface DeepEditViewProps {
   state: ProjectState;
@@ -11,22 +12,25 @@ interface DeepEditViewProps {
 
 export const DeepEditView: React.FC<DeepEditViewProps> = ({ state }) => {
   const engine = EngineFacade.getInstance();
-  const [activeTab, setActiveTab] = useState<'drums' | 'ambient' | 'effects' | 'modulation' | 'boundaries'>('drums');
+  const [activeTab, setActiveTab] = useState<'drums' | 'ambient' | 'effects' | 'modulation' | 'boundaries' | 'deepMind'>('drums');
 
   const updateDrum = (voice: 'kick' | 'snare' | 'hihat' | 'perc', param: string, val: number) => {
-    (state.drumParams[voice] as any)[param] = val;
-    engine.mutate(0);
+    engine.updateDrumParam(voice, param, val);
   };
 
   const updateAmbient = (param: string, val: any) => {
-    (state.ambientParams as any)[param] = val;
-    engine.mutate(0);
+    engine.updateAmbientParam(param, val);
   };
 
   const updateEffects = (param: string, val: number) => {
-    (state.effectsParams as any)[param] = val;
-    engine.effectsRack.updateParams(state.effectsParams);
-    engine.mutate(0);
+    engine.updateEffectsParam(param, val);
+  };
+
+  const updateDeepMindCC = (cc: number, value: number) => {
+    state.deepMindCCValues[cc] = value;
+    if (state.deepMindEnabled) {
+      engine.midiManager.sendCC(state.deepMindChannel, cc, value);
+    }
   };
 
   const scales: MusicalScale[] = [
@@ -89,6 +93,15 @@ export const DeepEditView: React.FC<DeepEditViewProps> = ({ state }) => {
         >
           <Sparkles className="w-3.5 h-3.5" />
           Mutation Boundaries
+        </button>
+        <button
+          onClick={() => setActiveTab('deepMind')}
+          className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
+            activeTab === 'deepMind' ? 'bg-emerald-600 text-white font-semibold' : 'text-stone-400 hover:text-stone-200'
+          }`}
+        >
+          <Cpu className="w-3.5 h-3.5" />
+          DeepMind 6 Hardware
         </button>
       </div>
 
@@ -180,7 +193,7 @@ export const DeepEditView: React.FC<DeepEditViewProps> = ({ state }) => {
       {activeTab === 'ambient' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 font-mono text-xs">
           
-          {/* Harmonic & Pitch Tuning */}
+          {/* Harmonic Framework */}
           <div className="bg-stone-950/70 border border-stone-800 rounded-xl p-5 space-y-4">
             <h3 className="font-bold text-stone-200 uppercase tracking-wider border-b border-stone-800 pb-2">
               Harmonic Framework
@@ -211,7 +224,7 @@ export const DeepEditView: React.FC<DeepEditViewProps> = ({ state }) => {
                 min="24"
                 max="60"
                 value={state.ambientParams.rootNote}
-                onChange={(e) => updateAmbient('rootNote', Number(e.target.value))}
+                onChange={(e) => updateAmbient('rootNote', Math.round(Number(e.target.value)))}
                 className="w-full accent-emerald-500 cursor-pointer h-1.5 bg-stone-800 rounded"
               />
             </div>
@@ -233,27 +246,27 @@ export const DeepEditView: React.FC<DeepEditViewProps> = ({ state }) => {
 
             <div className="space-y-1">
               <div className="flex justify-between text-stone-400 text-[11px]">
-                <span>ANALOG DRIFT / WANDER</span>
+                <span>STEREO VOICE SPREAD</span>
                 <span className="text-stone-200 font-bold">
-                  {Math.round(state.ambientParams.driftAmount * 100)}%
+                  {Math.round((state.ambientParams.voiceSpread || 0.6) * 100)}%
                 </span>
               </div>
               <input
                 type="range"
                 min="0"
                 max="1"
-                step="0.02"
-                value={state.ambientParams.driftAmount}
-                onChange={(e) => updateAmbient('driftAmount', Number(e.target.value))}
+                step="0.05"
+                value={state.ambientParams.voiceSpread || 0.6}
+                onChange={(e) => updateAmbient('voiceSpread', Number(e.target.value))}
                 className="w-full accent-emerald-500 cursor-pointer h-1.5 bg-stone-800 rounded"
               />
             </div>
           </div>
 
-          {/* Filter Section */}
+          {/* Cascaded 24dB Filter & LFO */}
           <div className="bg-stone-950/70 border border-stone-800 rounded-xl p-5 space-y-4">
             <h3 className="font-bold text-stone-200 uppercase tracking-wider border-b border-stone-800 pb-2">
-              Resonant Lowpass Filter
+              Cascaded 24dB Filter & LFO
             </h3>
 
             <div className="space-y-1">
@@ -291,9 +304,25 @@ export const DeepEditView: React.FC<DeepEditViewProps> = ({ state }) => {
 
             <div className="space-y-1">
               <div className="flex justify-between text-stone-400 text-[11px]">
-                <span>ENV MODULATION AMOUNT</span>
+                <span>LFO MODULATION RATE</span>
+                <span className="text-stone-200 font-bold">{state.ambientParams.lfoRate.toFixed(2)} Hz</span>
+              </div>
+              <input
+                type="range"
+                min="0.05"
+                max="8.0"
+                step="0.05"
+                value={state.ambientParams.lfoRate}
+                onChange={(e) => updateAmbient('lfoRate', Number(e.target.value))}
+                className="w-full accent-emerald-500 cursor-pointer h-1.5 bg-stone-800 rounded"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex justify-between text-stone-400 text-[11px]">
+                <span>LFO MODULATION DEPTH</span>
                 <span className="text-stone-200 font-bold">
-                  {Math.round(state.ambientParams.filterEnvAmount * 100)}%
+                  {Math.round(state.ambientParams.lfoDepth * 100)}%
                 </span>
               </div>
               <input
@@ -301,26 +330,8 @@ export const DeepEditView: React.FC<DeepEditViewProps> = ({ state }) => {
                 min="0"
                 max="1"
                 step="0.02"
-                value={state.ambientParams.filterEnvAmount}
-                onChange={(e) => updateAmbient('filterEnvAmount', Number(e.target.value))}
-                className="w-full accent-emerald-500 cursor-pointer h-1.5 bg-stone-800 rounded"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <div className="flex justify-between text-stone-400 text-[11px]">
-                <span>SUB-BASS OSC LEVEL</span>
-                <span className="text-stone-200 font-bold">
-                  {Math.round(state.ambientParams.subLevel * 100)}%
-                </span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={state.ambientParams.subLevel}
-                onChange={(e) => updateAmbient('subLevel', Number(e.target.value))}
+                value={state.ambientParams.lfoDepth}
+                onChange={(e) => updateAmbient('lfoDepth', Number(e.target.value))}
                 className="w-full accent-emerald-500 cursor-pointer h-1.5 bg-stone-800 rounded"
               />
             </div>
@@ -374,7 +385,7 @@ export const DeepEditView: React.FC<DeepEditViewProps> = ({ state }) => {
               <input
                 type="range"
                 min="0.5"
-                max="10.0"
+                max="12.0"
                 step="0.1"
                 value={state.ambientParams.release}
                 onChange={(e) => updateAmbient('release', Number(e.target.value))}
@@ -403,7 +414,7 @@ export const DeepEditView: React.FC<DeepEditViewProps> = ({ state }) => {
               <input
                 type="range"
                 min="0.05"
-                max="1.2"
+                max="1.5"
                 step="0.01"
                 value={state.effectsParams.delayTime}
                 onChange={(e) => updateEffects('delayTime', Number(e.target.value))}
@@ -449,7 +460,7 @@ export const DeepEditView: React.FC<DeepEditViewProps> = ({ state }) => {
 
             <div className="space-y-1">
               <div className="flex justify-between text-stone-400 text-[11px]">
-                <span>TAPE FLUTTER / DRIFT</span>
+                <span>TAPE FLUTTER</span>
                 <span className="text-stone-200 font-bold">
                   {Math.round(state.effectsParams.delayFlutter * 100)}%
                 </span>
@@ -474,7 +485,25 @@ export const DeepEditView: React.FC<DeepEditViewProps> = ({ state }) => {
 
             <div className="space-y-1">
               <div className="flex justify-between text-stone-400 text-[11px]">
-                <span>REVERB DECAY TIME</span>
+                <span>REVERB SIZE (ROOM SCALING)</span>
+                <span className="text-stone-200 font-bold">
+                  {Math.round((state.effectsParams.reverbSize !== undefined ? state.effectsParams.reverbSize : 0.8) * 100)}%
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0.1"
+                max="1.5"
+                step="0.05"
+                value={state.effectsParams.reverbSize !== undefined ? state.effectsParams.reverbSize : 0.8}
+                onChange={(e) => updateEffects('reverbSize', Number(e.target.value))}
+                className="w-full accent-emerald-500 cursor-pointer h-1.5 bg-stone-800 rounded"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex justify-between text-stone-400 text-[11px]">
+                <span>DECAY TIME</span>
                 <span className="text-stone-200 font-bold">{state.effectsParams.reverbDecay.toFixed(1)}s</span>
               </div>
               <input
@@ -508,7 +537,7 @@ export const DeepEditView: React.FC<DeepEditViewProps> = ({ state }) => {
 
             <div className="space-y-1">
               <div className="flex justify-between text-stone-400 text-[11px]">
-                <span>MASTER ANALOG WARMTH / DRIVE</span>
+                <span>MASTER ANALOG SATURATION / DRIVE</span>
                 <span className="text-stone-200 font-bold">
                   {Math.round(state.effectsParams.masterDrive * 100)}%
                 </span>
@@ -534,7 +563,7 @@ export const DeepEditView: React.FC<DeepEditViewProps> = ({ state }) => {
             <h3 className="font-bold text-stone-200 uppercase tracking-wider">
               Cross-Engine Inter-Modulation Matrix
             </h3>
-            <span className="text-stone-400 text-[11px]">4 Active Dynamic Routes</span>
+            <span className="text-stone-400 text-[11px]">4 Dynamic Bi-Directional Routes</span>
           </div>
 
           <div className="space-y-3">
@@ -550,7 +579,7 @@ export const DeepEditView: React.FC<DeepEditViewProps> = ({ state }) => {
                     onChange={(e) => {
                       route.enabled = e.target.checked;
                       engine.modMatrix.updateRoute(route.id, { enabled: route.enabled });
-                      engine.mutate(0);
+                      engine.updateEffectsParam('masterDrive', state.effectsParams.masterDrive);
                     }}
                     className="accent-emerald-500 w-4 h-4 rounded cursor-pointer"
                   />
@@ -572,7 +601,7 @@ export const DeepEditView: React.FC<DeepEditViewProps> = ({ state }) => {
                     onChange={(e) => {
                       route.depth = Number(e.target.value);
                       engine.modMatrix.updateRoute(route.id, { depth: route.depth });
-                      engine.mutate(0);
+                      engine.updateEffectsParam('masterDrive', state.effectsParams.masterDrive);
                     }}
                     className="w-28 accent-emerald-500 cursor-pointer h-1.5 bg-stone-800 rounded"
                   />
@@ -586,19 +615,50 @@ export const DeepEditView: React.FC<DeepEditViewProps> = ({ state }) => {
         </div>
       )}
 
-      {/* 5. MUTATION BOUNDARIES TAB */}
+      {/* 5. EDITABLE MUTATION BOUNDARIES TAB */}
       {activeTab === 'boundaries' && (
         <div className="bg-stone-950/70 border border-stone-800 rounded-xl p-5 space-y-4 font-mono text-xs">
           <div className="border-b border-stone-800 pb-2">
             <h3 className="font-bold text-stone-200 uppercase tracking-wider">
-              Layer Mutation Boundaries & Constraints
+              Editable Parameter Mutation Boundaries & Lock Constraints
             </h3>
             <p className="text-stone-400 text-[11px] mt-1">
-              Define the exploratory boundaries of randomness. Parameters mutate only within permitted ranges.
+              Define the exact min/max bounds and probabilities for randomness. Locked parameters are never mutated.
             </p>
           </div>
 
           <div className="space-y-4">
+            {/* Ambient Boundaries */}
+            <div className="p-4 bg-stone-900/60 border border-stone-800 rounded-lg space-y-3">
+              <span className="font-bold text-emerald-400 uppercase">Ambient Synth Boundaries</span>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {Object.entries(state.ambientBoundaries || {}).map(([paramName, b]) => (
+                  <div key={paramName} className="p-3 bg-stone-950 rounded border border-stone-800 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-stone-200 font-bold uppercase text-[10px]">{paramName}</span>
+                      <label className="flex items-center gap-1 text-[10px] text-stone-400">
+                        <input
+                          type="checkbox"
+                          checked={b.allowMutation && !b.locked}
+                          onChange={(e) => {
+                            b.allowMutation = e.target.checked;
+                            engine.updateEffectsParam('masterDrive', state.effectsParams.masterDrive);
+                          }}
+                          className="accent-emerald-500"
+                        />
+                        Allow
+                      </label>
+                    </div>
+                    <div className="flex justify-between text-[10px] text-stone-400">
+                      <span>Min: {b.min}</span>
+                      <span>Max: {b.max}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Layer Boundaries */}
             {state.layers.map((layer) => (
               <div key={layer.id} className="p-4 bg-stone-900/60 border border-stone-800 rounded-lg space-y-3">
                 <div className="flex items-center justify-between">
@@ -614,10 +674,10 @@ export const DeepEditView: React.FC<DeepEditViewProps> = ({ state }) => {
                         <label className="flex items-center gap-1 text-[10px] text-stone-400">
                           <input
                             type="checkbox"
-                            checked={b.allowMutation}
+                            checked={b.allowMutation && !b.locked}
                             onChange={(e) => {
                               b.allowMutation = e.target.checked;
-                              engine.mutate(0);
+                              engine.updateEffectsParam('masterDrive', state.effectsParams.masterDrive);
                             }}
                             className="accent-emerald-500"
                           />
@@ -627,13 +687,83 @@ export const DeepEditView: React.FC<DeepEditViewProps> = ({ state }) => {
 
                       <div className="flex justify-between text-[10px] text-stone-400">
                         <span>Range: [{b.min} — {b.max}]</span>
-                        <span>Prob: {Math.round(b.mutationProbability * 100)}%</span>
+                        <span>{b.isInteger ? 'INT' : 'FLOAT'}</span>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* 6. BEHRINGER DEEPMIND 6 HARDWARE TAB */}
+      {activeTab === 'deepMind' && (
+        <div className="bg-stone-950/70 border border-stone-800 rounded-xl p-5 space-y-4 font-mono text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-stone-800 pb-2">
+            <div>
+              <h3 className="font-bold text-stone-200 uppercase tracking-wider">
+                Behringer DeepMind 6 Hardware Control
+              </h3>
+              <p className="text-[11px] text-stone-400">
+                Verified MIDI CC parameters from DeepMind 6 User Manual pp. 132–133 (CC Mode).
+              </p>
+            </div>
+            
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={state.deepMindEnabled}
+                  onChange={(e) => {
+                    state.deepMindEnabled = e.target.checked;
+                    engine.updateEffectsParam('masterDrive', state.effectsParams.masterDrive);
+                  }}
+                  className="accent-emerald-500 w-4 h-4 rounded"
+                />
+                <span className="font-bold text-emerald-400">ENABLE DEEPMIND 6 AUTOMATION</span>
+              </label>
+
+              <div className="flex items-center gap-1">
+                <span className="text-stone-400">MIDI CH:</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="16"
+                  value={state.deepMindChannel}
+                  onChange={(e) => {
+                    state.deepMindChannel = Number(e.target.value);
+                    engine.updateEffectsParam('masterDrive', state.effectsParams.masterDrive);
+                  }}
+                  className="w-12 bg-stone-900 border border-stone-800 rounded px-1.5 py-0.5 text-center text-stone-200"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {DEEPMIND_6_PROFILE.controls.map((ctl) => {
+              const currentVal = state.deepMindCCValues[ctl.cc] !== undefined ? state.deepMindCCValues[ctl.cc] : ctl.defaultValue;
+
+              return (
+                <div key={ctl.cc} className="p-3 bg-stone-900/60 rounded-lg border border-stone-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-stone-200 text-[11px]">{ctl.name}</span>
+                    <span className="text-emerald-400 font-bold">CC {ctl.cc}: {currentVal}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={ctl.min}
+                    max={ctl.max}
+                    value={currentVal}
+                    onChange={(e) => updateDeepMindCC(ctl.cc, Number(e.target.value))}
+                    className="w-full accent-emerald-500 cursor-pointer h-1.5 bg-stone-800 rounded"
+                  />
+                  <p className="text-[10px] text-stone-500">{ctl.description}</p>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

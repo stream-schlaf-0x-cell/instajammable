@@ -1,4 +1,4 @@
-// High-Precision Web Audio Lookahead Musical Clock
+// High-Precision Web Audio Lookahead Musical Clock with Metric Duration Preservation & Stall Protection
 
 import { StepContext } from '../types';
 
@@ -9,11 +9,14 @@ export class MusicalClock {
   private swing: number = 0.0; // 0.0 (straight) to 0.75 (heavy shuffle)
   private currentStep: number = 0;
   private nextStepTime: number = 0;
-  private timerInterval: any = null;
+  private timerInterval: ReturnType<typeof setInterval> | null = null;
 
   // Lookahead parameters
   private readonly lookaheadMs: number = 25;       // frequency of scheduler checks (25ms)
   private readonly scheduleAheadTime: number = 0.1; // how far ahead to schedule Web Audio events (100ms)
+
+  // Max scheduling catch-up threshold to prevent audio machine-gun bursts after background-tab throttle
+  private readonly maxCatchupThresholdSec: number = 0.35;
 
   private onStepCallback?: (context: StepContext) => void;
   private onTickCallback?: (currentStep: number, bar: number) => void;
@@ -84,35 +87,53 @@ export class MusicalClock {
   }
 
   // Lookahead Scheduler Loop
-  private schedulerLoop(): void {
+  public schedulerLoop(): void {
     if (!this.isRunning) return;
 
-    // While there are notes that will need to play before the next interval
-    while (this.nextStepTime < this.audioCtx.currentTime + this.scheduleAheadTime) {
-      this.scheduleStep(this.currentStep, this.nextStepTime);
-      this.advanceStep();
+    const currentTime = this.audioCtx.currentTime;
+
+    // Detect if main thread stalled or background tab throttled
+    const stallLag = currentTime - this.nextStepTime;
+    if (stallLag > this.maxCatchupThresholdSec) {
+      // Avoid machine-gun burst of events: advance clock smoothly to now
+      const secondsPer16th = (60.0 / this.bpm) / 4.0;
+      const skippedSteps = Math.floor(stallLag / secondsPer16th);
+      this.currentStep += skippedSteps;
+      this.nextStepTime = currentTime + 0.02;
+    }
+
+    // While notes need scheduling before the next lookahead window
+    while (this.nextStepTime < currentTime + this.scheduleAheadTime) {
+      const scheduledTime = this.nextStepTime;
+      const stepToSchedule = this.currentStep;
+
+      // Calculate step durations preserving paired subdivision durations:
+      // Even step (on-beat): T + delta (delayed off-beat)
+      // Odd step (off-beat): T - delta
+      // Total for the pair: (T + delta) + (T - delta) = 2T (exact beat & bar duration preserved)
+      const base16thSec = (60.0 / this.bpm) / 4.0;
+      const swingDelta = this.swing * (base16thSec * 0.4); // max ~40% shift at 0.75 swing
+
+      const isEven = stepToSchedule % 2 === 0;
+      const stepDuration = isEven ? base16thSec + swingDelta : base16thSec - swingDelta;
+      const swingOffset = isEven ? 0 : swingDelta;
+
+      this.scheduleStep(stepToSchedule, scheduledTime, swingOffset);
+
+      this.nextStepTime += stepDuration;
+      this.currentStep++;
     }
   }
 
-  private advanceStep(): void {
-    const secondsPer16th = (60.0 / this.bpm) / 4.0;
-    
-    // Apply swing delay to odd 16th notes
-    let stepDuration = secondsPer16th;
-    if (this.currentStep % 2 === 1 && this.swing > 0) {
-      // Swing pushes odd steps slightly later
-      const swingOffset = secondsPer16th * (this.swing * 0.35);
-      stepDuration += swingOffset;
-    }
-
-    this.nextStepTime += stepDuration;
-    this.currentStep++;
-  }
-
-  private scheduleStep(step: number, time: number): void {
-    const beat = Math.floor(step / 4);
+  private scheduleStep(step: number, time: number, swingOffset: number): void {
+    const beat = Math.floor((step % 16) / 4);
     const bar = Math.floor(step / 16);
     const subStep = step % 16;
+
+    // Compute corresponding performance.now() timestamp in milliseconds
+    const currentTime = this.audioCtx.currentTime;
+    const currentPerfNow = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const perfTime = currentPerfNow + (time - currentTime) * 1000;
 
     const ctx: StepContext = {
       step,
@@ -120,7 +141,10 @@ export class MusicalClock {
       beat,
       bar,
       time,
+      perfTime,
       bpm: this.bpm,
+      swing: this.swing,
+      swingOffset,
     };
 
     if (this.onStepCallback) {
@@ -128,7 +152,6 @@ export class MusicalClock {
     }
 
     if (this.onTickCallback) {
-      // Dispatch visual tick
       this.onTickCallback(step, bar);
     }
   }

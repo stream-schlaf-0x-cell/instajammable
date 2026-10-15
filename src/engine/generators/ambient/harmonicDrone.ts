@@ -1,4 +1,4 @@
-// Generative Harmonic Drone & Chord Voicing Generator
+// Generative Harmonic Drone with Voice-Leading Smooth Transitions & Multi-Bar Sustains
 
 import { StepContext, MusicalScale, ParameterBoundary } from '../../../types';
 import { IGenerator, GeneratedEvent } from '../types';
@@ -30,24 +30,24 @@ export class HarmonicDroneGenerator implements IGenerator {
   public id: string;
   public name: string = 'Harmonic Drone & Voice Leading';
   public description: string =
-    'Generates slowly evolving modal chord voicings with voice-leading constraints, long sustained textures, and harmonic tension shifts.';
+    'Generates sustained modal chord soundscapes with smooth voice leading (minimizing pitch jumps between chord changes) and hold durations spanning multiple bars.';
   private prng: PRNG;
   private settings: HarmonicDroneSettings;
-  private lastBarTriggered: number = -1;
+  private lastTriggeredBarIndex: number = -1;
   private activeVoicing: number[] = [];
 
   constructor(id: string, initialSettings?: Partial<HarmonicDroneSettings>, seed?: number) {
     this.id = id;
-    this.prng = new PRNG(seed || Date.now());
+    this.prng = new PRNG(seed !== undefined ? seed : 42);
     this.settings = {
       rootNote: 36, // C2 deep analog bass
       scale: 'dorian',
       chordDegree: 0,
       voiceSpread: 2,
-      density: 0.8,
-      holdBars: 4, // holds chord for 4 bars before gentle shift
+      density: 0.85,
+      holdBars: 4, // holds chord for 4 full bars before voice-led shift
       inversion: 0,
-      velocity: 88,
+      velocity: 86,
       ...initialSettings,
     };
     this.rebuildVoicing();
@@ -62,79 +62,113 @@ export class HarmonicDroneGenerator implements IGenerator {
     return this.settings.rootNote + octaves * 12 + scale[normDegree];
   }
 
+  // Build chord voicing using voice-leading principles (minimize jump distances from previous chord)
   public rebuildVoicing(): void {
     const rootDeg = this.settings.chordDegree;
-    // Build root + 3rd/4th + 5th + 7th/9th cluster
-    const notes: number[] = [
-      this.quantizeDegreeToMidi(rootDeg, 0),         // Root bass
+    const rawTargetNotes = [
+      this.quantizeDegreeToMidi(rootDeg, 0),         // Bass root
       this.quantizeDegreeToMidi(rootDeg + 2, 1),     // 3rd
       this.quantizeDegreeToMidi(rootDeg + 4, 1),     // 5th
-      this.quantizeDegreeToMidi(rootDeg + 6, 2),     // 7th / extension
+      this.quantizeDegreeToMidi(rootDeg + 6, 2),     // 7th or 9th extension
     ];
 
-    // Apply inversion if requested
-    if (this.settings.inversion === 1) {
-      notes[1] -= 12;
-    } else if (this.settings.inversion === 2) {
-      notes[2] -= 12;
+    if (this.activeVoicing.length === 0) {
+      this.activeVoicing = rawTargetNotes;
+      return;
     }
 
-    this.activeVoicing = notes;
+    // Voice leading: for upper voices (index 1, 2, 3), find the octave that minimizes distance to the previous voice
+    const voiceLed = [rawTargetNotes[0]]; // keep bass in root register
+    for (let i = 1; i < rawTargetNotes.length; i++) {
+      const prevNote = this.activeVoicing[i] || rawTargetNotes[i];
+      let candidate = rawTargetNotes[i];
+      let bestNote = candidate;
+      let minDistance = Math.abs(candidate - prevNote);
+
+      // Check octave above and below
+      for (const octShift of [-12, 12]) {
+        const shifted = candidate + octShift;
+        if (shifted >= 36 && shifted <= 84) {
+          const dist = Math.abs(shifted - prevNote);
+          if (dist < minDistance) {
+            minDistance = dist;
+            bestNote = shifted;
+          }
+        }
+      }
+      voiceLed.push(bestNote);
+    }
+
+    this.activeVoicing = voiceLed;
   }
 
   public generateStep(context: StepContext): GeneratedEvent[] {
-    // Only trigger on start of bar or chord transition interval
-    const isBarStart = context.step % 16 === 0;
-    if (!isBarStart) return [];
+    const currentBar = context.bar;
+    const hold = Math.max(1, Math.round(this.settings.holdBars));
 
-    const barNumber = Math.floor(context.step / 16);
-    
-    // Check if it's time to shift chord degree
-    if (barNumber % this.settings.holdBars === 0 && barNumber !== this.lastBarTriggered) {
-      this.lastBarTriggered = barNumber;
-      // Step to neighboring harmonic degree (voice leading rule)
-      const scaleLen = SCALE_INTERVALS[this.settings.scale].length;
-      const stepDelta = this.prng.pick([-1, 1, 2, -2]);
-      this.settings.chordDegree = ((this.settings.chordDegree + stepDelta) % scaleLen + scaleLen) % scaleLen;
-      this.rebuildVoicing();
-    } else if (barNumber === this.lastBarTriggered) {
+    // A new chord is only triggered on step 0 of the hold boundary bar!
+    const isHoldStartBar = (currentBar % hold === 0);
+    const isStep0 = (context.subStep === 0);
+
+    if (!isHoldStartBar || !isStep0) {
+      // During held bars, sustain existing chord: do not retrigger new notes
       return [];
     }
 
-    this.lastBarTriggered = barNumber;
+    // Prevent re-triggering if already triggered for this hold block
+    const holdBlockIndex = Math.floor(currentBar / hold);
+    if (holdBlockIndex === this.lastTriggeredBarIndex) {
+      return [];
+    }
+    this.lastTriggeredBarIndex = holdBlockIndex;
 
-    if (!this.prng.chance(this.settings.density)) return [];
+    // Density check: if chord is skipped, let ambient space breathe
+    if (!this.prng.chance(this.settings.density)) {
+      return [];
+    }
 
-    // Duration equals holdBars in seconds
-    const secondsPerBeat = 60 / context.bpm;
-    const duration = secondsPerBeat * 4 * this.settings.holdBars;
+    // Advance harmonic degree smoothly by stepwise motion (voice leading)
+    const scaleLen = (SCALE_INTERVALS[this.settings.scale] || SCALE_INTERVALS.dorian).length;
+    const stepDelta = this.prng.pick([-1, 1, 2, -2]);
+    this.settings.chordDegree = ((this.settings.chordDegree + stepDelta) % scaleLen + scaleLen) % scaleLen;
+    this.rebuildVoicing();
 
-    // Return polyphonic chord events
+    // Duration covers the full hold period (seconds) with generous release overlap
+    const secondsPerBeat = 60.0 / context.bpm;
+    const holdDurationSec = secondsPerBeat * 4.0 * hold;
+
     return this.activeVoicing.map((midiNote) => ({
       type: 'note',
       midiNote,
-      velocity: Math.max(1, Math.min(127, Math.round(this.settings.velocity + this.prng.gaussian(0, 4)))),
-      duration,
+      velocity: Math.max(1, Math.min(127, Math.round(this.settings.velocity + this.prng.gaussian(0, 3)))),
+      duration: holdDurationSec,
       probability: 1.0,
       microOffset: 0,
     }));
   }
 
-  public mutate(boundaries: Record<string, ParameterBoundary>, _intensity: number): void {
+  public mutate(boundaries: Record<string, ParameterBoundary>, intensity: number): void {
     if (boundaries.rootNote && boundaries.rootNote.allowMutation && !boundaries.rootNote.locked) {
       if (this.prng.chance(boundaries.rootNote.mutationProbability)) {
         const rootDelta = this.prng.pick([-2, 2, 5, -5, 7]);
         this.settings.rootNote = Math.max(
           boundaries.rootNote.min,
-          Math.min(boundaries.rootNote.max, this.settings.rootNote + rootDelta)
+          Math.min(boundaries.rootNote.max, Math.round(this.settings.rootNote + rootDelta * intensity))
         );
       }
     }
 
     if (boundaries.scale && boundaries.scale.allowMutation && !boundaries.scale.locked) {
-      if (this.prng.chance(boundaries.scale.mutationProbability * 0.5)) {
+      if (this.prng.chance(boundaries.scale.mutationProbability * 0.4)) {
         const scales: MusicalScale[] = ['dorian', 'phrygian', 'lydian', 'aeolian', 'minorPentatonic', 'hirajoshi'];
         this.settings.scale = this.prng.pick(scales);
+      }
+    }
+
+    if (boundaries.holdBars && boundaries.holdBars.allowMutation && !boundaries.holdBars.locked) {
+      if (this.prng.chance(boundaries.holdBars.mutationProbability)) {
+        const delta = this.prng.pick([-1, 1]);
+        this.settings.holdBars = Math.max(1, Math.min(16, Math.round(this.settings.holdBars + delta)));
       }
     }
 
@@ -145,7 +179,7 @@ export class HarmonicDroneGenerator implements IGenerator {
     const scales: MusicalScale[] = ['dorian', 'phrygian', 'lydian', 'aeolian', 'minorPentatonic', 'hirajoshi'];
     this.settings.scale = this.prng.pick(scales);
     this.settings.chordDegree = this.prng.rangeInt(0, 6);
-    this.settings.inversion = this.prng.rangeInt(0, 2);
+    this.lastTriggeredBarIndex = -1;
     this.rebuildVoicing();
   }
 

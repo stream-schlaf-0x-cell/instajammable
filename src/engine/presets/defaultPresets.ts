@@ -8,6 +8,10 @@ export const PRESET_WARM_ANALOG_DRONE: ProjectState = {
   bpm: 84,
   swing: 0.12,
   seed: 142857,
+  lowResourceMode: false,
+  deepMindEnabled: false,
+  deepMindChannel: 1,
+  deepMindCCValues: { 29: 64, 30: 20, 31: 40, 33: 15, 39: 70, 41: 80 },
   drumParams: {
     kick: { pitch: 50, decay: 0.42, tone: 0.3, drive: 0.25, volume: 0.85, pan: 0, midiNote: 36 },
     snare: { pitch: 175, decay: 0.2, tone: 0.45, drive: 0.1, volume: 0.7, pan: -0.15, midiNote: 38 },
@@ -32,7 +36,16 @@ export const PRESET_WARM_ANALOG_DRONE: ProjectState = {
     lfoRate: 0.12,
     lfoDepth: 0.3,
     driftAmount: 0.4,
+    voiceSpread: 0.6,
     volume: 0.8,
+  },
+  ambientBoundaries: {
+    filterCutoff: { min: 80, max: 8000, allowMutation: true, mutationProbability: 0.6, mutationMagnitude: 0.25, speed: 1, locked: false },
+    filterResonance: { min: 0.5, max: 9.0, allowMutation: true, mutationProbability: 0.4, mutationMagnitude: 0.2, speed: 1, locked: false },
+    detuneSpread: { min: 2, max: 35, allowMutation: true, mutationProbability: 0.5, mutationMagnitude: 0.2, speed: 1, locked: false },
+    attack: { min: 0.1, max: 4.0, allowMutation: true, mutationProbability: 0.3, mutationMagnitude: 0.25, speed: 1, locked: false },
+    driftAmount: { min: 0.05, max: 0.8, allowMutation: true, mutationProbability: 0.4, mutationMagnitude: 0.2, speed: 1, locked: false },
+    rootNote: { min: 24, max: 48, isInteger: true, allowMutation: true, mutationProbability: 0.2, mutationMagnitude: 0.2, speed: 1, locked: false },
   },
   effectsParams: {
     delayTime: 0.375, // dotted eighth
@@ -43,6 +56,12 @@ export const PRESET_WARM_ANALOG_DRONE: ProjectState = {
     reverbDecay: 4.8,
     reverbMix: 0.4,
     masterDrive: 0.2,
+  },
+  effectsBoundaries: {
+    delayFeedback: { min: 0.1, max: 0.88, allowMutation: true, mutationProbability: 0.4, mutationMagnitude: 0.15, speed: 1, locked: false },
+    delayMix: { min: 0.1, max: 0.6, allowMutation: true, mutationProbability: 0.3, mutationMagnitude: 0.2, speed: 1, locked: false },
+    reverbMix: { min: 0.15, max: 0.7, allowMutation: true, mutationProbability: 0.4, mutationMagnitude: 0.2, speed: 1, locked: false },
+    masterDrive: { min: 0.0, max: 0.8, allowMutation: true, mutationProbability: 0.3, mutationMagnitude: 0.15, speed: 1, locked: false },
   },
   layers: [
     {
@@ -57,8 +76,8 @@ export const PRESET_WARM_ANALOG_DRONE: ProjectState = {
       algorithmType: 'euclidean',
       settings: { steps: 16, pulses: 4, rotation: 0, velocity: 105, accentVelocity: 125, accentSteps: [0], density: 1, probability: 1 },
       boundaries: {
-        pulses: { min: 2, max: 7, allowMutation: true, mutationProbability: 0.3, mutationMagnitude: 0.25, speed: 1, locked: false },
-        rotation: { min: 0, max: 15, allowMutation: true, mutationProbability: 0.25, mutationMagnitude: 0.2, speed: 1, locked: false },
+        pulses: { min: 2, max: 7, isInteger: true, allowMutation: true, mutationProbability: 0.3, mutationMagnitude: 0.25, speed: 1, locked: false },
+        rotation: { min: 0, max: 15, isInteger: true, allowMutation: true, mutationProbability: 0.25, mutationMagnitude: 0.2, speed: 1, locked: false },
         density: { min: 0.5, max: 1.0, allowMutation: true, mutationProbability: 0.3, mutationMagnitude: 0.2, speed: 1, locked: false },
       },
       locked: false,
@@ -101,7 +120,7 @@ export const PRESET_WARM_ANALOG_DRONE: ProjectState = {
       algorithmType: 'polymetric',
       settings: { loopLength: 7, activeHits: [0, 2, 4, 6], phaseOffset: 0, velocity: 88, accentVelocity: 110, density: 0.85 },
       boundaries: {
-        loopLength: { min: 3, max: 13, allowMutation: true, mutationProbability: 0.3, mutationMagnitude: 0.3, speed: 1, locked: false },
+        loopLength: { min: 3, max: 13, isInteger: true, allowMutation: true, mutationProbability: 0.3, mutationMagnitude: 0.3, speed: 1, locked: false },
         density: { min: 0.4, max: 1.0, allowMutation: true, mutationProbability: 0.4, mutationMagnitude: 0.2, speed: 1, locked: false },
       },
       locked: false,
@@ -135,8 +154,8 @@ export const PRESET_WARM_ANALOG_DRONE: ProjectState = {
       algorithmType: 'harmonicDrone',
       settings: { rootNote: 36, scale: 'dorian', chordDegree: 0, voiceSpread: 2, density: 0.9, holdBars: 4, inversion: 0, velocity: 85 },
       boundaries: {
-        rootNote: { min: 24, max: 48, allowMutation: true, mutationProbability: 0.2, mutationMagnitude: 0.2, speed: 1, locked: false },
-        scale: { min: 0, max: 7, allowMutation: true, mutationProbability: 0.15, mutationMagnitude: 0.2, speed: 1, locked: false },
+        rootNote: { min: 24, max: 48, isInteger: true, allowMutation: true, mutationProbability: 0.2, mutationMagnitude: 0.2, speed: 1, locked: false },
+        holdBars: { min: 1, max: 16, isInteger: true, allowMutation: true, mutationProbability: 0.25, mutationMagnitude: 0.25, speed: 1, locked: false },
       },
       locked: false,
       frozen: false,
