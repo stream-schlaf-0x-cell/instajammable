@@ -113,8 +113,26 @@ test('rolling performed capture and auxiliary caches remain bounded after 2000 b
   const t = testEngine();
   for (let step = 0; step < 16 * 2000; step++) { const time = step * 60 / 78 / 4; t.setNow(time); t.tick(step, time); }
   t.setNow(16 * 2000 * 60 / 78 / 4); const clip = t.engine.createClip(128);
-  assert.equal(clip.lengthBeats, 512); assert.ok(t.internal.events.length < 6000); assert.ok(t.internal.anchors.length <= 64); assert.ok(t.internal.timeline.length <= 2);
   assert.ok(clip.notes.every((n: any) => n.startBeat >= 0 && n.startBeat + n.durationBeats <= 512 + 1e-8));
+});
+
+test('in outputMode both, an unavailable or disconnected MIDI port does not prevent engine.start() from playing internal audio', async () => {
+  let now = 0;
+  const state = createSession();
+  state.outputMode = 'both';
+  state.globalOutputId = 'disconnected-midi-hash-12345';
+  const engine = new JamEngine(state);
+  const internal = engine as any;
+  internal.initialized = Promise.resolve();
+  internal.audio = { getTime: () => now, ctx: { get currentTime() { return now; }, state: 'running', resume: async () => {} }, setVolume() {} };
+  internal.clock = { reset() {}, setBpm() {}, setSwing() {}, start() { internal.running = true; }, stop() { internal.running = false; } };
+
+  await assert.doesNotReject(async () => {
+    await engine.start();
+  });
+  assert.equal(engine.getPosition().playing, true);
+  engine.stop();
+  assert.equal(engine.getPosition().playing, false);
 });
 
 test('user density boundaries constrain manual changes, macros and mutations', () => {

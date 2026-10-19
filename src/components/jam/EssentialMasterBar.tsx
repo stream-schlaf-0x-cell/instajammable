@@ -13,16 +13,17 @@ import {
   ChevronLeft,
   ChevronRight,
   SkipForward,
-  Activity,
-  Maximize2,
-  Minimize2,
   Dice5,
   FolderDown,
+  Tv,
+  LayoutGrid,
 } from 'lucide-react';
 import { JamEngine, SCENES } from '../../engine/jam/JamEngine';
 import { noteName } from './PianoRoll';
-import type { JamPosition, JamSession, ChordPattern, ChordPace, ChordTexture } from '../../types/jam';
+import type { JamPosition, JamSession, ChordPattern, ChordPace } from '../../types/jam';
 import type { MusicalScale } from '../../types';
+import type { ViewDensityMode } from './WorkspaceBar';
+import type { RecorderState } from '../../engine/audio/recorder';
 
 const SCALES: [MusicalScale, string][] = [
   ['dorian', 'Dorian'],
@@ -41,9 +42,17 @@ interface EssentialMasterBarProps {
   onOpenRouting: () => void;
   onCapture: () => void;
   onOpenSettings?: () => void;
+  tab?: 'jam' | 'library' | 'details';
+  onTabChange?: (tab: 'jam' | 'library' | 'details') => void;
+  libraryCount?: number;
+  viewMode?: ViewDensityMode;
+  onViewModeChange?: (mode: ViewDensityMode) => void;
+  recording?: RecorderState;
+  onRecord?: () => void;
+  onTogglePlay?: () => void;
+  allCollapsed?: boolean;
   onExpandAll?: () => void;
   onCollapseAll?: () => void;
-  allCollapsed?: boolean;
 }
 
 const engine = JamEngine.getInstance();
@@ -57,11 +66,15 @@ export function EssentialMasterBar({
   onOpenRouting,
   onCapture,
   onOpenSettings,
-  onExpandAll,
-  onCollapseAll,
-  allCollapsed = false,
+  tab = 'jam',
+  onTabChange,
+  libraryCount = 0,
+  viewMode = 'compact',
+  onViewModeChange,
+  recording,
+  onRecord,
+  onTogglePlay,
 }: EssentialMasterBarProps) {
-  // Tempo draft state
   const [bpmDraft, setBpmDraft] = useState(String(session.bpm));
   const tempoFocused = useRef(false);
   const taps = useRef<number[]>([]);
@@ -91,45 +104,93 @@ export function EssentialMasterBar({
   };
 
   const currentSceneIndex = SCENES.findIndex(s => s.id === session.sceneId);
-  const currentScene = SCENES[currentSceneIndex] || SCENES[0];
   const root = position.chordRoot;
   const holdBars = position.chordHoldBars || 4;
   const progress = holdBars ? 1 - position.chordBarsLeft / holdBars : 0;
   const scaleName = SCALES.find(s => s[0] === session.scale)?.[1] || session.scale;
   const beatIndex = Math.floor(position.beat) % 4;
   const chordsLayer = session.layers.find(l => l.role === 'chords');
-  const currentChordPattern = chordsLayer?.settings.chordPattern || (session.style === 'techno' ? 'syncopated' : session.style === 'lofi' ? 'broken' : 'pad');
+  const currentChordPattern =
+    chordsLayer?.settings.chordPattern ||
+    (session.style === 'techno' ? 'syncopated' : session.style === 'lofi' ? 'broken' : 'pad');
   const currentChordPace = chordsLayer?.settings.chordPace || '2-bars';
-  const currentChordTexture = chordsLayer?.settings.chordTexture || 'off';
+  const secondaryEnabled = Boolean(chordsLayer?.settings.secondaryEnabled);
+  const secondaryTimbre = chordsLayer?.settings.secondaryTimbre || 'shimmer';
 
+  const seqBlocks =
+    session.sequence && session.sequence.length > 0
+      ? session.sequence
+      : engine.getSequencerState().blocks;
   const seq = position.sequencer;
-  const isSeqActive = !!seq?.enabled;
+  const isSeqActive = Boolean(seq?.enabled);
+  const activeBlockIdx = seq?.activeBlockIndex ?? 0;
+  const activeBlock = seqBlocks[activeBlockIdx] || seqBlocks[0];
+  const currentSection = seq?.currentSection || activeBlock?.section || position.arrangementSection || 'groove';
+  const blockBarProgress = seq?.blockBarProgress ?? 0;
+  const totalBlockBars = seq?.totalBlockBars ?? activeBlock?.bars ?? 4;
+  const nextLabel = seq?.nextBlockLabel || seq?.nextSection?.toUpperCase() || 'Loop';
+  const barsUntilNext = seq?.barsUntilNextBlock ?? totalBlockBars;
 
   const handleEvolve = () => {
-    // Loudness-safe evolve keeps perceived overall loudness stable
     engine.mutate(true);
   };
 
   const handleRadical = () => {
-    // Radical randomizes scale, root, BPM, timbres, rhythms and effects safely
     engine.radicalRandomize();
   };
 
   return (
-    <header className="essential-master-bar" aria-label="Essential Master Bar">
-      {/* Top Deck: Big Name + Preset Selector right next to it */}
+    <header className="essential-master-bar unified-top-console" aria-label="Unified Top Console">
+      {/* Unified Console Header Row: Brand + Nav + Scene Preset Selector + Studio Actions */}
       <div className="master-bar-top-row">
-        <div className="session-preset-cluster">
-          <div className="title-and-dropdown">
-            <h1 className="session-big-title">
-              {session.name}
-              <span className="scene-num-badge">
-                #{String((currentSceneIndex >= 0 ? currentSceneIndex : 0) + 1).padStart(2, '0')}
-              </span>
-            </h1>
+        <div className="console-left-cluster">
+          <a
+            className="wordmark"
+            href="#jam"
+            onClick={e => {
+              e.preventDefault();
+              onTabChange?.('jam');
+            }}
+            aria-label="instajammable — Jam öffnen"
+          >
+            <span className="brand-symbol">
+              <i />
+              <i />
+              <i />
+              <i />
+            </span>
+            instajammable<span className="brand-dot">.</span>
+          </a>
 
-            {/* Preset Selector RIGHT NEXT to the big name */}
-            <div className="scene-picker-container" title="Preset / Szene direkt wechseln">
+          {onTabChange && (
+            <nav className="primary-nav unified-nav" aria-label="Hauptnavigation">
+              {([
+                ['jam', 'Jam'],
+                ['library', 'Sammlung'],
+                ['details', 'Details'],
+              ] as const).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => onTabChange(id)}
+                  aria-current={tab === id ? 'page' : undefined}
+                  className={tab === id ? 'selected' : ''}
+                >
+                  {label}
+                  {id === 'library' && libraryCount ? <span>{libraryCount}</span> : null}
+                </button>
+              ))}
+            </nav>
+          )}
+
+          <div className="console-divider" />
+
+          {/* Preset Selector right in the Unified Console */}
+          <div className="title-and-dropdown">
+            <span className="scene-num-badge">
+              #{String((currentSceneIndex >= 0 ? currentSceneIndex : 0) + 1).padStart(2, '0')}
+            </span>
+            <div className="scene-picker-container" title="Kuratierte Klangwelt / Szene direkt wechseln">
               <select
                 aria-label="Preset auswählen"
                 value={session.sceneId || 'moss-pulse'}
@@ -147,21 +208,50 @@ export function EssentialMasterBar({
               <ChevronDown size={14} className="dropdown-arrow-icon" />
             </div>
           </div>
-
-          <p className="scene-quick-desc">{currentScene?.description || 'Atmosphärischer Klangraum'}</p>
         </div>
 
-        {/* Global Live Info & Routing Chip */}
+        {/* Right Studio Controls: View Mode, Settings & Ableton, Audio/MIDI, Rec, Live Status */}
         <div className="master-meta-cluster">
+          {onViewModeChange && (
+            <div className="console-density-pills" role="group" aria-label="Ansichts-Modus">
+              <button
+                type="button"
+                className={`console-pill-btn ${viewMode === 'compact' ? 'active' : ''}`}
+                onClick={() => onViewModeChange('compact')}
+                title="Kompakt-Ansicht"
+              >
+                <LayoutGrid size={12} />
+                <span>Kompakt</span>
+              </button>
+              <button
+                type="button"
+                className={`console-pill-btn ${viewMode === 'standard' ? 'active' : ''}`}
+                onClick={() => onViewModeChange('standard')}
+                title="Standard Studio-Abstände"
+              >
+                <span>Standard</span>
+              </button>
+              <button
+                type="button"
+                className={`console-pill-btn ${viewMode === 'distance' ? 'active' : ''}`}
+                onClick={() => onViewModeChange('distance')}
+                title="Distanz-HUD (2–3m)"
+              >
+                <Tv size={12} />
+                <span>HUD</span>
+              </button>
+            </div>
+          )}
+
           {onOpenSettings && (
             <button
               type="button"
               className="button quiet settings-mgr-pill"
               onClick={onOpenSettings}
-              title="Standardisierte Presets & Backups: Alles importieren/exportieren & Ableton Live"
+              title="Presets, Backups & Ableton Live Export"
             >
               <FolderDown size={14} />
-              <span>Settings & Ableton</span>
+              <span>Ableton & Presets</span>
             </button>
           )}
 
@@ -172,40 +262,52 @@ export function EssentialMasterBar({
             title="Audio- & MIDI-Ausgangsrouting konfigurieren"
           >
             <Radio size={14} />
-            <span>{session.outputMode === 'internal' ? 'Audio intern' : session.outputMode === 'both' ? 'Audio + MIDI' : 'MIDI'}</span>
+            <span>
+              {session.outputMode === 'internal'
+                ? 'Audio intern'
+                : session.outputMode === 'both'
+                  ? 'Audio + MIDI'
+                  : 'MIDI'}
+            </span>
             <span className={`status-led ${midiStatus === 'ready' ? 'is-ready' : ''}`} />
           </button>
+
+          {onRecord && (
+            <button
+              type="button"
+              className={`record-button ${recording?.isRecording ? 'recording' : ''}`}
+              onClick={onRecord}
+              aria-label={recording?.isRecording ? 'Aufnahme stoppen und speichern' : 'Audio aufnehmen'}
+              title="Internes Audio als WAV mitschneiden"
+            >
+              <Circle size={12} />
+              <span>{recording?.isRecording ? `${recording.durationSec}s` : 'Rec'}</span>
+            </button>
+          )}
 
           <div className="jam-live-status-pill">
             <span className={`live-pulse-dot ${position.playing ? 'is-running' : ''}`} />
             <span className="live-status-text">
-              {position.playing ? `Live · Takt ${String(position.bar + 1).padStart(3, '0')}` : 'Bereit'}
+              {position.playing ? `Takt ${String(position.bar + 1).padStart(3, '0')}` : 'Bereit'}
             </span>
           </div>
-
-          {/* Quick Rack Collapse / Expand All toggle */}
-          {onExpandAll && onCollapseAll && (
-            <button
-              type="button"
-              className="button quiet rack-toggle-all-btn"
-              onClick={allCollapsed ? onExpandAll : onCollapseAll}
-              title={allCollapsed ? 'Alle Plugins ausklappen' : 'Alle Plugins auf Miniatur-Leiste minimieren'}
-            >
-              {allCollapsed ? <Maximize2 size={13} /> : <Minimize2 size={13} />}
-              <span>{allCollapsed ? 'Alle Ausklappen' : 'Alle Minimieren'}</span>
-            </button>
-          )}
         </div>
       </div>
 
-      {/* Main Essential Controls Strip */}
+      {/* Main 4-Cell Studio Control Strip (Well-spaced, clear overview, always editable) */}
       <div className="essential-strip-grid">
         {/* Unit 1: Transport & BPM */}
         <div className="essential-cell transport-cell">
           <button
             type="button"
             className={`master-play-btn ${position.playing ? 'is-playing' : ''}`}
-            onClick={() => void (position.playing ? engine.stop() : engine.start())}
+            onClick={() => {
+              if (onTogglePlay) {
+                onTogglePlay();
+              } else {
+                void (position.playing ? engine.stop() : engine.start());
+              }
+            }}
             title={position.playing ? 'Jam stoppen (Leertaste)' : 'Jam starten (Leertaste)'}
           >
             {position.playing ? <Square size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
@@ -271,9 +373,8 @@ export function EssentialMasterBar({
           </div>
         </div>
 
-        {/* Unit 2: Harmonic Center & Sounding Chord - Notes on the fly like tempo settings */}
+        {/* Unit 2: Harmonic Center & Dual-Chord Quick Access */}
         <div className="essential-cell harmony-cell">
-          {/* Root note stepper: - / root / + like tempo settings */}
           <div className="root-stepper-cluster" title="Grundton anpassen (− / + Halbton) oder anspielen">
             <button
               type="button"
@@ -307,7 +408,9 @@ export function EssentialMasterBar({
                 title="Grundton direkt auswählen"
               >
                 {['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'].map((pName, pIdx) => (
-                  <option key={pIdx} value={pIdx}>{pName}</option>
+                  <option key={pIdx} value={pIdx}>
+                    {pName}
+                  </option>
                 ))}
               </select>
             </div>
@@ -325,43 +428,44 @@ export function EssentialMasterBar({
 
           <div className="master-chord-info">
             <div className="chord-label-row">
-              <span className="cell-eyebrow">AKKORD JETZT</span>
+              <div className="chord-title-interactive-row">
+                <button
+                  type="button"
+                  className="icon-button chord-nav-btn"
+                  onClick={() => engine.cycleChord(-1)}
+                  title="Vorherige Akkordstufe (◀)"
+                  aria-label="Vorherige Akkordstufe"
+                >
+                  <ChevronLeft size={13} />
+                </button>
+                <strong className="master-chord-title">{position.chord || pitch(session.root)}</strong>
+                <button
+                  type="button"
+                  className="icon-button chord-nav-btn"
+                  onClick={() => engine.cycleChord(1)}
+                  title="Nächste Akkordstufe (▶)"
+                  aria-label="Nächste Akkordstufe"
+                >
+                  <ChevronRight size={13} />
+                </button>
+              </div>
+
               <select
                 className="key-tag-select"
                 value={session.scale}
                 onChange={e => engine.updateSession({ scale: e.target.value as MusicalScale })}
-                title={`Tonleiter: ${pitch(session.root)} ${scaleName} (Klick zum Wechseln)`}
+                title={`Tonleiter: ${pitch(session.root)} ${scaleName}`}
                 aria-label="Skala wechseln"
               >
                 {SCALES.map(([val, label]) => (
-                  <option key={val} value={val}>{pitch(session.root)} {label}</option>
+                  <option key={val} value={val}>
+                    {pitch(session.root)} {label}
+                  </option>
                 ))}
               </select>
             </div>
 
-            <div className="chord-title-interactive-row">
-              <button
-                type="button"
-                className="icon-button chord-nav-btn"
-                onClick={() => engine.cycleChord(-1)}
-                title="Vorherige Akkordstufe (◀)"
-                aria-label="Vorherige Akkordstufe"
-              >
-                <ChevronLeft size={13} />
-              </button>
-              <strong className="master-chord-title">{position.chord || pitch(session.root)}</strong>
-              <button
-                type="button"
-                className="icon-button chord-nav-btn"
-                onClick={() => engine.cycleChord(1)}
-                title="Nächste Akkordstufe (▶)"
-                aria-label="Nächste Akkordstufe"
-              >
-                <ChevronRight size={13} />
-              </button>
-            </div>
-
-            {/* Individual chord notes: on the fly transposing and auditioning like tempo settings */}
+            {/* Individual chord notes: on-the-fly transposing and auditioning */}
             <div className="master-chord-tones">
               {position.chordNotes.map((n, i) => (
                 <div key={i} className="mini-tone-stepper-node">
@@ -395,7 +499,7 @@ export function EssentialMasterBar({
               ))}
             </div>
 
-            {/* Generative pattern & pace on-the-fly row */}
+            {/* Pattern, Pace & Dual-Chord B Quick Row */}
             <div className="chord-pattern-pace-row">
               <label className="mini-chord-pattern-select" title="Generatives Akkordmuster wählen">
                 <span className="mini-label">Muster:</span>
@@ -404,13 +508,13 @@ export function EssentialMasterBar({
                   onChange={e => engine.setChordPattern(e.target.value as ChordPattern)}
                   aria-label="Akkordmuster"
                 >
-                  <option value="pad">Pad (Fläche)</option>
-                  <option value="pulse">Puls (3/16 CBL)</option>
-                  <option value="broken">Broken (Arp)</option>
-                  <option value="syncopated">Sync (Dub-Stab)</option>
-                  <option value="euclidean">Euklid (Poly)</option>
-                  <option value="wave">Welle (Swell)</option>
-                  <option value="cluster">Cluster (Glanz)</option>
+                  <option value="pad">Pad</option>
+                  <option value="wave">Wave</option>
+                  <option value="pulse">Pulse</option>
+                  <option value="broken">Arp</option>
+                  <option value="cluster">Cluster</option>
+                  <option value="euclidean">Euklid</option>
+                  <option value="syncopated">Sync</option>
                 </select>
               </label>
 
@@ -428,29 +532,13 @@ export function EssentialMasterBar({
                 </select>
               </label>
 
-              <label className="mini-chord-pace-select" title="Zusätzliche Begleittextur / Shimmer Layer">
-                <span className="mini-label">Layer:</span>
-                <select
-                  value={currentChordTexture}
-                  onChange={e => engine.setChordTexture(e.target.value as ChordTexture)}
-                  aria-label="Akkord-Begleittextur"
-                >
-                  <option value="off">Aus</option>
-                  <option value="shimmer">✨ Shimmer</option>
-                  <option value="octave">⚡ Oktave</option>
-                  <option value="sub5th">🪐 Quinte</option>
-                </select>
-              </label>
-
               <button
                 type="button"
-                className="mini-reharmonize-btn"
-                onClick={() => engine.evolve()}
-                title="Akkordfolge & Voicings generativ weiterentwickeln"
-                aria-label="Re-Harmonisieren"
+                className={`mini-reharmonize-btn ${secondaryEnabled ? 'is-active' : ''}`}
+                onClick={() => engine.setSecondaryChord({ enabled: !secondaryEnabled })}
+                title="Dual-Chord Spur B ein-/ausschalten"
               >
-                <Dice5 size={11} />
-                <span>Neu</span>
+                <span>B: {secondaryEnabled ? secondaryTimbre.toUpperCase() : 'OFF'}</span>
               </button>
             </div>
           </div>
@@ -462,172 +550,162 @@ export function EssentialMasterBar({
               <div className="next-chord-fill" style={{ width: `${Math.round(progress * 100)}%` }} />
             </div>
             <span className="next-chord-helper">
-              {position.playing ? `in ${Math.max(1, Math.ceil(position.chordBarsLeft))}T` : 'beim Jam'}
+              {position.playing ? `in ${Math.max(1, Math.ceil(position.chordBarsLeft))}T` : 'Bereit'}
             </span>
           </div>
         </div>
 
-        {/* Unit 3: Sequence Tracker Ribbon Breadcrumb with on-the-fly mini arrow buttons & steppers */}
-        <div className="essential-cell sequence-cell">
+        {/* Unit 3: Editable Arrangement Mini Module (Always editable; clicking any scene activates it ASAP) */}
+        <div className={`essential-cell sequence-cell ${!isSeqActive ? 'is-seq-off' : ''}`}>
           <div className="seq-cell-header">
-            <span className="cell-eyebrow">ARRANGEMENT-SEQUENZ</span>
-            <button
-              type="button"
-              className={`seq-status-chip ${isSeqActive ? 'active' : 'idle'}`}
-              onClick={() => engine.toggleSequencer(!isSeqActive)}
-              title={isSeqActive ? 'Sequencer pausieren' : 'Sequencer starten'}
-            >
-              <Activity size={12} />
-              <span>{isSeqActive ? 'Aktiv' : 'Frei'}</span>
-            </button>
-          </div>
+            <span className="cell-eyebrow">
+              ARRANGEMENT · {isSeqActive ? `#${activeBlockIdx + 1} ${(seq?.currentBlockLabel || currentSection).toUpperCase()}` : 'MANUELL / AUS'}
+            </span>
 
-          {isSeqActive && seq ? (
-            <div className="seq-block-callout">
-              <div className="seq-block-title-row">
-                <strong className="active-block-name">
-                  #{seq.activeBlockIndex + 1} · {seq.currentBlockLabel || seq.currentSection.toUpperCase()}
-                </strong>
-
-                {/* Stepper for block duration like tempo settings */}
-                <div className="seq-bars-mini-stepper" title="Länge dieses Blocks anpassen (Takte)">
-                  <button
-                    type="button"
-                    className="icon-button mini-bar-step-btn"
-                    onClick={() => {
-                      const curBlock = (session.sequence || engine.getSequencerState().blocks)[seq.activeBlockIndex];
-                      if (curBlock) engine.stepBlockBars(curBlock.id, -1);
-                    }}
-                    title="Takte verkürzen (−)"
-                    aria-label="Takte verkürzen"
-                  >
-                    −
-                  </button>
-                  <span className="active-bar-badge">
-                    {seq.blockBarProgress + 1}/{seq.totalBlockBars}T
-                  </span>
-                  <button
-                    type="button"
-                    className="icon-button mini-bar-step-btn"
-                    onClick={() => {
-                      const curBlock = (session.sequence || engine.getSequencerState().blocks)[seq.activeBlockIndex];
-                      if (curBlock) engine.stepBlockBars(curBlock.id, 1);
-                    }}
-                    title="Takte verlängern (+)"
-                    aria-label="Takte verlängern"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-
-              {/* Mini buttons referencing arrows for up, high, down, and low */}
-              <div className="seq-energy-arrow-row" role="group" aria-label="Abschnitt-Energie für aktiven Block">
+            <div className="seq-header-right">
+              {/* Bar duration stepper: always editable */}
+              <div className="seq-bars-mini-stepper" title="Block-Länge in Takten anpassen (aktiviert Sequencer sofort)">
                 <button
                   type="button"
-                  className={`seq-mini-arrow-btn high ${seq.currentSection === 'chorus' ? 'is-selected' : ''}`}
+                  className="icon-button mini-bar-step-btn"
                   onClick={() => {
-                    const curBlock = (session.sequence || engine.getSequencerState().blocks)[seq.activeBlockIndex];
-                    if (curBlock) engine.setBlockSectionByEnergy(curBlock.id, 'high');
+                    if (activeBlock) engine.stepBlockBars(activeBlock.id, -1);
                   }}
-                  title="High (↑) · Chorus / Peak"
+                  title="Takte verkürzen (−)"
+                  aria-label="Takte verkürzen"
                 >
-                  <span className="arrow-icon">↑</span>
-                  <span>High</span>
+                  −
                 </button>
-                <button
-                  type="button"
-                  className={`seq-mini-arrow-btn up ${seq.currentSection === 'buildup' ? 'is-selected' : ''}`}
-                  onClick={() => {
-                    const curBlock = (session.sequence || engine.getSequencerState().blocks)[seq.activeBlockIndex];
-                    if (curBlock) engine.setBlockSectionByEnergy(curBlock.id, 'up');
-                  }}
-                  title="Up (↗) · Buildup / Steigerung"
-                >
-                  <span className="arrow-icon">↗</span>
-                  <span>Up</span>
-                </button>
-                <button
-                  type="button"
-                  className={`seq-mini-arrow-btn groove ${seq.currentSection === 'groove' ? 'is-selected' : ''}`}
-                  onClick={() => {
-                    const curBlock = (session.sequence || engine.getSequencerState().blocks)[seq.activeBlockIndex];
-                    if (curBlock) engine.setBlockSectionByEnergy(curBlock.id, 'groove');
-                  }}
-                  title="Flow (➔) · Voller Beat"
-                >
-                  <span className="arrow-icon">➔</span>
-                  <span>Flow</span>
-                </button>
-                <button
-                  type="button"
-                  className={`seq-mini-arrow-btn down ${seq.currentSection === 'breakdown' ? 'is-selected' : ''}`}
-                  onClick={() => {
-                    const curBlock = (session.sequence || engine.getSequencerState().blocks)[seq.activeBlockIndex];
-                    if (curBlock) engine.setBlockSectionByEnergy(curBlock.id, 'down');
-                  }}
-                  title="Down (↘) · Breakdown / Drums aus"
-                >
-                  <span className="arrow-icon">↘</span>
-                  <span>Down</span>
-                </button>
-                <button
-                  type="button"
-                  className={`seq-mini-arrow-btn low ${seq.currentSection === 'silent' ? 'is-selected' : ''}`}
-                  onClick={() => {
-                    const curBlock = (session.sequence || engine.getSequencerState().blocks)[seq.activeBlockIndex];
-                    if (curBlock) engine.setBlockSectionByEnergy(curBlock.id, 'low');
-                  }}
-                  title="Low (↓) · Stille / Minimal"
-                >
-                  <span className="arrow-icon">↓</span>
-                  <span>Low</span>
-                </button>
-              </div>
-
-              <div className="seq-next-sub-row">
-                <span className="seq-next-cue">
-                  ➔ {seq.nextBlockLabel || seq.nextSection?.toUpperCase() || 'Loop'} (noch {seq.barsUntilNextBlock}T)
+                <span className="active-bar-badge">
+                  {isSeqActive ? `${blockBarProgress + 1}/${totalBlockBars}T` : `${totalBlockBars}T`}
                 </span>
                 <button
                   type="button"
-                  className="seq-skip-btn"
-                  onClick={() => engine.jumpToSequenceBlock((seq.activeBlockIndex + 1) % (seq.totalBlocks || 1))}
-                  title="Sofort zum nächsten Block springen"
+                  className="icon-button mini-bar-step-btn"
+                  onClick={() => {
+                    if (activeBlock) engine.stepBlockBars(activeBlock.id, 1);
+                  }}
+                  title="Takte verlängern (+)"
+                  aria-label="Takte verlängern"
                 >
-                  <SkipForward size={11} />
-                  <span>Skip</span>
+                  +
                 </button>
               </div>
-            </div>
-          ) : (
-            <div className="seq-idle-info">
-              <span>Freier Jam ohne Kette</span>
+
+              {/* Clean ON / OFF Switch */}
               <button
                 type="button"
-                className="button quiet seq-activate-link"
-                onClick={() => engine.toggleSequencer(true)}
-                title="Arrangement-Sequencer jetzt starten"
+                role="switch"
+                aria-checked={isSeqActive}
+                className={`hardware-switch-pill ${isSeqActive ? 'is-on' : 'is-off'}`}
+                onClick={() => engine.toggleSequencer(!isSeqActive)}
+                title={isSeqActive ? 'Arrangement-Sequenzer ausschalten' : 'Arrangement-Sequenzer einschalten'}
               >
-                Sequenz starten ▶
+                <span className="switch-dot" />
+                <span>{isSeqActive ? 'ON' : 'OFF'}</span>
               </button>
             </div>
-          )}
+          </div>
+
+          <div className="seq-block-callout">
+            {/* Always-editable scene/section buttons: clicking any button activates the sequencer ASAP */}
+            <div className="seq-energy-arrow-row" role="group" aria-label="Abschnitt sofort aktivieren">
+              <button
+                type="button"
+                className={`seq-mini-arrow-btn high ${isSeqActive && currentSection === 'chorus' ? 'is-selected' : ''}`}
+                onClick={() => {
+                  if (activeBlock) engine.setBlockSectionByEnergy(activeBlock.id, 'high');
+                  else engine.applyArrangement('chorus');
+                }}
+                title="Sofort aktivieren: High (↑) · Chorus / Peak"
+              >
+                <span className="arrow-icon">↑</span>
+                <span>High</span>
+              </button>
+              <button
+                type="button"
+                className={`seq-mini-arrow-btn up ${isSeqActive && currentSection === 'buildup' ? 'is-selected' : ''}`}
+                onClick={() => {
+                  if (activeBlock) engine.setBlockSectionByEnergy(activeBlock.id, 'up');
+                  else engine.applyArrangement('buildup');
+                }}
+                title="Sofort aktivieren: Up (↗) · Buildup / Steigerung"
+              >
+                <span className="arrow-icon">↗</span>
+                <span>Up</span>
+              </button>
+              <button
+                type="button"
+                className={`seq-mini-arrow-btn groove ${isSeqActive && currentSection === 'groove' ? 'is-selected' : ''}`}
+                onClick={() => {
+                  if (activeBlock) engine.setBlockSectionByEnergy(activeBlock.id, 'groove');
+                  else engine.applyArrangement('groove');
+                }}
+                title="Sofort aktivieren: Flow (➔) · Voller Groove"
+              >
+                <span className="arrow-icon">➔</span>
+                <span>Flow</span>
+              </button>
+              <button
+                type="button"
+                className={`seq-mini-arrow-btn down ${isSeqActive && currentSection === 'breakdown' ? 'is-selected' : ''}`}
+                onClick={() => {
+                  if (activeBlock) engine.setBlockSectionByEnergy(activeBlock.id, 'down');
+                  else engine.applyArrangement('breakdown');
+                }}
+                title="Sofort aktivieren: Down (↘) · Breakdown (Drums aus)"
+              >
+                <span className="arrow-icon">↘</span>
+                <span>Down</span>
+              </button>
+              <button
+                type="button"
+                className={`seq-mini-arrow-btn low ${isSeqActive && currentSection === 'silent' ? 'is-selected' : ''}`}
+                onClick={() => {
+                  if (activeBlock) engine.setBlockSectionByEnergy(activeBlock.id, 'low');
+                  else engine.applyArrangement('silent');
+                }}
+                title="Sofort aktivieren: Low (↓) · Stille / Intimer Raum"
+              >
+                <span className="arrow-icon">↓</span>
+                <span>Low</span>
+              </button>
+            </div>
+
+            <div className="seq-next-sub-row">
+              <span className="seq-next-cue">
+                {isSeqActive
+                  ? `Nächster Teil: ${nextLabel} (in ${barsUntilNext}T)`
+                  : 'Klicke High / Up / Flow / Down / Low für Sofort-Start'}
+              </span>
+              <button
+                type="button"
+                className="seq-skip-btn"
+                onClick={() =>
+                  engine.jumpToSequenceBlock((activeBlockIdx + 1) % Math.max(1, seqBlocks.length))
+                }
+                title="Sofort zum nächsten Block springen (aktiviert Sequencer)"
+              >
+                <SkipForward size={11} />
+                <span>Nächster Block</span>
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* Unit 4: Loudness-Safe Evolve & Creative Controls */}
+        {/* Unit 4: Creative Evolution & Capture (Generously spaced buttons) */}
         <div className="essential-cell creative-cell">
           <div className="evolve-button-group">
             <button
               type="button"
               className="master-evolve-btn"
               onClick={handleEvolve}
-              title="Entwickelt Voicings, Grooves und Klangfarben weiter mit automatischer Lautstärke-Stabilisierung (keine Pegelsprünge)"
+              title="Entwickelt Voicings, Grooves und Klangfarben weiter mit automatischer Lautstärke-Stabilisierung"
             >
               <Shuffle size={15} />
               <div className="evolve-btn-txt">
                 <strong>Evolve</strong>
-                <span className="loudness-tag">⚖️ Loudness-Safe</span>
+                <span className="loudness-tag">Loudness-Safe</span>
               </div>
             </button>
 
@@ -635,12 +713,12 @@ export function EssentialMasterBar({
               type="button"
               className="master-radical-btn"
               onClick={handleRadical}
-              title="🎲 Radical Random: Komplette kreative Neukomposition (Skala, Grundton, Timbres, Rhythmen, Effekte) mit Loudness-Schutz"
+              title="Radical Random: Komplette kreative Neukomposition (Skala, Grundton, Timbres, Rhythmen, Effekte)"
             >
               <Dice5 size={15} />
               <div className="radical-btn-txt">
                 <strong>Radical</strong>
-                <span className="radical-tag">🎲 Chaos Dice</span>
+                <span className="radical-tag">Neu würfeln</span>
               </div>
             </button>
 
@@ -649,7 +727,7 @@ export function EssentialMasterBar({
                 type="button"
                 className="icon-button master-tool-btn"
                 onClick={() => engine.undo()}
-                title="Evolve rückgängig machen"
+                title="Rückgängig machen (Undo)"
                 aria-label="Undo"
               >
                 <Undo2 size={14} />
@@ -658,7 +736,7 @@ export function EssentialMasterBar({
                 type="button"
                 className="icon-button master-tool-btn"
                 onClick={() => engine.redo()}
-                title="Evolve wiederholen"
+                title="Wiederholen (Redo)"
                 aria-label="Redo"
               >
                 <Redo2 size={14} />
@@ -674,16 +752,16 @@ export function EssentialMasterBar({
               title="Organischen Timbre-Drift anstoßen"
             >
               <Zap size={12} />
-              <span>Chaos</span>
+              <span>Drift</span>
             </button>
             <button
               type="button"
               className="quick-creative-btn drop-btn"
               onClick={() => engine.applyArrangement('spontaneous')}
-              title="Spontaner Arrangement-Wechsel (Drop / Buildup)"
+              title="Spontaner Arrangement-Wechsel"
             >
               <Sparkles size={12} />
-              <span>Drop</span>
+              <span>Wendung</span>
             </button>
             <button
               type="button"
@@ -692,7 +770,7 @@ export function EssentialMasterBar({
               title="Letzte 8 Takte als MIDI-Take festhalten"
             >
               <Circle size={10} />
-              <span>Capture</span>
+              <span>Capture MIDI</span>
             </button>
           </div>
         </div>

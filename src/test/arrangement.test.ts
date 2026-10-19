@@ -189,9 +189,12 @@ test('Soundscapes match chords, hall reverb, and background atmosphere', () => {
 
 test('Arrangement Sequencer executes "4 Takte dies, 4 Takte jenes" and glides arrangable macros', () => {
   const engine = new JamEngine(createSession('moss-pulse'));
-  assert.equal(engine.getPosition().sequencer, undefined);
+  // Default is active per design requirements
+  assert.equal(engine.getPosition().sequencer?.enabled, true);
 
-  // 1. Activate Sequencer
+  // 1. Toggle off and back on
+  engine.toggleSequencer(false);
+  assert.equal(engine.getPosition().sequencer?.enabled, false);
   engine.toggleSequencer(true);
   let pos = engine.getPosition();
   assert.ok(pos.sequencer);

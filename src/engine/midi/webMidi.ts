@@ -79,7 +79,7 @@ export class WebMidiManager {
       this.selectedOutputId = (list.find(port => port.name.toLowerCase().includes('iac')) ?? list[0]).id;
       this.preferredOutputId = this.selectedOutputId; // pin initial discovery; unplugging never redirects a live route
     }
-    if (this.selectedOutputId && list.some(port => port.id === this.selectedOutputId) && this.errorMessage?.startsWith('MIDI output ')) { this.errorMessage = null; this.notifyStatus(); }
+    if (this.selectedOutputId && list.some(port => port.id === this.selectedOutputId) && (this.errorMessage?.startsWith('MIDI output ') || this.errorMessage?.includes('MIDI-Ausgang'))) { this.errorMessage = null; this.notifyStatus(); }
     this.onDevicesChanged?.([...list]);
   }
   public getAvailableOutputs(): MidiDeviceOption[] { return [...this.availableOutputs]; }
@@ -87,8 +87,8 @@ export class WebMidiManager {
   public selectOutput(id: string, preserveLayerIds?: Set<string>): void {
     if (this.selectedOutputId && this.selectedOutputId !== id) this.releaseGlobalRoute(this.selectedOutputId, preserveLayerIds);
     this.outputExplicitlyOff = false; this.preferredOutputId = id; this.selectedOutputId = id;
-    if (!this.getOutput(id)) { this.errorMessage = `MIDI output ${id} is unavailable. Its route is retained without selecting a different device.`; this.notifyStatus(); }
-    else if (this.errorMessage?.startsWith('MIDI output ')) { this.errorMessage = null; this.notifyStatus(); }
+    if (!this.getOutput(id)) { this.errorMessage = `Gespeicherter MIDI-Port nicht verbunden. Internes Audio spielt wie gewohnt.`; this.notifyStatus(); }
+    else if (this.errorMessage?.startsWith('MIDI output ') || this.errorMessage?.includes('MIDI-Port')) { this.errorMessage = null; this.notifyStatus(); }
   }
   public selectOff(preserveLayerIds?: Set<string>): void {
     if (this.selectedOutputId) this.releaseGlobalRoute(this.selectedOutputId, preserveLayerIds);

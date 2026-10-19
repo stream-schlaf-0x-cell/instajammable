@@ -7,7 +7,15 @@ const engine = JamEngine.getInstance();
 
 type DriftMode = 'manual' | 'calm' | 'pulse' | 'wild';
 
-export function ChaosModulatorDeck({ session }: { session: JamSession }) {
+export function ChaosModulatorDeck({
+  session,
+  enabled = true,
+  onToggleEnabled,
+}: {
+  session: JamSession;
+  enabled?: boolean;
+  onToggleEnabled?: (next: boolean) => void;
+}) {
   const [driftMode, setDriftMode] = useState<DriftMode>('calm');
   const [isDragging, setIsDragging] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -35,8 +43,8 @@ export function ChaosModulatorDeck({ session }: { session: JamSession }) {
       const dt = (now - lastTime) / 1000;
       lastTime = now;
 
-      // Update position if auto-drifting and not manually dragging
-      if (!isDragging && driftMode !== 'manual') {
+      // Update position if enabled, auto-drifting, and not manually dragging
+      if (enabled && !isDragging && driftMode !== 'manual') {
         const speed = driftMode === 'calm' ? 0.35 : driftMode === 'pulse' ? 0.8 : 1.7;
         phaseRef.current += dt * speed;
 
@@ -115,9 +123,10 @@ export function ChaosModulatorDeck({ session }: { session: JamSession }) {
     return () => {
       if (animFrame.current) cancelAnimationFrame(animFrame.current);
     };
-  }, [driftMode, isDragging]);
+  }, [driftMode, isDragging, enabled]);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!enabled && onToggleEnabled) onToggleEnabled(true);
     setIsDragging(true);
     updateFromPointer(e);
   };
@@ -142,6 +151,7 @@ export function ChaosModulatorDeck({ session }: { session: JamSession }) {
   };
 
   const handleSpontaneousPulse = () => {
+    if (!enabled && onToggleEnabled) onToggleEnabled(true);
     engine.applyChaosImpulse();
     // Jolt visual position
     posRef.current = {
@@ -150,8 +160,13 @@ export function ChaosModulatorDeck({ session }: { session: JamSession }) {
     };
   };
 
+  const selectMode = (mode: DriftMode) => {
+    if (!enabled && onToggleEnabled) onToggleEnabled(true);
+    setDriftMode(mode);
+  };
+
   return (
-    <section className="chaos-modulator-deck" aria-label="Chaos- und Drift-Modulator">
+    <section className={`chaos-modulator-deck ${!enabled ? 'is-disabled' : ''}`} aria-label="Chaos- und Drift-Modulator">
       <header className="chaos-deck-header">
         <div>
           <span className="eyebrow">ORGANISCHER ATTRACTOR</span>
@@ -159,6 +174,19 @@ export function ChaosModulatorDeck({ session }: { session: JamSession }) {
           <p className="helper">Gegen die starre Kälte: Ein mathematisch schwebender Attraktor wandert durch den 2D-Klangraum und moduliert Bewegung und Hall organisch.</p>
         </div>
         <div className="chaos-deck-actions">
+          {onToggleEnabled && (
+            <button
+              type="button"
+              role="switch"
+              aria-checked={enabled}
+              className={`hardware-switch-pill ${enabled ? 'is-on' : 'is-off'}`}
+              onClick={() => onToggleEnabled(!enabled)}
+              title={enabled ? 'Attraktor ausschalten' : 'Attraktor einschalten'}
+            >
+              <span className="switch-dot" />
+              <span>{enabled ? 'ON' : 'OFF'}</span>
+            </button>
+          )}
           <button
             type="button"
             className="button impulse-btn"
@@ -197,29 +225,29 @@ export function ChaosModulatorDeck({ session }: { session: JamSession }) {
             <div className="mode-btn-group">
               <button
                 type="button"
-                className={'button mode-btn ' + (driftMode === 'manual' ? 'active' : '')}
-                onClick={() => setDriftMode('manual')}
+                className={'button mode-btn ' + (enabled && driftMode === 'manual' ? 'active' : '')}
+                onClick={() => selectMode('manual')}
               >
                 Manuell (Halten)
               </button>
               <button
                 type="button"
-                className={'button mode-btn ' + (driftMode === 'calm' ? 'active' : '')}
-                onClick={() => setDriftMode('calm')}
+                className={'button mode-btn ' + (enabled && driftMode === 'calm' ? 'active' : '')}
+                onClick={() => selectMode('calm')}
               >
                 <Compass size={14} /> Sanft schwebend (CBL)
               </button>
               <button
                 type="button"
-                className={'button mode-btn ' + (driftMode === 'pulse' ? 'active' : '')}
-                onClick={() => setDriftMode('pulse')}
+                className={'button mode-btn ' + (enabled && driftMode === 'pulse' ? 'active' : '')}
+                onClick={() => selectMode('pulse')}
               >
                 <RefreshCw size={14} /> Pulsierend
               </button>
               <button
                 type="button"
-                className={'button mode-btn ' + (driftMode === 'wild' ? 'active' : '')}
-                onClick={() => setDriftMode('wild')}
+                className={'button mode-btn ' + (enabled && driftMode === 'wild' ? 'active' : '')}
+                onClick={() => selectMode('wild')}
               >
                 <Sparkles size={14} /> Wild & Chaotisch
               </button>

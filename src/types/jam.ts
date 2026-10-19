@@ -30,6 +30,11 @@ export interface LayerSettings {
   chordPattern?: ChordPattern;
   chordPace?: ChordPace;
   chordTexture?: ChordTexture;
+  /** Dual-Chord Engine (Layer B): harmonic counter-pad / ethereal shimmer / drone layer */
+  secondaryEnabled?: boolean;
+  secondaryTimbre?: Timbre;
+  secondaryVolume?: number;
+  secondaryPattern?: ChordPattern;
   mutationDensityMin?: number;
   mutationDensityMax?: number;
   minNote: number;

@@ -1,5 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { Play, Square, Download, Upload, Radio, SlidersHorizontal, Circle, ArrowUpRight, LockKeyhole, Snowflake, Volume2, Pin, X, Music2, Save, Trash2, Headphones, Compass, Activity, Disc, Waves, Cpu, Cloud, Sparkles } from 'lucide-react';
+import { Play, Square, Download, Upload, Radio, SlidersHorizontal, ArrowUpRight, LockKeyhole, Snowflake, Volume2, Pin, X, Music2, Save, Trash2, Headphones, Compass, Activity, Disc, Waves, Cpu, Cloud, Sparkles } from 'lucide-react';
 import { JamEngine } from './engine/jam/JamEngine';
 import { SCENES } from './engine/jam/scenes';
 import { clipToMidi, midiToClip } from './engine/jam/clipMidi';
@@ -9,7 +9,7 @@ import { ClipEditor } from './components/jam/ClipEditor';
 import { SoundLab, PinnedParameters } from './components/jam/SoundLab';
 import { AtmosphereFlow } from './components/jam/AtmosphereFlow';
 import { SoundscapeDeck, SequencerDeck, RhythmPoolDeck } from './components/jam/ArrangementHub';
-import { WorkspaceBar, type ViewDensityMode } from './components/jam/WorkspaceBar';
+import { type ViewDensityMode } from './components/jam/WorkspaceBar';
 import { EqualizerDeck } from './components/jam/EqualizerDeck';
 import { DistanceStageHUD } from './components/jam/DistanceStageHUD';
 import { CustomMacroDeck } from './components/jam/CustomMacroDeck';
@@ -18,18 +18,6 @@ import { ChaosModulatorDeck } from './components/jam/ChaosModulatorDeck';
 import { EssentialMasterBar } from './components/jam/EssentialMasterBar';
 import { PresetsSettingsModal } from './components/jam/PresetsSettingsModal';
 import { QuickMixerDeck, MiniMixerPreview } from './components/jam/QuickMixerDeck';
-import { PluginRackUnit } from './components/jam/PluginRackUnit';
-import {
-  MiniChaosPreview,
-  MiniEqPreview,
-  MiniSoundscapePreview,
-  MiniSequencerPreview,
-  MiniRhythmPoolPreview,
-  MiniFxChainPreview,
-  MiniCustomMacroPreview,
-  MiniAtmospherePreview,
-  MiniScorePreview,
-} from './components/jam/PluginMiniViews';
 import { findParamOption } from './engine/jam/customMacros';
 import { TIMBRES, type JamLayer, type JamSession, type MacroName, type MidiClip } from './types/jam';
 import type { MusicalScale } from './types';
@@ -66,38 +54,11 @@ export default function App() {
   const [midiStatus, setMidiStatus] = useState(engine.midi.getStatus());
   const [recording, setRecording] = useState<RecorderState>(() => engine.recorder.getState());
   const [viewMode, setViewMode] = useState<ViewDensityMode>('compact');
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({
-    mixer: false,
-    chaos: false,
-    eq: false,
-    score: false,
-    soundscape: true,
-    sequencer: true,
-    rhythms: true,
-    fxchain: true,
-    custommacros: true,
-    atmosphere: true,
-  });
+  const [activeDrawer, setActiveDrawer] = useState<string | null>('soundscape');
+  const [mixerExpanded, setMixerExpanded] = useState<boolean>(true);
+  const [chaosEnabled, setChaosEnabled] = useState<boolean>(true);
+  const [customMacrosEnabled, setCustomMacrosEnabled] = useState<boolean>(true);
 
-  const toggleCollapse = useCallback((id: string) => {
-    setCollapsed(prev => ({ ...prev, [id]: !prev[id] }));
-  }, []);
-
-  const allCollapsed = useMemo(() => Object.values(collapsed).every(Boolean), [collapsed]);
-  const expandAll = useCallback(() => {
-    setCollapsed(prev => {
-      const next = { ...prev };
-      for (const k in next) next[k] = false;
-      return next;
-    });
-  }, []);
-  const collapseAll = useCallback(() => {
-    setCollapsed(prev => {
-      const next = { ...prev };
-      for (const k in next) next[k] = true;
-      return next;
-    });
-  }, []);
 
   const midiInput = useRef<HTMLInputElement>(null), sessionInput = useRef<HTMLInputElement>(null);
   const restored = useRef(false);
@@ -140,13 +101,8 @@ export default function App() {
   const pinned = MACROS.filter(m => session.pinned.includes(m.id));
 
   return <div className={`instrument-shell view-${viewMode} density-${viewMode}`}>
-    <header className="app-header">
-      <a className="wordmark" href="#jam" onClick={e => { e.preventDefault(); setTab('jam'); }} aria-label="instajammable — Jam öffnen"><span className="brand-symbol"><i /><i /><i /><i /></span>instajammable<span className="brand-dot">.</span></a>
-      <nav className="primary-nav" aria-label="Hauptnavigation">{([['jam','Jam'],['library','Sammlung'],['details','Details']] as const).map(([id,label]) => <button key={id} onClick={() => setTab(id)} aria-current={tab === id ? 'page' : undefined} className={tab === id ? 'selected' : ''}>{label}{id === 'library' && library.length ? <span>{library.length}</span> : null}</button>)}</nav>
-      <div className="header-actions"><button className="button quiet" onClick={() => setRouting(true)}><Radio /><span>{session.outputMode === 'internal' ? 'Audio intern' : session.outputMode === 'both' ? 'Audio + MIDI' : 'MIDI'}</span><span className={'status-dot ' + (midiStatus === 'ready' ? 'connected' : '')} /></button><button className={'record-button ' + (recording.isRecording ? 'recording' : '')} onClick={() => void record()} aria-label={recording.isRecording ? 'Aufnahme stoppen und speichern' : 'Audio aufnehmen'}><Circle />{recording.isRecording ? recording.durationSec + 's' : 'Rec'}</button></div>
-    </header>
     <main className="workspace">
-      {/* 1. Essential Master Bar: Big Name + Preset Selector, Transport, BPM, Harmonies, Sequence Status & Loudness-Safe Evolve */}
+      {/* 1. Unified Master Top Console: Brand, Nav, Preset Selector, Transport, BPM, Harmonies, Always-Editable Sequence & Actions */}
       <EssentialMasterBar
         session={session}
         position={position}
@@ -154,9 +110,14 @@ export default function App() {
         onOpenRouting={() => setRouting(true)}
         onCapture={capture}
         onOpenSettings={() => setSettingsOpen(true)}
-        allCollapsed={allCollapsed}
-        onExpandAll={expandAll}
-        onCollapseAll={collapseAll}
+        tab={tab}
+        onTabChange={setTab}
+        libraryCount={library.length}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        recording={recording}
+        onRecord={record}
+        onTogglePlay={toggle}
       />
 
       {position.clipOverride && (
@@ -170,9 +131,6 @@ export default function App() {
           {viewMode === 'distance' && (
             <DistanceStageHUD session={session} position={position} onClose={() => setViewMode('compact')} />
           )}
-
-          {/* View density and display settings bar */}
-          <WorkspaceBar session={session} viewMode={viewMode} onViewModeChange={setViewMode} />
 
           {/* Core & Custom Macros Ribbon */}
           <section className="macro-strip" aria-label="Musikalische Makros">
@@ -208,248 +166,268 @@ export default function App() {
             ))}
           </section>
 
-          {/* Modular Plugin Rack: Ableton-style rack with individual minimize buttons and live background previews */}
-          <div className={`modular-plugin-rack density-${viewMode}`}>
-            {/* 1. Studio-Mischpult */}
-            <PluginRackUnit
-              id="mixer"
-              title="Studio-Mischpult"
-              subtitle="8-Kanal Fader, Mute, Solo, Lock & Freeze"
-              icon={SlidersHorizontal}
-              badge="8 Spuren"
-              themeColor="#38bdf8"
-              isCollapsed={!!collapsed.mixer}
-              onToggleCollapse={() => toggleCollapse('mixer')}
-              miniContent={<MiniMixerPreview session={session} />}
-            >
-              <QuickMixerDeck session={session} position={position} />
-            </PluginRackUnit>
-
-            {/* 2. Organischer Attraktor */}
-            <PluginRackUnit
-              id="chaos"
-              title="Organischer Attraktor"
-              subtitle="Nichtlineare Chaossysteme für Timbre- & Modulationsdrift"
-              icon={Sparkles}
-              badge="LORENZ"
-              themeColor="#ec4899"
-              isCollapsed={!!collapsed.chaos}
-              onToggleCollapse={() => toggleCollapse('chaos')}
-              miniContent={<MiniChaosPreview session={session} />}
-            >
-              <ChaosModulatorDeck session={session} />
-            </PluginRackUnit>
-
-            {/* 3. 4-Band Studio-EQ & Low-Cut */}
-            {(() => {
-              const eqModule = engine.getEffectChain().modules.find(m => m.id === 'eq');
-              const isBypassed = eqModule?.bypassed ?? false;
-              return (
-                <PluginRackUnit
-                  id="eq"
-                  title="4-Band Studio-EQ & Low-Cut"
-                  subtitle="Frequenzkurve, Resonanz-Dämpfung & Sub-Bereinigung"
-                  icon={SlidersHorizontal}
-                  badge={`${session.effectsPatch?.eqHighpass || 20}Hz LC`}
-                  themeColor="#10b981"
-                  isBypassed={isBypassed}
-                  onToggleBypass={() => engine.toggleEffectBypass('eq')}
-                  isCollapsed={!!collapsed.eq}
-                  onToggleCollapse={() => toggleCollapse('eq')}
-                  miniContent={<MiniEqPreview session={session} />}
-                >
-                  <EqualizerDeck session={session} onClose={() => toggleCollapse('eq')} />
-                </PluginRackUnit>
-              );
-            })()}
-
-            {/* 4. Pianorolle & Ensemble */}
-            <PluginRackUnit
-              id="score"
-              title="Pianorolle & Ensemble"
-              subtitle="Visualisierte Melodien, Akkorde & Noten-Spuren"
-              icon={Music2}
-              badge={`${position.voices} Stimmen`}
-              themeColor="#6366f1"
-              isCollapsed={!!collapsed.score}
-              onToggleCollapse={() => toggleCollapse('score')}
-              miniContent={<MiniScorePreview session={session} position={position} />}
-            >
-              <div className="jam-layout">
-                <section className="score-panel">
-                  <header className="panel-heading">
-                    <div>
-                      <span className="eyebrow">{live ? 'GESPIELTE NOTEN' : 'SZENENVORSCHAU · NOCH NICHT GESPIELT'}</span>
-                      <h2>Platz für deine Melodie.</h2>
-                    </div>
-                    <div className="segmented">
-                      <button className={!drums ? 'selected' : ''} onClick={() => { setDrums(false); setFocusTrack(''); }}>Keys</button>
-                      <button className={drums ? 'selected' : ''} onClick={() => { setDrums(true); setFocusTrack(''); }}>Drums</button>
-                    </div>
-                  </header>
-                  <div className="roll-focus">
-                    <label>
-                      Fokus{' '}
-                      <select aria-label="Pianorollen-Fokus" value={focusTrack} onChange={e => setFocusTrack(e.target.value)}>
-                        <option value="">Alle Spuren</option>
-                        {session.layers.filter(l => drums ? l.role === 'drum' : l.role !== 'drum').map(l => (
-                          <option key={l.id} value={l.id}>{l.name}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <span>Oktaven wie in Ableton · MIDI 60 = C3</span>
-                  </div>
-                  <PianoRoll
-                    rootPitchClass={((position.chordRoot % 12) + 12) % 12}
-                    chordTones={position.chordNotes}
-                    notes={rollNotes}
-                    tracks={session.layers}
-                    focusedTrack={focusTrack || undefined}
-                    startBeat={startBeat}
-                    span={span}
-                    cursor={live ? position.beat : undefined}
-                    drums={drums}
-                    height={345}
-                    onAudition={n => { void act(() => engine.auditionNote(n)); }}
-                  />
-                  <footer className="score-footer">
-                    <div className="chord-display">
-                      <span className="helper">Jetzt</span>
-                      <strong>{position.chord || pitch(session.root) + ' ' + session.scale}</strong>
-                    </div>
-                    <span className="helper">
-                      {live ? `Live · 8 Takte · ${position.voices} Stimmen` : 'Starte den Jam, um den tatsächlichen Verlauf zu sehen.'}
-                    </span>
-                  </footer>
-                </section>
-                <aside className="layers-panel">
-                  <header className="panel-heading">
-                    <div>
-                      <span className="eyebrow">DAS ENSEMBLE</span>
-                      <h2>In Balance.</h2>
-                    </div>
-                    <button className="icon-button" aria-label="Spurdetails öffnen" onClick={() => setTab('details')}>
-                      <SlidersHorizontal />
-                    </button>
-                  </header>
-                  <div className="layers-list">
-                    {session.layers.map(layer => (
-                      <LayerRow key={layer.id} layer={layer} />
-                    ))}
-                  </div>
-                  <footer className="helper layer-legend">
-                    <LockKeyhole size={13} /> Parameter schützen <Snowflake size={13} /> Phrase wiederholen
-                  </footer>
-                </aside>
+          {/* Central 8-Channel Studio Mixing Desk */}
+          <section className="central-mixer-stage" aria-label="8-Kanal Studio-Mischpult">
+            <header className="mixer-stage-header">
+              <div className="mixer-stage-title">
+                <SlidersHorizontal size={15} style={{ color: '#38bdf8' }} />
+                <strong>8-Kanal Studio-Mischpult</strong>
+                <span className="mixer-stage-badge">Fader, Mute, Solo, Lock & Freeze</span>
               </div>
-            </PluginRackUnit>
+              <div className="mixer-stage-actions">
+                <button
+                  type="button"
+                  className="button quiet mixer-collapse-btn"
+                  onClick={() => setMixerExpanded(prev => !prev)}
+                  title={mixerExpanded ? 'Mischpult minimieren' : 'Mischpult öffnen'}
+                >
+                  <span>{mixerExpanded ? 'Minimieren' : 'Öffnen'}</span>
+                </button>
+              </div>
+            </header>
+            {mixerExpanded ? (
+              <QuickMixerDeck session={session} position={position} />
+            ) : (
+              <div className="mini-mixer-collapsed-bar" onClick={() => setMixerExpanded(true)}>
+                <MiniMixerPreview session={session} />
+                <span className="click-to-expand-hint">Klicken zum Öffnen des 8-Kanal-Mischpults</span>
+              </div>
+            )}
+          </section>
 
-            {/* 5. Klanglandschaft & Streicher */}
-            <PluginRackUnit
-              id="soundscape"
-              title="Klanglandschaft & Orchester"
-              subtitle="Großes Streichorchester, Hall-Räume & harmonische Stimmung"
-              icon={Compass}
-              badge={session.layers.find(l => l.role === 'chords')?.settings.timbre === 'strings' ? 'Großes Orchester' : 'Akkorde'}
-              themeColor="#f59e0b"
-              isCollapsed={!!collapsed.soundscape}
-              onToggleCollapse={() => toggleCollapse('soundscape')}
-              miniContent={<MiniSoundscapePreview session={session} />}
-            >
-              <SoundscapeDeck session={session} position={position} onClose={() => toggleCollapse('soundscape')} />
-            </PluginRackUnit>
-
-            {/* 6. Arrangement-Sequenzer */}
-            <PluginRackUnit
-              id="sequencer"
-              title="Arrangement-Sequenzer"
-              subtitle="Strophe, Refrain, Break & Drop im 4/8-Takt-Verlauf"
-              icon={Activity}
-              badge={position.sequencer?.enabled ? 'Aktiv' : 'Frei'}
-              themeColor="#a855f7"
-              isBypassed={!session.sequencerEnabled}
-              onToggleBypass={() => engine.toggleSequencer(!session.sequencerEnabled)}
-              isCollapsed={!!collapsed.sequencer}
-              onToggleCollapse={() => toggleCollapse('sequencer')}
-              miniContent={<MiniSequencerPreview session={session} position={position} />}
-            >
-              <SequencerDeck session={session} position={position} onClose={() => toggleCollapse('sequencer')} />
-            </PluginRackUnit>
-
-            {/* 7. Rhythmus-Pool & Drums */}
-            <PluginRackUnit
-              id="rhythms"
-              title="Rhythmus-Pool & Groove"
-              subtitle="Euclidean, Markov, Polyrhythmen & CBL Grooves"
-              icon={Disc}
-              badge={session.layers.find(l => l.role === 'drum')?.settings.rhythmAlgorithm?.toUpperCase() || 'COMPOSED'}
-              themeColor="#06b6d4"
-              isCollapsed={!!collapsed.rhythms}
-              onToggleCollapse={() => toggleCollapse('rhythms')}
-              miniContent={<MiniRhythmPoolPreview session={session} />}
-            >
-              <RhythmPoolDeck session={session} position={position} onClose={() => toggleCollapse('rhythms')} />
-            </PluginRackUnit>
-
-            {/* 8. Studio-Effektkette */}
-            <PluginRackUnit
-              id="fxchain"
-              title="Studio-Effektkette"
-              subtitle="Ping-Pong Delay, Damped Reverb, Chorus & Bandsättigung"
-              icon={Waves}
-              badge={session.effectChain?.mode === 'delay-into-reverb' ? 'Delay ➔ Hall' : 'Hall ➔ Delay'}
-              themeColor="#14b8a6"
-              isCollapsed={!!collapsed.fxchain}
-              onToggleCollapse={() => toggleCollapse('fxchain')}
-              miniContent={<MiniFxChainPreview session={session} />}
-            >
-              <EffectChainDeck session={session} />
-            </PluginRackUnit>
-
-            {/* 9. Eigene Makros */}
-            <PluginRackUnit
-              id="custommacros"
-              title="Eigene Makros (Ableton-Style)"
-              subtitle="Selbst konfigurierte Multi-Parameter-Regler"
-              icon={Cpu}
-              badge={`${session.customMacros?.length || 0} Makros`}
-              themeColor="#e11d48"
-              isCollapsed={!!collapsed.custommacros}
-              onToggleCollapse={() => toggleCollapse('custommacros')}
-              miniContent={<MiniCustomMacroPreview session={session} />}
-            >
-              <CustomMacroDeck session={session} />
-            </PluginRackUnit>
-
-            {/* 10. Atmosphären-Generator */}
-            <PluginRackUnit
-              id="atmosphere"
-              title="Atmosphären-Generator"
-              subtitle="Subtiler Rauschteppich & Sidechain (Gedeckelt auf max. 20%)"
-              icon={Cloud}
-              badge={`Pegel ${Math.round(Math.min(0.2, session.atmosphere?.level ?? 0.12) * 100)}%`}
-              themeColor="#8b5cf6"
-              isBypassed={session.atmosphere?.kind === 'off'}
-              onToggleBypass={() => {
-                const isOff = session.atmosphere?.kind === 'off';
-                engine.updateSession({
-                  atmosphere: {
-                    kind: isOff ? 'air' : 'off',
-                    level: Math.min(0.2, session.atmosphere?.level ?? 0.14),
-                    tone: session.atmosphere?.tone ?? 0.5,
-                    movement: session.atmosphere?.movement ?? 0.4,
+          {/* Single-Drawer Console: Clean tab bar with explicit ON/OFF hardware switch on every tab */}
+          <section className="single-drawer-console" aria-label="Single-Drawer Modul-Konsole">
+            <div className="drawer-tabs-bar" role="tablist">
+              {[
+                {
+                  id: 'soundscape',
+                  title: 'Klangwelt & Chords',
+                  icon: Compass,
+                  color: '#f59e0b',
+                  isOn: session.layers.find(l => l.role === 'chords')?.settings.secondaryEnabled ?? true,
+                  onToggle: () => {
+                    const l = session.layers.find(ly => ly.role === 'chords');
+                    engine.setSecondaryChord({ enabled: !(l?.settings.secondaryEnabled ?? true) });
                   },
-                });
-              }}
-              isCollapsed={!!collapsed.atmosphere}
-              onToggleCollapse={() => toggleCollapse('atmosphere')}
-              miniContent={<MiniAtmospherePreview session={session} />}
-            >
-              <AtmosphereFlow session={session} />
-            </PluginRackUnit>
+                },
+                {
+                  id: 'sequencer',
+                  title: 'Arrangement-Sequenzer',
+                  icon: Activity,
+                  color: '#a855f7',
+                  isOn: session.sequencerEnabled ?? true,
+                  onToggle: () => engine.toggleSequencer(!session.sequencerEnabled),
+                },
+                {
+                  id: 'score',
+                  title: 'Pianorolle & Ensemble',
+                  icon: Music2,
+                  color: '#6366f1',
+                  isOn: !session.layers.find(l => l.role === 'melody')?.muted,
+                  onToggle: () => {
+                    const l = session.layers.find(ly => ly.role === 'melody');
+                    if (l) engine.updateLayer(l.id, { muted: !l.muted });
+                  },
+                },
+                {
+                  id: 'rhythms',
+                  title: 'Rhythmus & Drums',
+                  icon: Disc,
+                  color: '#06b6d4',
+                  isOn: session.layers.some(l => l.role === 'drum' && !l.muted),
+                  onToggle: () => {
+                    const anyDrumUnmuted = session.layers.some(l => l.role === 'drum' && !l.muted);
+                    for (const l of session.layers) {
+                      if (l.role === 'drum') engine.updateLayer(l.id, { muted: anyDrumUnmuted });
+                    }
+                  },
+                },
+                {
+                  id: 'eq',
+                  title: '4-Band Studio-EQ',
+                  icon: SlidersHorizontal,
+                  color: '#10b981',
+                  isOn: !engine.getEffectChain().modules.find(m => m.id === 'eq')?.bypassed,
+                  onToggle: () => engine.toggleEffectBypass('eq'),
+                },
+                {
+                  id: 'fxchain',
+                  title: 'Effektkette',
+                  icon: Waves,
+                  color: '#14b8a6',
+                  isOn: !engine.getEffectChain().modules.find(m => m.id === 'reverb')?.bypassed,
+                  onToggle: () => engine.toggleEffectBypass('reverb'),
+                },
+                {
+                  id: 'chaos',
+                  title: 'Organischer Attraktor',
+                  icon: Sparkles,
+                  color: '#ec4899',
+                  isOn: chaosEnabled,
+                  onToggle: () => setChaosEnabled(prev => !prev),
+                },
+                {
+                  id: 'atmosphere',
+                  title: 'Atmosphäre (≤10%)',
+                  icon: Cloud,
+                  color: '#8b5cf6',
+                  isOn: session.atmosphere?.kind !== 'off',
+                  onToggle: () => {
+                    const isOff = session.atmosphere?.kind === 'off';
+                    engine.updateSession({
+                      atmosphere: {
+                        kind: isOff ? 'air' : 'off',
+                        level: Math.min(0.10, session.atmosphere?.level ?? 0.06),
+                        tone: session.atmosphere?.tone ?? 0.5,
+                        movement: session.atmosphere?.movement ?? 0.4,
+                      },
+                    });
+                  },
+                },
+                {
+                  id: 'custommacros',
+                  title: 'Eigene Makros',
+                  icon: Cpu,
+                  color: '#e11d48',
+                  isOn: customMacrosEnabled,
+                  onToggle: () => setCustomMacrosEnabled(prev => !prev),
+                },
+              ].map(d => {
+                const IconComponent = d.icon;
+                const isSelected = activeDrawer === d.id;
+                return (
+                  <div
+                    key={d.id}
+                    className={`drawer-tab-item ${isSelected ? 'is-active' : ''} ${!d.isOn ? 'is-module-off' : ''}`}
+                    onClick={() => setActiveDrawer(isSelected ? null : d.id)}
+                    role="tab"
+                    aria-selected={isSelected}
+                    title={`${d.title} (Klicken zum Öffnen)`}
+                  >
+                    <div className="drawer-tab-main">
+                      <IconComponent size={14} style={{ color: d.color }} />
+                      <span className="drawer-tab-title">{d.title}</span>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={d.isOn}
+                      className={`hardware-switch-pill ${d.isOn ? 'is-on' : 'is-off'}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        d.onToggle();
+                      }}
+                      title={`${d.title} ${d.isOn ? 'ausschalten' : 'einschalten'}`}
+                    >
+                      <span className="switch-dot" />
+                      <span>{d.isOn ? 'ON' : 'OFF'}</span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
 
-            <PinnedParameters session={session} />
-          </div>
+            {/* Active Drawer Panel Container */}
+            {activeDrawer && (
+              <div className="drawer-panel-body" role="tabpanel">
+                {activeDrawer === 'soundscape' && (
+                  <SoundscapeDeck session={session} position={position} onClose={() => setActiveDrawer(null)} />
+                )}
+                {activeDrawer === 'sequencer' && (
+                  <SequencerDeck session={session} position={position} onClose={() => setActiveDrawer(null)} />
+                )}
+                {activeDrawer === 'score' && (
+                  <div className="jam-layout">
+                    <section className="score-panel">
+                      <header className="panel-heading">
+                        <div>
+                          <span className="eyebrow">{live ? 'GESPIELTE NOTEN' : 'SZENENVORSCHAU · NOCH NICHT GESPIELT'}</span>
+                          <h2>Platz für deine Melodie.</h2>
+                        </div>
+                        <div className="segmented">
+                          <button className={!drums ? 'selected' : ''} onClick={() => { setDrums(false); setFocusTrack(''); }}>Keys</button>
+                          <button className={drums ? 'selected' : ''} onClick={() => { setDrums(true); setFocusTrack(''); }}>Drums</button>
+                        </div>
+                      </header>
+                      <div className="roll-focus">
+                        <label>
+                          Fokus{' '}
+                          <select aria-label="Pianorollen-Fokus" value={focusTrack} onChange={e => setFocusTrack(e.target.value)}>
+                            <option value="">Alle Spuren</option>
+                            {session.layers.filter(l => drums ? l.role === 'drum' : l.role !== 'drum').map(l => (
+                              <option key={l.id} value={l.id}>{l.name}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <span>Oktaven wie in Ableton · MIDI 60 = C3</span>
+                      </div>
+                      <PianoRoll
+                        rootPitchClass={((position.chordRoot % 12) + 12) % 12}
+                        chordTones={position.chordNotes}
+                        notes={rollNotes}
+                        tracks={session.layers}
+                        focusedTrack={focusTrack || undefined}
+                        startBeat={startBeat}
+                        span={span}
+                        cursor={live ? position.beat : undefined}
+                        drums={drums}
+                        height={345}
+                        onAudition={n => { void act(() => engine.auditionNote(n)); }}
+                      />
+                      <footer className="score-footer">
+                        <div className="chord-display">
+                          <span className="helper">Jetzt</span>
+                          <strong>{position.chord || pitch(session.root) + ' ' + session.scale}</strong>
+                        </div>
+                        <span className="helper">
+                          {live ? `Live · 8 Takte · ${position.voices} Stimmen` : 'Starte den Jam, um den tatsächlichen Verlauf zu sehen.'}
+                        </span>
+                      </footer>
+                    </section>
+                    <aside className="layers-panel">
+                      <header className="panel-heading">
+                        <div>
+                          <span className="eyebrow">DAS ENSEMBLE</span>
+                          <h2>In Balance.</h2>
+                        </div>
+                        <button className="icon-button" aria-label="Spurdetails öffnen" onClick={() => setTab('details')}>
+                          <SlidersHorizontal />
+                        </button>
+                      </header>
+                      <div className="layers-list">
+                        {session.layers.map(layer => (
+                          <LayerRow key={layer.id} layer={layer} />
+                        ))}
+                      </div>
+                      <footer className="helper layer-legend">
+                        <LockKeyhole size={13} /> Parameter schützen <Snowflake size={13} /> Phrase wiederholen
+                      </footer>
+                    </aside>
+                  </div>
+                )}
+                {activeDrawer === 'rhythms' && (
+                  <RhythmPoolDeck session={session} position={position} onClose={() => setActiveDrawer(null)} />
+                )}
+                {activeDrawer === 'eq' && (
+                  <EqualizerDeck session={session} onClose={() => setActiveDrawer(null)} />
+                )}
+                {activeDrawer === 'fxchain' && (
+                  <EffectChainDeck session={session} />
+                )}
+                {activeDrawer === 'chaos' && (
+                  <ChaosModulatorDeck session={session} enabled={chaosEnabled} onToggleEnabled={setChaosEnabled} />
+                )}
+                {activeDrawer === 'atmosphere' && (
+                  <AtmosphereFlow session={session} />
+                )}
+                {activeDrawer === 'custommacros' && (
+                  <CustomMacroDeck session={session} />
+                )}
+              </div>
+            )}
+          </section>
+
+          <PinnedParameters session={session} />
 
           {/* 16 Ausgangspunkte / Szenen */}
           <section className="scene-section">

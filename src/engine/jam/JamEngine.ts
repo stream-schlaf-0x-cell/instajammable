@@ -42,23 +42,23 @@ const id = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.rand
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const rootPitchName = (midi: number) => NOTE_NAMES[((Math.round(midi) % 12) + 12) % 12];
 
-export function ambientPatch(layer: JamLayer, session: JamSession, beat = 0, cutoffOffset = 0): AmbientSynthParams {
-  const timbre = layer.settings.timbre; const bass = layer.role === 'bass'; const pluck = timbre === 'keys' || timbre === 'bell' || timbre === 'celeste';
+export function ambientPatch(layer: JamLayer, session: JamSession, beat = 0, cutoffOffset = 0, timbreOverride?: Timbre): AmbientSynthParams {
+  const timbre = timbreOverride || layer.settings.timbre; const bass = layer.role === 'bass'; const pluck = timbre === 'keys' || timbre === 'bell' || timbre === 'celeste';
   const movement = layer.locked || layer.frozen ? 0 : session.macros.movement;
-  const drift = session.evolving ? Math.sin(beat / 37 + layer.id.length) * movement : 0;
+  const drift = session.evolving ? Math.sin(beat / 37 + layer.id.length + (timbreOverride ? 1.7 : 0)) * movement : 0;
   const warmth = session.macros.warmth;
   const base: AmbientSynthParams = { rootNote: session.root, scale: session.scale,
     osc1Wave: timbre === 'strings' || timbre === 'solina' ? 'sawtooth' : timbre === 'bell' ? 'sine' : timbre === 'keys' || timbre === 'celeste' ? 'triangle' : 'sine',
     osc2Wave: timbre === 'strings' || timbre === 'solina' ? 'sawtooth' : 'triangle', osc3Wave: timbre === 'air' || timbre === 'bell' || timbre === 'shimmer' ? 'sine' : 'triangle',
     detuneSpread: bass ? 2.5 : timbre === 'strings' || timbre === 'solina' ? 14 : timbre === 'air' || timbre === 'shimmer' ? 10 : 4 + movement * 4,
-    subLevel: bass ? 0.35 : timbre === 'warm' ? 0.08 : 0,
+    subLevel: bass ? 0.35 : timbre === 'warm' ? 0.14 : 0,
     filterCutoff: bass ? 380 : clamp((timbre === 'air' ? 3400 : timbre === 'bell' ? 5200 : timbre === 'shimmer' ? 3800 : 2500) * (1 - warmth * 0.65) * (1 + drift * 0.35), 180, 6000),
-    filterResonance: 0.7, filterEnvAmount: pluck ? 0.28 : 0.05,
+    filterResonance: 0.72, filterEnvAmount: pluck ? 0.28 : 0.08,
     attack: bass ? 0.010 : pluck ? 0.015 : timbre === 'air' ? 0.65 : 1.1,
     decay: pluck ? 0.75 : 2.1, sustain: bass ? 0.78 : pluck ? 0.25 : 0.74,
     release: bass ? 0.24 : pluck ? 0.75 : 1.5 + session.macros.space * 1.2,
     lfoRate: bass ? 0.25 : 0.065 + movement * 0.09, lfoDepth: bass ? 0.05 : 0.07 + movement * 0.12,
-    driftAmount: bass ? 0.12 : movement * 0.12, voiceSpread: bass ? 0 : layer.role === 'melody' ? 0.35 : 0.55,
+    driftAmount: bass ? 0.12 : movement * 0.12, voiceSpread: bass ? 0 : layer.role === 'melody' ? 0.38 : 0.65,
     volume: bass ? 0.78 : timbre === 'bell' ? 0.45 : 0.48,
   };
 
@@ -96,8 +96,41 @@ export function ambientPatch(layer: JamLayer, session: JamSession, beat = 0, cut
         driftAmount: 0.08, voiceSpread: 0, volume: 0.74,
       });
     }
+  } else if (timbre === 'warm') {
+    // Juno-60 / Prophet-5 warm analog poly-pad (CBL / Aes Dana foundation)
+    Object.assign(base, {
+      osc1Wave: 'sawtooth', osc2Wave: 'triangle', osc3Wave: 'sine',
+      detuneSpread: 11 + movement * 4, subLevel: 0.14,
+      filterCutoff: clamp(1950 * (1 - warmth * 0.45) * (1 + drift * 0.22), 320, 4400),
+      filterResonance: 0.78, filterEnvAmount: 0.20,
+      attack: 1.35, decay: 2.6, sustain: 0.84, release: 4.4 + session.macros.space * 2.6,
+      lfoRate: 0.11 + movement * 0.08, lfoDepth: 0.13 + movement * 0.09,
+      driftAmount: 0.18 + movement * 0.10, voiceSpread: 0.86, volume: 0.44
+    });
+  } else if (timbre === 'keys') {
+    // Kupla / No Spirit / Chillhop Fender Rhodes Mark I & warm felt electric piano
+    Object.assign(base, {
+      osc1Wave: 'triangle', osc2Wave: 'sine', osc3Wave: 'sine',
+      detuneSpread: 5.5 + movement * 2.5, subLevel: 0.10,
+      filterCutoff: clamp(2350 * (1 - warmth * 0.42) * (1 + drift * 0.18), 420, 4600),
+      filterResonance: 0.74, filterEnvAmount: 0.34,
+      attack: 0.012, decay: 1.85, sustain: 0.38, release: 2.2 + session.macros.space * 1.6,
+      lfoRate: 0.16 + movement * 0.10, lfoDepth: 0.09 + movement * 0.07,
+      driftAmount: 0.14, voiceSpread: 0.74, volume: 0.46
+    });
+  } else if (timbre === 'bell') {
+    // Crystalline CBL / S1gns Of L1fe glass marimba & ethereal bell
+    Object.assign(base, {
+      osc1Wave: 'sine', osc2Wave: 'triangle', osc3Wave: 'sine',
+      detuneSpread: 7 + movement * 3, subLevel: 0.04,
+      filterCutoff: clamp(3900 * (1 - warmth * 0.40) * (1 + drift * 0.22), 680, 6200),
+      filterResonance: 0.76, filterEnvAmount: 0.36,
+      attack: 0.014, decay: 2.2, sustain: 0.28, release: 3.6 + session.macros.space * 2.4,
+      lfoRate: 0.10 + movement * 0.07, lfoDepth: 0.10 + movement * 0.08,
+      driftAmount: 0.16, voiceSpread: 0.78, volume: 0.40
+    });
   } else if (timbre === 'solina') {
-    // 70s Solina String Ensemble / Eminent 310 Unique (Cell aesthetic):
+    // 70s Solina String Ensemble / Eminent 310 Unique (Cell / Asura / CBL aesthetic):
     // Sawtooth waveforms, bucket-brigade chorus detune, tape warmth, silky roll-off.
     Object.assign(base, {
       osc1Wave: 'sawtooth', osc2Wave: 'sawtooth', osc3Wave: 'triangle',
@@ -109,7 +142,7 @@ export function ambientPatch(layer: JamLayer, session: JamSession, beat = 0, cut
       driftAmount: 0.22 + movement * 0.12, voiceSpread: 0.95, volume: 0.44
     });
   } else if (timbre === 'shimmer') {
-    // Upper-register crystalline shimmer pad with wide stereo breath
+    // Upper-register crystalline shimmer pad with wide stereo breath (S1gns Of L1fe / Spotify Ambient)
     Object.assign(base, {
       osc1Wave: 'sine', osc2Wave: 'triangle', osc3Wave: 'sawtooth',
       detuneSpread: 14 + movement * 6, subLevel: 0.03,
@@ -120,7 +153,7 @@ export function ambientPatch(layer: JamLayer, session: JamSession, beat = 0, cut
       driftAmount: 0.25 + movement * 0.15, voiceSpread: 0.96, volume: 0.40
     });
   } else if (timbre === 'celeste') {
-    // Warm felt acoustic piano / celesta hybrid: tactile pluck, warm bell sustain
+    // Warm felt acoustic piano / celesta hybrid: tactile pluck, warm bell sustain (Kupla / Ólafur Arnalds)
     Object.assign(base, {
       osc1Wave: 'triangle', osc2Wave: 'sine', osc3Wave: 'triangle',
       detuneSpread: 6, subLevel: 0.06,
@@ -140,27 +173,30 @@ export function ambientPatch(layer: JamLayer, session: JamSession, beat = 0, cut
       lfoRate: 0.14 + movement * 0.08, lfoDepth: 0.16 + movement * 0.10,
       driftAmount: 0.26 + movement * 0.15, voiceSpread: 0.95, volume: 0.46
     });
-  } else if (!bass && timbre === 'wash') Object.assign(base, { osc1Wave: 'sawtooth', osc2Wave: 'sawtooth', osc3Wave: 'triangle', detuneSpread: 10 + movement * 4, subLevel: 0.05,
-    filterCutoff: clamp(1700 * (1 - warmth * 0.6) * (1 + drift * 0.25), 280, 4200), filterResonance: 0.72, filterEnvAmount: 0.2, attack: 2.2, decay: 2.5, sustain: 0.82, release: 4.5 + session.macros.space * 2,
-    lfoRate: 0.05 + movement * 0.06, lfoDepth: 0.15 + movement * 0.12, driftAmount: 0.18 + movement * 0.12, voiceSpread: 0.85, volume: 0.35 });
+  } else if (!bass && timbre === 'wash') Object.assign(base, { osc1Wave: 'sawtooth', osc2Wave: 'sawtooth', osc3Wave: 'triangle', detuneSpread: 12 + movement * 5, subLevel: 0.08,
+    filterCutoff: clamp(1750 * (1 - warmth * 0.55) * (1 + drift * 0.25), 280, 4200), filterResonance: 0.74, filterEnvAmount: 0.22, attack: 2.1, decay: 2.6, sustain: 0.84, release: 4.8 + session.macros.space * 2.4,
+    lfoRate: 0.06 + movement * 0.06, lfoDepth: 0.15 + movement * 0.12, driftAmount: 0.20 + movement * 0.12, voiceSpread: 0.88, volume: 0.38 });
   else if (!bass && timbre === 'air') Object.assign(base, {
-    osc1Wave: 'sine', osc2Wave: 'triangle', osc3Wave: 'sine', detuneSpread: 10 + movement * 5, subLevel: 0.04,
+    osc1Wave: 'sine', osc2Wave: 'triangle', osc3Wave: 'sine', detuneSpread: 11 + movement * 5, subLevel: 0.04,
     filterCutoff: clamp(3100 * (1 - warmth * 0.4) * (1 + drift * 0.25), 450, 5800), filterResonance: 0.74, filterEnvAmount: 0.16, attack: 1.8, decay: 2.8, sustain: 0.80, release: 5.0 + session.macros.space * 3,
-    lfoRate: 0.07, lfoDepth: 0.12 + movement * 0.08, driftAmount: 0.18, voiceSpread: 0.88, volume: 0.40
+    lfoRate: 0.07, lfoDepth: 0.12 + movement * 0.08, driftAmount: 0.18, voiceSpread: 0.90, volume: 0.40
   });
-  else if (!bass && timbre === 'dub') Object.assign(base, { osc1Wave: 'sawtooth', osc2Wave: 'sawtooth', osc3Wave: 'triangle', detuneSpread: 8, subLevel: 0.1,
-    filterCutoff: clamp(820 * (1 - warmth * 0.4) * (1 + drift * 0.25), 250, 2200), filterResonance: 1.5, filterEnvAmount: 0.75, attack: 0.008, decay: 0.4, sustain: 0.12, release: 2.8 + session.macros.space * 1.5,
+  else if (!bass && timbre === 'dub') Object.assign(base, { osc1Wave: 'sawtooth', osc2Wave: 'sawtooth', osc3Wave: 'triangle', detuneSpread: 8, subLevel: 0.12,
+    filterCutoff: clamp(820 * (1 - warmth * 0.4) * (1 + drift * 0.25), 250, 2200), filterResonance: 1.45, filterEnvAmount: 0.72, attack: 0.008, decay: 0.42, sustain: 0.14, release: 2.8 + session.macros.space * 1.5,
     lfoRate: 0, lfoDepth: 0, driftAmount: 0.1, voiceSpread: 0.75, volume: 0.46 });
-  else if (!bass && timbre === 'root') Object.assign(base, { osc1Wave: 'sine', osc2Wave: 'triangle', osc3Wave: 'sine', detuneSpread: 3, subLevel: 0.35,
-    filterCutoff: clamp(950 * (1 - warmth * 0.35), 250, 2200), filterResonance: 0.65, filterEnvAmount: 0.05, attack: 3, decay: 2, sustain: 0.92, release: 5,
-    lfoRate: 0.04, lfoDepth: 0.1 + movement * 0.07, driftAmount: 0.08, voiceSpread: 0.3, volume: 0.5 });
+  else if (!bass && timbre === 'root') Object.assign(base, { osc1Wave: 'sawtooth', osc2Wave: 'triangle', osc3Wave: 'sine', detuneSpread: 6 + movement * 3, subLevel: 0.36,
+    filterCutoff: clamp(1050 * (1 - warmth * 0.35) * (1 + drift * 0.18), 240, 2400), filterResonance: 0.78, filterEnvAmount: 0.14, attack: 2.6, decay: 3.0, sustain: 0.92, release: 5.5 + session.macros.space * 2.5,
+    lfoRate: 0.05 + movement * 0.05, lfoDepth: 0.12 + movement * 0.08, driftAmount: 0.14, voiceSpread: 0.55, volume: 0.48 });
   else if (!bass && timbre === 'glass') Object.assign(base, { osc1Wave: 'sine', osc2Wave: 'triangle', osc3Wave: 'sine', detuneSpread: 11, subLevel: 0,
     filterCutoff: clamp(3200 * (1 - warmth * 0.5) * (1 + drift * 0.25), 650, 5200), filterResonance: 0.76, filterEnvAmount: 0.35, attack: 0.6, decay: 1.6, sustain: 0.55, release: 4.5 + session.macros.space * 2,
-    lfoRate: 0.07, lfoDepth: 0.08 + movement * 0.08, driftAmount: 0.2, voiceSpread: 0.8, volume: 0.38 });
+    lfoRate: 0.07, lfoDepth: 0.08 + movement * 0.08, driftAmount: 0.2, voiceSpread: 0.84, volume: 0.38 });
   else if (!bass && timbre === 'organ') Object.assign(base, { osc1Wave: 'sine', osc2Wave: 'triangle', osc3Wave: 'square', detuneSpread: 5, subLevel: 0.12,
     filterCutoff: clamp(1500 * (1 - warmth * 0.45) * (1 + drift * 0.2), 350, 4000), filterResonance: 0.8, filterEnvAmount: 0.1, attack: 0.12, decay: 0.3, sustain: 0.85, release: 1.4 + session.macros.space,
     lfoRate: 0.12, lfoDepth: 0.08 + movement * 0.08, driftAmount: 0.15, voiceSpread: 0.5, volume: 0.28 });
-  const patch = mergeAudioPatch(base, layer.settings.audioPatch); patch.filterCutoff = clamp(patch.filterCutoff + cutoffOffset, 20, 18000); return patch;
+  const useCustomPatch = !timbreOverride || timbreOverride === layer.settings.timbre;
+  const patch = useCustomPatch ? mergeAudioPatch(base, layer.settings.audioPatch) : base;
+  patch.filterCutoff = clamp(patch.filterCutoff + cutoffOffset, 20, 18000);
+  return patch;
 }
 /** Which timbres Evolve may rotate a layer through. Layers whose current timbre is not listed here are left as the user set them. */
 export const TIMBRE_PALETTES: Record<'chords' | 'melody', Record<JamSession['style'], JamLayer['settings']['timbre'][]>> = {
@@ -190,7 +226,7 @@ export function drumPatch(voice: NonNullable<JamLayer['drumVoice']>, session: Ja
 export function effectiveEffects(session: JamSession, offsets?: Partial<ModulationOffsets>): EffectsParams {
   const space = session.macros.space, warmth = session.macros.warmth; const techno = session.style === 'techno', ambient = session.style === 'ambient';
   const chordsLayer = session.layers?.find(l => l.role === 'chords');
-  const isStrings = chordsLayer?.settings.timbre === 'strings';
+  const isStrings = chordsLayer?.settings.timbre === 'strings' || chordsLayer?.settings.timbre === 'solina';
   const base: EffectsParams = { delayTime: (60 / session.bpm) * 0.75,
     delayFeedback: techno ? 0.34 + space * 0.34 : ambient ? 0.26 + space * 0.32 : 0.2 + space * 0.3,
     delayMix: space * (techno ? 0.36 : ambient ? 0.24 : 0.14), delayFlutter: warmth * 0.12 + (session.style === 'lofi' ? 0.06 : 0),
@@ -221,8 +257,8 @@ export function modulationAt(session: JamSession, recent: JamEvent[], beat: numb
 
 /** Sounding / releasing voice limits. Releasing is generous for pads: cutting a long tail early is audible. */
 export function voiceBudget(layer: JamLayer, lowResource: boolean): [number, number] {
-  const sounding = layer.role === 'chords' ? 6 : layer.role === 'drone' ? 2 : layer.role === 'bass' ? 1 : 3;
-  const releasing = layer.role === 'chords' ? 8 : layer.role === 'drone' ? 3 : 4;
+  const sounding = layer.role === 'chords' ? 10 : layer.role === 'drone' ? 5 : layer.role === 'bass' ? 2 : 4;
+  const releasing = layer.role === 'chords' ? 12 : layer.role === 'drone' ? 6 : 6;
   return lowResource ? [Math.min(sounding, layer.role === 'chords' ? 5 : 3), Math.min(releasing, 4)] : [sounding, releasing];
 }
 
@@ -249,13 +285,14 @@ export class JamEngine {
     buildupBarsLeft: 0,
     targetDropBar: 0,
     lastAutoBar: -1,
-    sequencerEnabled: false,
+    sequencerEnabled: true,
     sequencerBlocks: [] as SequenceBlock[],
     sequencerIndex: 0,
     sequencerBarInBlock: 0,
     lastSequencerBar: -1,
   };
   private pads = new Map<string, AmbientSynth>();
+  private secondaryPads = new Map<string, AmbientSynth>();
   private composer = new JamComposer();
   private events: JamEvent[] = [];
   private tempos: ClipTempo[] = [];
@@ -275,6 +312,7 @@ export class JamEngine {
   private previewTimer: ReturnType<typeof setInterval> | null = null;
   private previewDrums: DrumSynth | null = null;
   private previewPads = new Map<string, AmbientSynth>();
+  private previewSecondaryPads = new Map<string, AmbientSynth>();
   private auditionSynth: AmbientSynth | null = null;
   private changeCounter = 0; private transportToken = 0; private primeAtNextStep = false; private resumeNotes: PlannedNote[] = [];
 
@@ -285,8 +323,10 @@ export class JamEngine {
       this.arrangement.sequencerBlocks = clone(this.state.sequence);
     } else {
       this.arrangement.sequencerBlocks = createDefaultSequence();
+      this.state.sequence = clone(this.arrangement.sequencerBlocks);
     }
-    this.arrangement.sequencerEnabled = !!this.state.sequencerEnabled;
+    this.arrangement.sequencerEnabled = this.state.sequencerEnabled !== undefined ? !!this.state.sequencerEnabled : true;
+    this.state.sequencerEnabled = this.arrangement.sequencerEnabled;
     this.history = [this.snapshot(false)];
   }
   getState(): JamSession { return clone(this.state); }
@@ -312,7 +352,9 @@ export class JamEngine {
     if (this.running && anchor) beat = Math.max(this.stoppedBeat, anchor.beat + Math.max(0, this.audio.getTime() - anchor.audioTime) * anchor.bpm / 60);
     const h = anchor?.harmony || this.composer.getHarmony();
     let firstPerformed = Infinity; const now = this.audio.getTime(); for (const e of this.events) if (e.audioTime <= now && e.startBeat <= beat) firstPerformed = Math.min(firstPerformed, e.startBeat);
-    let voices = 0; for (const synth of this.pads.values()) { const v = synth.getActiveVoiceCount(); voices += v.sounding + v.releasing; }
+    let voices = 0;
+    for (const synth of this.pads.values()) { const v = synth.getActiveVoiceCount(); voices += v.sounding + v.releasing; }
+    for (const synth of this.secondaryPads.values()) { const v = synth.getActiveVoiceCount(); voices += v.sounding + v.releasing; }
     const chordLayer = this.state.layers.find(l => l.role === 'chords');
     const hold = holdBarsFor(this.state.style, chordLayer?.settings?.chordPace);
     const key = `${h.index}:${this.state.root}:${this.state.scale}:${this.state.style}:${this.state.seed}:${chordLayer?.settings?.chordPace || 'def'}`;
@@ -322,8 +364,8 @@ export class JamEngine {
     const activeBlock = blocks[this.arrangement.sequencerIndex] || blocks[0];
     const nextBlock = blocks[(this.arrangement.sequencerIndex + 1) % (blocks.length || 1)];
     const barsUntilNextBlock = Math.max(0, (activeBlock ? activeBlock.bars : 4) - this.arrangement.sequencerBarInBlock);
-    const sequencer: SequencerPosition | undefined = this.arrangement.sequencerEnabled ? {
-      enabled: true,
+    const sequencer: SequencerPosition = {
+      enabled: this.arrangement.sequencerEnabled,
       activeBlockIndex: this.arrangement.sequencerIndex,
       totalBlocks: blocks.length,
       blockBarProgress: this.arrangement.sequencerBarInBlock,
@@ -333,7 +375,7 @@ export class JamEngine {
       nextSection: nextBlock?.section,
       nextBlockLabel: nextBlock?.label,
       barsUntilNextBlock,
-    } : undefined;
+    };
 
     return { beat, bar: Math.floor(beat / 4), playing: this.running, chord: h.name, chordNotes: [...h.notes], voices,
       capturedBars: Number.isFinite(firstPerformed) ? Math.min(128, Math.max(0, beat - Math.max(0, firstPerformed)) / 4) : 0, clipOverride: this.override !== null || this.pendingOverride !== null,
@@ -387,7 +429,26 @@ export class JamEngine {
     const token = ++this.transportToken;
     this.startPromise = (async () => {
       this.stopPreview(); await this.init(); await this.audio.ctx?.resume(); if (token !== this.transportToken) return;
-      if (this.state.outputMode !== 'internal' && (this.state.globalOutputId !== null || this.state.layers.some(l => !l.muted && l.outputId !== null))) { const ready = await this.midi.init(); if (token !== this.transportToken) return; if (!ready) throw new Error(this.midi.getErrorMessage() || 'MIDI konnte nicht aktiviert werden. Wähle interne Klänge oder erlaube MIDI im Browser.'); this.applyRouting(true); }
+      if (this.state.outputMode !== 'internal' && (this.state.globalOutputId !== null || this.state.layers.some(l => !l.muted && l.outputId !== null))) {
+        try {
+          const ready = await this.midi.init();
+          if (token !== this.transportToken) return;
+          if (!ready) {
+            if (this.state.outputMode === 'midi') {
+              throw new Error(this.midi.getErrorMessage() || 'MIDI konnte nicht aktiviert werden. Wähle interne Klänge oder erlaube MIDI im Browser.');
+            }
+          } else {
+            // Strict checking only if outputMode is purely 'midi' (no internal audio).
+            // In 'both' mode, an unavailable or disconnected MIDI device must NEVER stop internal audio from playing!
+            this.applyRouting(this.state.outputMode === 'midi');
+          }
+        } catch (error) {
+          if (this.state.outputMode === 'midi') {
+            throw error;
+          }
+          console.warn('MIDI-Port konnte nicht initialisiert werden; Audio intern spielt weiter:', error);
+        }
+      }
       this.stepOffset = Math.ceil(this.stoppedBeat * 4); this.nextStep = this.stepOffset;
       this.anchors = []; this.clock!.reset(); this.clock!.setBpm(this.state.bpm); this.clock!.setSwing(this.state.swing);
       this.running = true; this.primeAtNextStep = true; this.resetFlow(); this.applySound(); this.clock!.start(); this.notify();
@@ -414,7 +475,9 @@ export class JamEngine {
   }
   stop(): void {
     this.transportToken++; if (this.running) this.resumeNotes = this.remainingNotes(); this.stoppedBeat = this.getPosition().beat; this.running = false; this.clock?.stop(); this.midi.panic(); this.bed?.setActive(false);
-    for (const synth of this.pads.values()) synth.stopAllVoices(true); this.drums?.stopAllVoices();
+    for (const synth of this.pads.values()) synth.stopAllVoices(true);
+    for (const synth of this.secondaryPads.values()) synth.stopAllVoices(true);
+    this.drums?.stopAllVoices();
     // Keep performed material and terminate long notes at the actual stop position.
     const now = this.audio.getTime(); this.controllers = this.controllers.filter(c => c.audioTime <= now); this.events = this.getRecentEvents(512).filter(e => e.audioTime <= now && e.startBeat < this.stoppedBeat)
       .map(e => ({ ...e, durationBeats: Math.min(e.durationBeats, Math.max(0, this.stoppedBeat - e.startBeat)) }));
@@ -433,7 +496,15 @@ export class JamEngine {
       }
     }
     this.rack?.updateParams(effectiveEffects(this.state, offsets));
-    for (const layer of this.state.layers) this.pads.get(layer.id)?.updateParams(ambientPatch(layer, this.state, this.getPosition().beat, offsets.ambientCutoffOffset), layer.volume);
+    const beat = this.getPosition().beat;
+    for (const layer of this.state.layers) {
+      this.pads.get(layer.id)?.updateParams(ambientPatch(layer, this.state, beat, offsets.ambientCutoffOffset), layer.volume);
+      if (layer.role === 'chords') {
+        const secTimbre = layer.settings.secondaryTimbre || 'shimmer';
+        const secVol = layer.volume * clamp(layer.settings.secondaryVolume ?? 0.55, 0, 1);
+        this.secondaryPads.get(layer.id)?.updateParams(ambientPatch(layer, this.state, beat, offsets.ambientCutoffOffset, secTimbre), secVol);
+      }
+    }
   }
   private synthFor(layer: JamLayer, preview = false): AmbientSynth {
     const map = preview ? this.previewPads : this.pads;
@@ -442,6 +513,17 @@ export class JamEngine {
       const [sounding, releasing] = voiceBudget(layer, this.state.lowResource);
       synth = new AmbientSynth(this.audio.ctx!, this.padBus || this.rack!.inputNode, sounding, releasing,
         new PRNG(streamSeed(this.state.seed, `${preview ? 'preview-' : ''}${layer.id}-audio`)));
+      map.set(layer.id, synth);
+    }
+    return synth;
+  }
+  private secondarySynthFor(layer: JamLayer, preview = false): AmbientSynth {
+    const map = preview ? this.previewSecondaryPads : this.secondaryPads;
+    let synth = map.get(layer.id);
+    if (!synth) {
+      const [sounding, releasing] = voiceBudget(layer, this.state.lowResource);
+      synth = new AmbientSynth(this.audio.ctx!, this.padBus || this.rack!.inputNode, Math.max(4, Math.round(sounding * 0.75)), Math.max(4, Math.round(releasing * 0.75)),
+        new PRNG(streamSeed(this.state.seed, `${preview ? 'preview-' : ''}${layer.id}-sec-audio`)));
       map.set(layer.id, synth);
     }
     return synth;
@@ -458,8 +540,17 @@ export class JamEngine {
         else if (voice === 'snare') drums?.triggerSnare(time, note.velocity, params, layer.volume);
         else if (voice === 'hihat') drums?.triggerHiHat(time, note.velocity, params, layer.volume);
         else drums?.triggerPerc(time, note.velocity, params, layer.volume);
-      } else { const patch = ambientPatch(layer, session, this.getPosition().beat, preview ? 0 : this.modulation().ambientCutoffOffset); if (note.soft) patch.attack = Math.min(patch.attack, 0.4);
-        this.synthFor(layer, preview).triggerNote(time, note.note, note.velocity, duration, patch, layer.volume); }
+      } else if (note.subLayer === 'chords_b') {
+        const secTimbre = layer.settings.secondaryTimbre || 'shimmer';
+        const secVol = layer.volume * clamp(layer.settings.secondaryVolume ?? 0.55, 0, 1);
+        const patch = ambientPatch(layer, session, this.getPosition().beat, preview ? 0 : this.modulation().ambientCutoffOffset, secTimbre);
+        if (note.soft) patch.attack = Math.min(patch.attack, 0.45);
+        this.secondarySynthFor(layer, preview).triggerNote(time, note.note, note.velocity, duration, patch, secVol);
+      } else {
+        const patch = ambientPatch(layer, session, this.getPosition().beat, preview ? 0 : this.modulation().ambientCutoffOffset);
+        if (note.soft) patch.attack = Math.min(patch.attack, 0.4);
+        this.synthFor(layer, preview).triggerNote(time, note.note, note.velocity, duration, patch, layer.volume);
+      }
     }
     if (!preview && (session.outputMode === 'midi' || session.outputMode === 'both')) this.midi.scheduleNote(note.channel ?? layer.channel, note.note, note.velocity, perfTime, duration * 1000, layer.id, layer.outputId ?? undefined);
   }
@@ -547,7 +638,7 @@ export class JamEngine {
               }
             } else {
               // Arrangable macros slow glide ("make it more evolving slowly")
-              if (currentBlock.macroTargets) {
+              if (currentBar > 0 && currentBlock.macroTargets) {
                 let changedMacros = false;
                 for (const [name, targetVal] of Object.entries(currentBlock.macroTargets) as [MacroName, number][]) {
                   if (targetVal !== undefined) {
@@ -656,12 +747,16 @@ export class JamEngine {
       if (this.state.outputMode === 'midi') this.truncatePerformed(defaults); this.applyRouting();
     }
     if (patch.bpm !== undefined) this.clock?.setBpm(this.state.bpm); if (patch.swing !== undefined) this.clock?.setSwing(this.state.swing);
-    if (patch.outputMode && patch.outputMode !== old.outputMode) { this.midi.panic(); if (patch.outputMode === 'midi') { for (const synth of this.pads.values()) synth.stopAllVoices(); this.drums?.stopAllVoices(); this.rack?.killTail(); } }
+    if (patch.outputMode && patch.outputMode !== old.outputMode) { this.midi.panic(); if (patch.outputMode === 'midi') { for (const synth of this.pads.values()) synth.stopAllVoices(); for (const synth of this.secondaryPads.values()) synth.stopAllVoices(); this.drums?.stopAllVoices(); this.rack?.killTail(); } }
     const continuous = ['bpm', 'swing', 'volume', 'macros', 'atmosphere', 'pump', 'flow']; const keys = Object.keys(patch);
     let historyGroup = keys.every(k => continuous.includes(k)) ? `session:${keys.join(',')}` : '';
     if (keys.length === 1 && patch.effectsPatch) { const changed = [...new Set([...Object.keys(old.effectsPatch || {}), ...Object.keys(patch.effectsPatch)])].filter(key => (old.effectsPatch as Record<string, number> | undefined)?.[key] !== (patch.effectsPatch as Record<string, number>)[key]); if (changed.length === 1 && Object.hasOwn(patch.effectsPatch, changed[0])) historyGroup = `fx:${changed[0]}`; }
     if (keys.length === 1 && patch.modRoutes && old.modRoutes?.length === patch.modRoutes.length) { const changed = patch.modRoutes.filter(route => JSON.stringify(route) !== JSON.stringify(old.modRoutes!.find(r => r.id === route.id))); if (changed.length === 1) { const route = changed[0]; const prior = old.modRoutes.find(r => r.id === route.id); if (prior && prior.depth !== route.depth && prior.source === route.source && prior.destination === route.destination && prior.enabled === route.enabled) historyGroup = `mod:${route.id}:depth`; } }
-    if (patch.lowResource !== undefined) for (const layer of this.state.layers) { const [sounding, releasing] = voiceBudget(layer, this.state.lowResource); this.pads.get(layer.id)?.setVoiceBudget(sounding, releasing); }
+    if (patch.lowResource !== undefined) for (const layer of this.state.layers) {
+      const [sounding, releasing] = voiceBudget(layer, this.state.lowResource);
+      this.pads.get(layer.id)?.setVoiceBudget(sounding, releasing);
+      this.secondaryPads.get(layer.id)?.setVoiceBudget(Math.max(4, Math.round(sounding * 0.75)), Math.max(4, Math.round(releasing * 0.75)));
+    }
     this.applySound(); this.remember(historyGroup); this.notify();
   }
   updateLayer(layerId: string, patch: Partial<JamLayer>): void {
@@ -677,14 +772,15 @@ export class JamEngine {
       }
     }
     if (patch.frozen === false) this.composer.clearFrozen(layerId);
-    if (patch.muted === true) this.pads.get(layerId)?.stopAllVoices(true);
+    if (patch.muted === true) { this.pads.get(layerId)?.stopAllVoices(true); this.secondaryPads.get(layerId)?.stopAllVoices(true); }
+    if (patch.settings?.secondaryEnabled === false) this.secondaryPads.get(layerId)?.stopAllVoices(true);
     if (patch.settings?.minNote !== undefined || patch.settings?.maxNote !== undefined) this.resumeNotes = [];
     this.state.layers = this.state.layers.map(l => l.id === layerId ? normalizeLayer({ ...l, ...patch, settings: { ...l.settings, ...patch.settings } }, l) : l);
     const edited = this.state.layers.find(l => l.id === layerId)!;
     if (edited.role !== 'drum') { let allowed = false; for (let n = edited.settings.minNote; n <= edited.settings.maxNote; n++) if (SCALE_INTERVALS[this.state.scale].includes(((n - this.state.root) % 12 + 12) % 12)) allowed = true; if (!allowed) this.addChange(`${edited.name} · Register enthält keinen Skalenton; Layer bleibt stumm`); }
     const anySolo = this.state.layers.some(l => l.solo); const hidden = new Set(this.state.layers.filter(l => l.muted || (anySolo && !l.solo)).map(l => l.id));
     this.truncatePerformed(hidden);
-    for (const l of this.state.layers) if (hidden.has(l.id)) { this.midi.releaseNotesForLayer(l.id); this.pads.get(l.id)?.stopAllVoices(true); if (l.drumVoice) this.drums?.stopVoiceKind(l.drumVoice); }
+    for (const l of this.state.layers) if (hidden.has(l.id)) { this.midi.releaseNotesForLayer(l.id); this.pads.get(l.id)?.stopAllVoices(true); this.secondaryPads.get(l.id)?.stopAllVoices(true); if (l.drumVoice) this.drums?.stopVoiceKind(l.drumVoice); }
     this.applySound(); this.remember(patch.volume !== undefined ? `layer:${layerId}:volume` : patch.settings ? layerSettingsGroup(layerId, layer.settings, patch.settings) : ''); this.notify();
   }
   setLayerSettings(layerId: string, settings: Partial<LayerSettings>): void {
@@ -734,6 +830,9 @@ export class JamEngine {
     const wasRunning = this.running; this.panic();
     const previous = this.state; this.state = createSession(sceneId, previous.seed);
     this.state.outputMode = previous.outputMode; this.state.globalOutputId = previous.globalOutputId; this.state.lowResource = previous.lowResource; this.state.pinned = previous.pinned; if (previous.pinnedParams) this.state.pinnedParams = sanitizePinnedParams(previous.pinnedParams, this.state);
+    this.state.sequencerEnabled = previous.sequencerEnabled ?? true;
+    this.arrangement.sequencerEnabled = this.state.sequencerEnabled;
+    this.state.sequence = clone(this.arrangement.sequencerBlocks);
     for (const layer of this.state.layers) { const route = previous.layers.find(l => l.id === layer.id); if (route) { layer.outputId = route.outputId; layer.channel = route.channel; } }
     this.composer.reset(); this.composer.harmonyAt(0, this.state); this.events = []; this.controllers = []; this.eventEnds.clear(); this.timeline = []; this.tempos = []; this.anchors = []; this.stoppedBeat = 0; this.nextStep = 0; this.resumeNotes = []; this.override = null; this.pendingOverride = null;
     this.resetFlow(); this.lastAtmosphereKey = ''; this.remember(); this.applySound(); this.notify(); if (wasRunning) await this.start();
@@ -744,7 +843,7 @@ export class JamEngine {
    */
   calculatePerceivedLoudness(): number {
     const timbreWeights: Record<string, number> = {
-      strings: 1.15, dub: 1.25, wash: 0.95, air: 0.85, keys: 1.0,
+      strings: 1.15, solina: 1.12, shimmer: 0.90, celeste: 0.88, dub: 1.25, wash: 0.95, air: 0.85, keys: 1.0,
       bell: 0.9, root: 1.05, glass: 0.92, organ: 0.82, warm: 1.0,
     };
     let energy = 0;
@@ -796,7 +895,7 @@ export class JamEngine {
    * Radical Random. Daring, creative quantum re-composition.
    * Completely randomizes root, scale, BPM, rhythm algorithms, timbres, and effect chains,
    * while keeping loudness safe and within musical constraints (no clipping or harsh ringing).
-   * Atmosphere is guaranteed to stay <= 0.20 (and vinyl/tape noise <= 0.10).
+   * Atmosphere is guaranteed to stay <= 0.10.
    */
   radicalRandomize(options: { keepBpm?: boolean; keepKey?: boolean } = {}): void {
     const energyBefore = this.calculatePerceivedLoudness();
@@ -845,9 +944,9 @@ export class JamEngine {
     };
 
     // 5. Scramble Layers & Instruments (respecting locks and freezes)
-    const chordTimbres: Timbre[] = ['strings', 'wash', 'glass', 'dub', 'keys', 'organ', 'warm'];
-    const melodyTimbres: Timbre[] = ['bell', 'glass', 'keys', 'strings', 'air'];
-    const droneTimbres: Timbre[] = ['root', 'air', 'warm'];
+    const chordTimbres: Timbre[] = ['strings', 'solina', 'shimmer', 'celeste', 'wash', 'glass', 'dub', 'keys', 'organ', 'warm'];
+    const melodyTimbres: Timbre[] = ['bell', 'glass', 'keys', 'celeste', 'shimmer', 'strings', 'air'];
+    const droneTimbres: Timbre[] = ['root', 'air', 'warm', 'solina'];
     const bassTimbres: Timbre[] = ['warm', 'dub', 'root'];
     const drumAlgos: JamLayer['settings']['rhythmAlgorithm'][] = [
       'composed', 'euclidean', 'probabilistic', 'polymetric', 'markov', 'densityBurst'
@@ -905,6 +1004,9 @@ export class JamEngine {
       const isChords = layer.role === 'chords' && !layer.locked;
       const chordPattern: ChordPattern | undefined = isChords ? rng.pick([...CHORD_PATTERNS]) : layer.settings.chordPattern;
       const chordPace: ChordPace | undefined = isChords ? rng.pick([...CHORD_PACES]) : layer.settings.chordPace;
+      const secTimbres: Timbre[] = ['shimmer', 'air', 'solina', 'glass', 'celeste', 'strings', 'wash'];
+      const secondaryTimbre: Timbre | undefined = isChords ? rng.pick(secTimbres.filter(t => t !== timbre)) : layer.settings.secondaryTimbre;
+      const secondaryPattern: ChordPattern | undefined = isChords ? rng.pick(['wave', 'pad', 'broken', 'pulse', 'cluster'] as ChordPattern[]) : layer.settings.secondaryPattern;
 
       return {
         ...layer,
@@ -916,6 +1018,7 @@ export class JamEngine {
           rhythmAlgorithm,
           ...(chordPattern ? { chordPattern } : {}),
           ...(chordPace ? { chordPace } : {}),
+          ...(isChords ? { secondaryEnabled: true, secondaryTimbre, secondaryPattern, secondaryVolume: Number(rng.range(0.42, 0.68).toFixed(2)) } : {}),
           ...(drumPatch ? { drumPatch } : {})
         }
       };
@@ -987,7 +1090,11 @@ export class JamEngine {
     const clipTracks = new Set(this.override?.clip.tracks.map(t => t.id));
     const affected = new Set(this.state.layers.filter(l => l.role !== 'drum' && l.role !== 'drone' && !l.locked && !l.frozen && !l.muted && !clipTracks.has(l.id)).map(l => l.id));
     if (!affected.size) return;
-    for (const id of affected) { this.pads.get(id)?.fadeOutAll(time, 0.28); this.midi.releaseNotesForLayer(id); }
+    for (const id of affected) {
+      this.pads.get(id)?.fadeOutAll(time, 0.28);
+      this.secondaryPads.get(id)?.fadeOutAll(time, 0.28);
+      this.midi.releaseNotesForLayer(id);
+    }
     for (const e of this.events) {
       if (!affected.has(e.layerId) || e.audioTime > time) continue; const end = this.eventEnds.get(e.id);
       if (end !== undefined && end > time) { this.eventEnds.set(e.id, time); e.durationBeats = Math.max(0, beat - e.startBeat); }
@@ -997,7 +1104,10 @@ export class JamEngine {
   undo(): void { if (this.historyIndex > 0) { this.historyIndex--; this.restore(this.history[this.historyIndex]); } }
   redo(): void { if (this.historyIndex < this.history.length - 1) { this.historyIndex++; this.restore(this.history[this.historyIndex]); } }
   private restore(session: JamSession): void {
-    this.lastHistoryGroup = ''; this.pendingEvolve = false; this.truncatePerformed(); this.midi.panic(); for (const synth of this.pads.values()) synth.stopAllVoices(); this.drums?.stopAllVoices();
+    this.lastHistoryGroup = ''; this.pendingEvolve = false; this.truncatePerformed(); this.midi.panic();
+    for (const synth of this.pads.values()) synth.stopAllVoices();
+    for (const synth of this.secondaryPads.values()) synth.stopAllVoices();
+    this.drums?.stopAllVoices();
     this.state = validateSession(clone({ ...session, runtime: undefined })); this.composer.restore(session.runtime?.composer);
     this.arrangement.current = this.state.arrangement || 'groove';
     this.restoreClipRuntime(session.runtime); this.applyRouting();
@@ -1245,6 +1355,9 @@ export class JamEngine {
   jumpToSequenceBlock(index: number): void {
     const blocks = this.arrangement.sequencerBlocks;
     if (index < 0 || index >= blocks.length) return;
+    this.arrangement.sequencerEnabled = true;
+    this.state.sequencerEnabled = true;
+    this.arrangement.auto = false;
     this.arrangement.sequencerIndex = index;
     this.arrangement.sequencerBarInBlock = 0;
     const block = blocks[index];
@@ -1266,7 +1379,15 @@ export class JamEngine {
       id: `block-${Date.now()}-${i + 1}`,
       ...b,
     }));
+    this.arrangement.sequencerEnabled = true;
+    this.state.sequencerEnabled = true;
+    this.arrangement.auto = false;
     this.setSequence(blocks);
+    if (blocks[0]) {
+      this.arrangement.sequencerIndex = 0;
+      this.arrangement.sequencerBarInBlock = 0;
+      this.applyArrangement(blocks[0].section, false);
+    }
     this.addChange(`Sequencer-Vorlage: ${template.name}`, this.getPosition().beat);
   }
 
@@ -1336,6 +1457,21 @@ export class JamEngine {
     this.notify();
   }
 
+  /** Configure Dual-Chord Layer B (Chord B mixer, timbre, pattern, enable) on the chords track. */
+  setSecondaryChord(patch: { enabled?: boolean; timbre?: Timbre; volume?: number; pattern?: ChordPattern }): void {
+    const chordLayer = this.state.layers.find(l => l.role === 'chords');
+    if (!chordLayer) return;
+    const nextSettings: Partial<LayerSettings> = {};
+    if (patch.enabled !== undefined) nextSettings.secondaryEnabled = patch.enabled;
+    if (patch.timbre !== undefined) nextSettings.secondaryTimbre = patch.timbre;
+    if (patch.volume !== undefined) nextSettings.secondaryVolume = clamp(patch.volume, 0, 1);
+    if (patch.pattern !== undefined) nextSettings.secondaryPattern = patch.pattern;
+    this.setLayerSettings(chordLayer.id, nextSettings);
+    if (patch.timbre || patch.pattern || patch.enabled !== undefined) {
+      this.addChange(`Chord Layer B: ${patch.enabled === false ? 'Aus' : `${patch.timbre || chordLayer.settings.secondaryTimbre || 'shimmer'} (${patch.pattern || chordLayer.settings.secondaryPattern || 'wave'})`}`, this.getPosition().beat);
+    }
+  }
+
   /** Move a sequence block left/earlier or right/later in the arrangement order. */
   moveSequenceBlock(blockId: string, direction: 'left' | 'right' | 'up' | 'down'): void {
     const blocks = [...this.arrangement.sequencerBlocks];
@@ -1353,6 +1489,8 @@ export class JamEngine {
   stepBlockBars(blockId: string, delta: number): void {
     const block = this.arrangement.sequencerBlocks.find(b => b.id === blockId);
     if (!block) return;
+    this.arrangement.sequencerEnabled = true;
+    this.state.sequencerEnabled = true;
     const BARS = [2, 4, 8, 16, 32];
     const curIdx = BARS.indexOf(block.bars);
     let nextBars = block.bars;
@@ -1366,7 +1504,7 @@ export class JamEngine {
     this.addChange(`Sequenz: Block-Dauer auf ${nextBars} Takte geändert`, this.getPosition().beat);
   }
 
-  /** Set a sequence block's arrangement energy and macro profile referencing arrows (High, Up, Flow, Down, Low). */
+  /** Set a sequence block's arrangement energy and macro profile referencing arrows (High, Up, Flow, Down, Low). Immediately activates the sequencer and applies the section ASAP! */
   setBlockSectionByEnergy(blockId: string, energy: 'high' | 'up' | 'groove' | 'down' | 'low'): void {
     const map: Record<'high' | 'up' | 'groove' | 'down' | 'low', { section: ArrangementSection; label: string; space: number; density: number; movement: number }> = {
       high: { section: 'chorus', label: 'Chorus (Peak)', space: 0.72, density: 0.85, movement: 0.55 },
@@ -1377,8 +1515,12 @@ export class JamEngine {
     };
     const target = map[energy];
     if (!target) return;
-    const block = this.arrangement.sequencerBlocks.find(b => b.id === blockId);
+    const blockIdx = this.arrangement.sequencerBlocks.findIndex(b => b.id === blockId);
+    const block = blockIdx >= 0 ? this.arrangement.sequencerBlocks[blockIdx] : undefined;
     const bars = block?.bars || 4;
+    this.arrangement.sequencerEnabled = true;
+    this.state.sequencerEnabled = true;
+    this.arrangement.auto = false;
     this.updateSequenceBlock(blockId, {
       section: target.section,
       label: `${bars}T ${target.label}`,
@@ -1389,7 +1531,12 @@ export class JamEngine {
         movement: target.movement,
       }
     });
-    this.addChange(`Sequenz: Block auf [${target.label}] (${energy.toUpperCase()}) gesetzt`, this.getPosition().beat);
+    if (blockIdx >= 0) {
+      this.arrangement.sequencerIndex = blockIdx;
+      this.arrangement.sequencerBarInBlock = 0;
+    }
+    this.applyArrangement(target.section, false);
+    this.addChange(`Sequenz: Block auf [${target.label}] (${energy.toUpperCase()}) gesetzt & aktiviert`, this.getPosition().beat);
   }
 
   applySoundscapePreset(presetId: string): void {
@@ -1398,8 +1545,14 @@ export class JamEngine {
     const chordsLayer = this.state.layers.find(l => l.role === 'chords');
     if (chordsLayer) {
       chordsLayer.settings.timbre = preset.chordTimbre;
+      if (preset.secondaryTimbre) {
+        chordsLayer.settings.secondaryEnabled = true;
+        chordsLayer.settings.secondaryTimbre = preset.secondaryTimbre;
+        chordsLayer.settings.secondaryVolume = preset.secondaryVolume ?? 0.55;
+        if (preset.secondaryPattern) chordsLayer.settings.secondaryPattern = preset.secondaryPattern;
+      }
     }
-    this.state.atmosphere = { ...preset.atmosphere, level: Math.min(0.20, preset.atmosphere.level) };
+    this.state.atmosphere = { ...preset.atmosphere, level: Math.min(0.10, preset.atmosphere.level) };
     if (preset.macros) {
       for (const [k, v] of Object.entries(preset.macros) as [MacroName, number][]) {
         if (v !== undefined) this.state.macros[k] = clamp(v, 0, 1);
@@ -1419,21 +1572,24 @@ export class JamEngine {
     if (!chordsLayer) return;
     chordsLayer.settings.timbre = timbre;
     if (matchAtmosphere) {
-      if (timbre === 'strings') {
-        this.state.atmosphere = { kind: 'air', level: 0.16, tone: 0.58, movement: 0.48 };
+      if (timbre === 'strings' || timbre === 'solina') {
+        this.state.atmosphere = { kind: 'air', level: 0.06, tone: 0.58, movement: 0.48 };
         this.state.macros.space = Math.max(this.state.macros.space, 0.84);
         this.state.macros.warmth = Math.max(this.state.macros.warmth, 0.68);
+      } else if (timbre === 'shimmer' || timbre === 'air') {
+        this.state.atmosphere = { kind: 'air', level: 0.05, tone: 0.64, movement: 0.44 };
+        this.state.macros.space = Math.max(this.state.macros.space, 0.86);
       } else if (timbre === 'wash') {
-        this.state.atmosphere = { kind: 'tape', level: 0.14, tone: 0.50, movement: 0.45 };
+        this.state.atmosphere = { kind: 'tape', level: 0.06, tone: 0.50, movement: 0.45 };
         this.state.macros.space = Math.max(this.state.macros.space, 0.78);
-      } else if (timbre === 'glass') {
-        this.state.atmosphere = { kind: 'air', level: 0.15, tone: 0.68, movement: 0.40 };
+      } else if (timbre === 'glass' || timbre === 'celeste') {
+        this.state.atmosphere = { kind: 'air', level: 0.05, tone: 0.62, movement: 0.40 };
         this.state.macros.space = Math.max(this.state.macros.space, 0.82);
       } else if (timbre === 'keys') {
-        this.state.atmosphere = { kind: 'rain', level: 0.18, tone: 0.52, movement: 0.35 };
-        this.state.macros.space = 0.50;
-      } else if (timbre === 'dub') {
-        this.state.atmosphere = { kind: 'tape', level: 0.16, tone: 0.38, movement: 0.42 };
+        this.state.atmosphere = { kind: 'rain', level: 0.07, tone: 0.52, movement: 0.35 };
+        this.state.macros.space = 0.54;
+      } else if (timbre === 'dub' || timbre === 'root') {
+        this.state.atmosphere = { kind: 'tape', level: 0.06, tone: 0.38, movement: 0.42 };
       }
     }
     this.addChange(`Akkord-Klang: ${timbre === 'strings' ? 'Großes Streichorchester' : timbre}`);
@@ -1480,8 +1636,8 @@ export class JamEngine {
         const key = target.param.slice(3) as keyof EffectsParams;
         this.state.effectsPatch = { ...(this.state.effectsPatch || {}), [key]: targetVal };
       } else if (target.param === 'atmo:level') {
-        const level = Math.min(0.20, Math.max(0, targetVal));
-        this.state.atmosphere = { ...(this.state.atmosphere || { kind: 'off', level: 0.18, tone: 0.5, movement: 0.4 }), level };
+        const level = Math.min(0.10, Math.max(0, targetVal));
+        this.state.atmosphere = { ...(this.state.atmosphere || { kind: 'off', level: 0.06, tone: 0.5, movement: 0.4 }), level };
       } else if (target.param === 'pump') {
         this.state.pump = clamp(targetVal, 0, 1);
       } else if (target.param.startsWith('layer:')) {
@@ -1643,7 +1799,9 @@ export class JamEngine {
   }
   stopPreview(): void {
     if (this.previewTimer) clearInterval(this.previewTimer); this.previewTimer = null;
-    for (const synth of this.previewPads.values()) synth.stopAllVoices(); this.previewPads.clear(); this.previewDrums?.stopAllVoices(); this.previewDrums = null;
+    for (const synth of this.previewPads.values()) synth.stopAllVoices(); this.previewPads.clear();
+    for (const synth of this.previewSecondaryPads.values()) synth.stopAllVoices(); this.previewSecondaryPads.clear();
+    this.previewDrums?.stopAllVoices(); this.previewDrums = null;
   }
   async auditionNote(note: number, velocity = 90): Promise<void> {
     if (typeof window === 'undefined') return;
@@ -1676,8 +1834,8 @@ export class JamEngine {
   /** Decodes a user-chosen audio file into the atmosphere loop. Runs entirely in the browser; the file is not stored. */
   async loadAtmosphereSample(data: ArrayBuffer, name: string): Promise<void> {
     await this.init(); await this.audio.ctx?.resume(); if (!this.bed) throw new Error('Dieser Browser kann keine Samples dekodieren.');
-    await this.bed.loadSample(data, name); const current = this.state.atmosphere ?? { kind: 'sample' as const, level: 0.18, tone: 0.6, movement: 0.3 };
-    this.updateSession({ atmosphere: { ...current, kind: 'sample', sampleName: name.slice(0, 120), level: current.kind === 'off' ? 0.18 : Math.min(0.2, current.level) } });
+    await this.bed.loadSample(data, name); const current = this.state.atmosphere ?? { kind: 'sample' as const, level: 0.08, tone: 0.6, movement: 0.3 };
+    this.updateSession({ atmosphere: { ...current, kind: 'sample', sampleName: name.slice(0, 120), level: current.kind === 'off' ? 0.08 : Math.min(0.10, current.level) } });
   }
   getAtmosphereSampleName(): string | null { return this.bed?.getSampleName() ?? null; }
 }
@@ -1731,6 +1889,10 @@ function normalizeLayer(raw: JamLayer, fallback: JamLayer): JamLayer {
       ...(s.chordPattern !== undefined && (CHORD_PATTERNS as readonly string[]).includes(s.chordPattern) ? { chordPattern: s.chordPattern } : {}),
       ...(s.chordPace !== undefined && (CHORD_PACES as readonly string[]).includes(s.chordPace) ? { chordPace: s.chordPace } : {}),
       ...(s.chordTexture !== undefined && (CHORD_TEXTURES as readonly string[]).includes(s.chordTexture) ? { chordTexture: s.chordTexture } : {}),
+      ...(s.secondaryEnabled !== undefined ? { secondaryEnabled: !!s.secondaryEnabled } : {}),
+      ...(s.secondaryTimbre !== undefined && (TIMBRES as readonly string[]).includes(s.secondaryTimbre) ? { secondaryTimbre: s.secondaryTimbre } : {}),
+      ...(s.secondaryVolume !== undefined ? { secondaryVolume: clamp(Number(s.secondaryVolume), 0, 1) } : {}),
+      ...(s.secondaryPattern !== undefined && (CHORD_PATTERNS as readonly string[]).includes(s.secondaryPattern) ? { secondaryPattern: s.secondaryPattern } : {}),
       timbre: (TIMBRES as readonly string[]).includes(s.timbre) ? s.timbre : 'warm' } };
 }
 export function validateSession(raw: JamSession): JamSession {

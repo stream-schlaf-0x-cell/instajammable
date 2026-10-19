@@ -219,6 +219,34 @@ export function QuickMixerDeck({ session }: QuickMixerDeckProps) {
                 )}
               </div>
 
+              {/* Dual-Chord Layer B Compact Sub-Mixer (Chords Strip Only) */}
+              {layer.role === 'chords' && (
+                <div className="strip-dual-chord-bar" title="Dual-Chord Spur B: Harmonisch gekoppelter Konterpart mit eigener Klangfarbe & Gegenbewegung">
+                  <button
+                    type="button"
+                    className={`dual-chord-toggle ${layer.settings.secondaryEnabled ? 'active' : ''}`}
+                    onClick={() => engine.setSecondaryChord({ enabled: !layer.settings.secondaryEnabled })}
+                    aria-pressed={Boolean(layer.settings.secondaryEnabled)}
+                    title={layer.settings.secondaryEnabled ? 'Akkordspur B ausschalten' : 'Akkordspur B einschalten'}
+                  >
+                    B: {layer.settings.secondaryEnabled ? (layer.settings.secondaryTimbre || 'shimmer').toUpperCase() : 'OFF'}
+                  </button>
+                  {layer.settings.secondaryEnabled && (
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.02}
+                      value={layer.settings.secondaryVolume ?? 0.45}
+                      aria-label="Akkordspur B Mix-Pegel"
+                      onChange={e => engine.setSecondaryChord({ enabled: true, volume: Number(e.target.value) })}
+                      className="dual-chord-blend-slider"
+                      title={`Spur B Mix: ${Math.round((layer.settings.secondaryVolume ?? 0.45) * 100)}%`}
+                    />
+                  )}
+                </div>
+              )}
+
               {/* Fader, Meter & Calibrated Ruler Grid Area */}
               <div className="strip-fader-area">
                 {/* Visual LED Meter */}

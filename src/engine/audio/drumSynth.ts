@@ -26,45 +26,49 @@ export class DrumSynth {
     const gain = this.ctx.createGain();
     const panner = this.ctx.createStereoPanner ? this.ctx.createStereoPanner() : null;
 
-    // Pitch Envelope: Punch drop from high frequency down to base sub
+    // Pitch Envelope: Warm analog punch drop from chest-thump down to sub fundamental
     osc.type = 'sine';
-    const startFreq = baseFreq * (3.5 + (params.drive ?? 0) * 2.0);
+    const startFreq = baseFreq * (2.6 + (params.drive ?? 0) * 1.4);
     osc.frequency.setValueAtTime(startFreq, time);
-    osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, time + 0.045);
-    osc.frequency.exponentialRampToValueAtTime(Math.max(20, baseFreq * 0.8), time + decay);
+    osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.18, time + 0.032);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(22, baseFreq * 0.88), time + decay);
 
     // Amplitude Envelope with layerVolume scaling
-    const peakGain = (params.volume ?? 0.8) * layerVolume * vel * 0.95;
+    const peakGain = (params.volume ?? 0.8) * layerVolume * vel * 0.96;
     gain.gain.setValueAtTime(0, time);
     gain.gain.linearRampToValueAtTime(peakGain, time + 0.003);
     gain.gain.exponentialRampToValueAtTime(0.0001, time + decay);
 
-    // Click / Transient noise for punch
+    // Warm Felt / Vinyl Beater Transient (avoids harsh high-frequency digital beep)
     const clickOsc = this.ctx.createOscillator();
     const clickGain = this.ctx.createGain();
-    clickOsc.type = 'triangle';
-    clickOsc.frequency.setValueAtTime(startFreq * 2.5, time);
-    clickGain.gain.setValueAtTime(peakGain * (0.35 + (params.tone ?? 0.5) * 0.4), time);
-    clickGain.gain.exponentialRampToValueAtTime(0.0001, time + 0.015);
+    clickOsc.type = 'sine';
+    clickOsc.frequency.setValueAtTime(baseFreq * 2.2, time);
+    clickOsc.frequency.exponentialRampToValueAtTime(baseFreq, time + 0.014);
+    clickGain.gain.setValueAtTime(peakGain * (0.22 + (params.tone ?? 0.5) * 0.32), time);
+    clickGain.gain.exponentialRampToValueAtTime(0.0001, time + 0.014);
 
     clickOsc.connect(clickGain);
     clickGain.connect(gain);
+    osc.connect(gain);
+
+    // Analog tape/tube saturation on the kick body
+    const kickDrive = this.saturate(gain, params.drive ?? 0.12);
 
     // Routing
     if (panner) {
       panner.pan.setValueAtTime(Math.max(-1, Math.min(1, params.pan ?? 0)), time);
-      gain.connect(panner);
+      kickDrive.output.connect(panner);
       panner.connect(this.outputNode);
     } else {
-      gain.connect(this.outputNode);
+      kickDrive.output.connect(this.outputNode);
     }
 
-    osc.connect(gain);
     osc.start(time);
     clickOsc.start(time);
     osc.stop(time + decay + 0.05);
     clickOsc.stop(time + 0.02);
-    this.track([osc, clickOsc], [gain, clickGain, ...(panner ? [panner] : [])], osc, 'kick');
+    this.track([osc, clickOsc], [gain, clickGain, ...kickDrive.nodes, ...(panner ? [panner] : [])], osc, 'kick');
   }
 
   // Trigger synthesized snare drum
@@ -74,32 +78,39 @@ export class DrumSynth {
     const basePitch = Math.max(100, params.pitch ?? 185);
     const decay = Math.max(0.06, params.decay ?? 0.22);
     const peakGain = (params.volume ?? 0.8) * layerVolume * vel * 0.85;
+    const tone = params.tone ?? 0.5;
 
-    // 1. Tonal Body
+    // 1. Warm Woody Tonal Body (Rim / Shell resonance)
     const bodyOsc = this.ctx.createOscillator();
     const bodyGain = this.ctx.createGain();
     bodyOsc.type = 'triangle';
-    bodyOsc.frequency.setValueAtTime(basePitch * 1.6, time);
-    bodyOsc.frequency.exponentialRampToValueAtTime(basePitch, time + 0.04);
+    bodyOsc.frequency.setValueAtTime(basePitch * 1.48, time);
+    bodyOsc.frequency.exponentialRampToValueAtTime(basePitch, time + 0.036);
 
-    bodyGain.gain.setValueAtTime(peakGain * (1.0 - (params.tone ?? 0.5) * 0.4), time);
-    bodyGain.gain.exponentialRampToValueAtTime(0.0001, time + decay * 0.7);
+    bodyGain.gain.setValueAtTime(peakGain * (0.95 - tone * 0.35), time);
+    bodyGain.gain.exponentialRampToValueAtTime(0.0001, time + decay * 0.68);
 
-    // 2. Snappy Noise Component
+    // 2. Dusty Organic Noise Component (Highpass + Warm Analog Lowpass Roll-Off)
     const noiseBuffer = this.generateWhiteNoiseBuffer(decay + 0.05);
     const noiseSource = this.ctx.createBufferSource();
     noiseSource.buffer = noiseBuffer;
 
     const noiseFilter = this.ctx.createBiquadFilter();
     noiseFilter.type = 'highpass';
-    noiseFilter.frequency.setValueAtTime(600 + (params.tone ?? 0.5) * 2500, time);
+    noiseFilter.frequency.setValueAtTime(520 + tone * 1800, time);
+
+    const noiseLowpass = this.ctx.createBiquadFilter();
+    noiseLowpass.type = 'lowpass';
+    noiseLowpass.frequency.setValueAtTime(3400 + tone * 4800, time);
+    noiseLowpass.Q.setValueAtTime(0.65, time);
 
     const noiseGain = this.ctx.createGain();
-    noiseGain.gain.setValueAtTime(peakGain * (0.5 + (params.tone ?? 0.5) * 0.6), time);
+    noiseGain.gain.setValueAtTime(peakGain * (0.42 + tone * 0.50), time);
     noiseGain.gain.exponentialRampToValueAtTime(0.0001, time + decay);
 
     noiseSource.connect(noiseFilter);
-    noiseFilter.connect(noiseGain);
+    noiseFilter.connect(noiseLowpass);
+    noiseLowpass.connect(noiseGain);
 
     const masterSnareGain = this.ctx.createGain();
     const snareDrive = this.saturate(masterSnareGain, params.drive);
@@ -120,7 +131,7 @@ export class DrumSynth {
     noiseSource.start(time);
     bodyOsc.stop(time + decay + 0.05);
     noiseSource.stop(time + decay + 0.05);
-    this.track([bodyOsc, noiseSource], [bodyGain, noiseFilter, noiseGain, masterSnareGain, ...snareDrive.nodes, ...(panner ? [panner] : [])], noiseSource, 'snare');
+    this.track([bodyOsc, noiseSource], [bodyGain, noiseFilter, noiseLowpass, noiseGain, masterSnareGain, ...snareDrive.nodes, ...(panner ? [panner] : [])], noiseSource, 'snare');
   }
 
   // Trigger synthesized Hi-Hat
@@ -128,7 +139,7 @@ export class DrumSynth {
     if (params.volume <= 0 || layerVolume <= 0 || velocity <= 0) return;
     const vel = velocity / 127.0;
     const decay = Math.max(0.03, params.decay ?? 0.07);
-    const peakGain = (params.volume ?? 0.75) * layerVolume * vel * 0.75;
+    const peakGain = (params.volume ?? 0.75) * layerVolume * vel * 0.72;
 
     const noiseBuffer = this.generateWhiteNoiseBuffer(decay + 0.05);
     const noiseSource = this.ctx.createBufferSource();
@@ -136,13 +147,13 @@ export class DrumSynth {
 
     const highpass = this.ctx.createBiquadFilter();
     highpass.type = 'highpass';
-    highpass.frequency.setValueAtTime(5500 + (params.tone ?? 0.5) * 4500, time);
+    highpass.frequency.setValueAtTime(5200 + (params.tone ?? 0.5) * 4000, time);
 
     const bandpass = this.ctx.createBiquadFilter();
     bandpass.type = 'bandpass';
-    const centerFreq = 8000 + ((params.pitch ?? 60) - 60) * 120;
-    bandpass.frequency.setValueAtTime(Math.max(2000, Math.min(16000, centerFreq)), time);
-    bandpass.Q.setValueAtTime(2.5, time);
+    const centerFreq = 7600 + ((params.pitch ?? 60) - 60) * 110;
+    bandpass.frequency.setValueAtTime(Math.max(2200, Math.min(14500, centerFreq)), time);
+    bandpass.Q.setValueAtTime(1.8, time);
 
     const gain = this.ctx.createGain();
     gain.gain.setValueAtTime(0, time);

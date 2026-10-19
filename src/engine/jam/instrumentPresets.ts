@@ -625,14 +625,94 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     name: 'Cell Solina Ensemble',
     role: 'chords',
     category: 'Cell-Grade Ultimae',
-    description: '70er Eminent BBD-Ensemble-Chorus: samtige Sägezähne mit breiter Stereo-Atmosphäre.',
+    description: '70er Eminent BBD-Ensemble-Chorus (A) + ätherischer Shimmer-Schleier (B) mit breiter Stereo-Bühne.',
     volume: 0.58,
     settings: {
       timbre: 'solina',
       chordPattern: 'pulse',
       chordPace: '2-bars',
       chordTexture: 'shimmer',
+      secondaryEnabled: true,
+      secondaryTimbre: 'shimmer',
+      secondaryVolume: 0.56,
+      secondaryPattern: 'wave',
       density: 0.82
+    }
+  },
+  {
+    id: 'chords-s1gns-ethereal',
+    name: 'S1gns Of L1fe Veil',
+    role: 'chords',
+    category: 'Ambient & Ethereal',
+    description: 'Sehr fein & ätherisch: Kristalline Shimmer-Obertöne (A) verwoben mit atmendem Air-Chor (B).',
+    volume: 0.56,
+    settings: {
+      timbre: 'shimmer',
+      chordPattern: 'wave',
+      chordPace: '4-bars',
+      chordTexture: 'shimmer',
+      secondaryEnabled: true,
+      secondaryTimbre: 'air',
+      secondaryVolume: 0.62,
+      secondaryPattern: 'cluster',
+      density: 0.80
+    }
+  },
+  {
+    id: 'chords-asura-monolith',
+    name: 'Asura Power Monolith',
+    role: 'chords',
+    category: 'Drone & Mighty',
+    description: 'Dronig & mächtig: Analoges Quint-Fundament (Root) gepaart mit majestätischem Solina-Ensemble.',
+    volume: 0.62,
+    settings: {
+      timbre: 'root',
+      chordPattern: 'pad',
+      chordPace: '4-bars',
+      chordTexture: 'sub5th',
+      secondaryEnabled: true,
+      secondaryTimbre: 'solina',
+      secondaryVolume: 0.66,
+      secondaryPattern: 'wave',
+      density: 0.86
+    }
+  },
+  {
+    id: 'chords-cbl-hydroponic',
+    name: 'CBL Hydroponic Pad',
+    role: 'chords',
+    category: 'Cell-Grade Ultimae',
+    description: 'Carbon Based Lifeforms Dual-Fläche: Warmes Analog-Wash (A) + Solina String-Machine (B).',
+    volume: 0.58,
+    settings: {
+      timbre: 'wash',
+      chordPattern: 'pulse',
+      chordPace: '2-bars',
+      chordTexture: 'shimmer',
+      secondaryEnabled: true,
+      secondaryTimbre: 'solina',
+      secondaryVolume: 0.58,
+      secondaryPattern: 'broken',
+      density: 0.84
+    }
+  },
+  {
+    id: 'chords-kupla-cozy',
+    name: 'Kupla & No Spirit Keys',
+    role: 'chords',
+    category: 'Lo-Fi Chill',
+    description: 'Intime Chillhop-Septakkorde auf warmem Filz-Rhodes (A) über einem sanften Celeste/Air-Pad (B).',
+    volume: 0.64,
+    settings: {
+      timbre: 'keys',
+      chordPattern: 'wave',
+      chordPace: '2-bars',
+      chordTexture: 'shimmer',
+      secondaryEnabled: true,
+      secondaryTimbre: 'celeste',
+      secondaryVolume: 0.52,
+      secondaryPattern: 'broken',
+      density: 0.84
     }
   },
   {
@@ -640,13 +720,17 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     name: 'Dusty Rhodes EP',
     role: 'chords',
     category: 'Lo-Fi Chill',
-    description: 'Warme Tines mit dezentem Tremolo-Flutter und analogem Bandsättigungs-Charakter.',
+    description: 'Warme Tines mit dezentem Tremolo-Flutter (A) und weichem Analog-Pad-Bett (B).',
     volume: 0.64,
     settings: {
       timbre: 'keys',
       chordPattern: 'broken',
       chordPace: '2-bars',
       chordTexture: 'octave',
+      secondaryEnabled: true,
+      secondaryTimbre: 'warm',
+      secondaryVolume: 0.48,
+      secondaryPattern: 'pad',
       density: 0.85
     }
   },
@@ -655,13 +739,17 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     name: 'Felted Celeste',
     role: 'chords',
     category: 'Neo-Classical',
-    description: 'Gefilztes Klavier trifft Celesta-Glocken: perkussiver Zupf-Attack und warmer Ausklang.',
+    description: 'Gefilztes Klavier trifft Celesta-Glocken (A) mit schwebendem Shimmer-Halo (B).',
     volume: 0.60,
     settings: {
       timbre: 'celeste',
       chordPattern: 'wave',
       chordPace: '2-bars',
       chordTexture: 'shimmer',
+      secondaryEnabled: true,
+      secondaryTimbre: 'shimmer',
+      secondaryVolume: 0.50,
+      secondaryPattern: 'pad',
       density: 0.80
     }
   },
@@ -670,28 +758,36 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     name: 'Ambient Wash Cloud',
     role: 'chords',
     category: 'Cinematic & Space',
-    description: 'Endlos schwebendes Pad mit langsamem Anschwellen und weitem Kathedralen-Hall.',
+    description: 'Endlos schwebendes Pad (A) mit langsamer Streicher-Gegenbewegung (B) im Kathedralen-Hall.',
     volume: 0.54,
     settings: {
       timbre: 'wash',
       chordPattern: 'pad',
       chordPace: '4-bars',
       chordTexture: 'shimmer',
+      secondaryEnabled: true,
+      secondaryTimbre: 'strings',
+      secondaryVolume: 0.54,
+      secondaryPattern: 'wave',
       density: 0.78
     }
   },
   {
     id: 'chords-dub-stabs',
-    name: 'Dub Techno Stabs',
+    name: 'Aes Dana Dub Stabs',
     role: 'chords',
     category: 'Deep Techno',
-    description: 'Gefilterte Moll-Akkord-Stabs mit bandverzögertem Raum-Echo auf die 16tel.',
+    description: 'Gefilterte Moll-Akkord-Stabs (A) mit schwebender Air-Hintergrundfläche (B) im Bandecho.',
     volume: 0.62,
     settings: {
       timbre: 'dub',
       chordPattern: 'syncopated',
       chordPace: '4-bars',
       chordTexture: 'off',
+      secondaryEnabled: true,
+      secondaryTimbre: 'air',
+      secondaryVolume: 0.46,
+      secondaryPattern: 'pad',
       density: 0.82
     }
   },
@@ -700,13 +796,17 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     name: 'Shimmer Cathedral',
     role: 'chords',
     category: 'Cell-Grade Ultimae',
-    description: 'Kristalline Oktav-Begleitstimmen (+12st) mit schimmerndem Mikro-Timing-Delay.',
+    description: 'Kristalline Oktav-Begleitstimmen (+12st) mit Glas-Arpeggien und schimmerndem Mikro-Delay.',
     volume: 0.56,
     settings: {
       timbre: 'shimmer',
       chordPattern: 'wave',
       chordPace: '4-bars',
       chordTexture: 'shimmer',
+      secondaryEnabled: true,
+      secondaryTimbre: 'glass',
+      secondaryVolume: 0.54,
+      secondaryPattern: 'broken',
       density: 0.80
     }
   },
@@ -715,13 +815,17 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     name: 'Nordic Felt Hall',
     role: 'chords',
     category: 'Neo-Classical',
-    description: 'Nils Frahm Ästhetik: intimer Klavier-Anschlag mit mechanischer Resonanz.',
+    description: 'Nils Frahm Ästhetik: intimer Klavier-Anschlag (A) mit warmem Streicher-Atem (B).',
     volume: 0.58,
     settings: {
       timbre: 'keys',
       chordPattern: 'broken',
       chordPace: '2-bars',
       chordTexture: 'sub5th',
+      secondaryEnabled: true,
+      secondaryTimbre: 'strings',
+      secondaryVolume: 0.48,
+      secondaryPattern: 'wave',
       density: 0.76
     }
   },
@@ -730,13 +834,17 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     name: 'Warm Pipe Organ',
     role: 'chords',
     category: 'Cinematic & Space',
-    description: 'Sanfte Kirchenorgel-Flöten mit erhabenem, tragendem Akkord-Fundament.',
+    description: 'Sanfte Kirchenorgel-Flöten (A) mit sakralem Air-Chor (B) und tragendem Fundament.',
     volume: 0.52,
     settings: {
       timbre: 'organ',
       chordPattern: 'pad',
       chordPace: '4-bars',
       chordTexture: 'octave',
+      secondaryEnabled: true,
+      secondaryTimbre: 'air',
+      secondaryVolume: 0.52,
+      secondaryPattern: 'wave',
       density: 0.75
     }
   },
@@ -797,7 +905,7 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     name: 'Apollo Space Chime',
     role: 'melody',
     category: 'Cinematic & Space',
-    description: 'Brian Eno Space Ambient: schwebende Glockensplitter im unendlichen Nachhall.',
+    description: 'Brian Eno & S1gns Of L1fe Space Ambient: schwebende Glockensplitter im unendlichen Nachhall.',
     volume: 0.34,
     settings: {
       timbre: 'shimmer',
@@ -837,11 +945,50 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     name: 'Deep Earth Root',
     role: 'drone',
     category: 'Grounding & Sub',
-    description: 'Fester Grundton-Anker mit harmonischem Oberton: verleiht dem gesamten Mix Stabilität.',
-    volume: 0.52,
+    description: 'Fester Grundton-Anker mit reiner Quinte: verleiht dem gesamten Mix erhabene Stabilität.',
+    volume: 0.54,
     settings: {
       timbre: 'root',
+      ambientAlgorithm: 'harmonicDrone',
       density: 0.95
+    }
+  },
+  {
+    id: 'drone-asura-fifth',
+    name: 'Asura Power Fifth',
+    role: 'drone',
+    category: 'Drone & Mighty',
+    description: 'Dronig & mächtig: Analoger Sub-Kathedralen-Monolith mit reiner Quinte (+702 ct) und tiefer Wärme.',
+    volume: 0.58,
+    settings: {
+      timbre: 'root',
+      ambientAlgorithm: 'harmonicDrone',
+      density: 0.96,
+      audioPatch: {
+        osc1Wave: 'sawtooth',
+        osc2Wave: 'triangle',
+        osc3Wave: 'sine',
+        subLevel: 0.40,
+        filterCutoff: 1180,
+        filterResonance: 0.85,
+        attack: 2.8,
+        release: 6.5,
+        detuneSpread: 9,
+        voiceSpread: 0.72
+      }
+    }
+  },
+  {
+    id: 'drone-s1gns-aether',
+    name: 'S1gns Ethereal Veil',
+    role: 'drone',
+    category: 'Ambient & Ethereal',
+    description: 'Sehr fein & ätherisch: Schwereloser Oberton-Schleier nach S1gns Of L1fe & Ultimae.',
+    volume: 0.48,
+    settings: {
+      timbre: 'shimmer',
+      ambientAlgorithm: 'granularDrift',
+      density: 0.88
     }
   },
   {
@@ -862,10 +1009,11 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     name: 'Cathedral Bowed Cello',
     role: 'drone',
     category: 'Neo-Classical',
-    description: 'Bogenstrich eines Solo-Cellos im sakralen Kathedralen-Raum.',
+    description: 'Bogenstrich eines tiefen Streicher-Ensembles im sakralen Kathedralen-Raum.',
     volume: 0.50,
     settings: {
       timbre: 'strings',
+      ambientAlgorithm: 'harmonicDrone',
       density: 0.88
     }
   },
@@ -874,10 +1022,11 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     name: 'Analog Swarm Pad',
     role: 'drone',
     category: 'Cell-Grade Ultimae',
-    description: 'Dreifach verstimmte Sägezahn-Schwebung mit sanfter Phasen-Verschiebung.',
-    volume: 0.46,
+    description: 'Dreifach verstimmte Solina-Sägezahn-Schwebung mit sanfter Phasen-Verschiebung.',
+    volume: 0.48,
     settings: {
       timbre: 'solina',
+      ambientAlgorithm: 'harmonicDrone',
       density: 0.90
     }
   },
@@ -890,6 +1039,7 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     volume: 0.44,
     settings: {
       timbre: 'glass',
+      ambientAlgorithm: 'granularDrift',
       density: 0.82
     }
   },
@@ -898,10 +1048,11 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     name: 'Abyssal Deep Sub',
     role: 'drone',
     category: 'Grounding & Sub',
-    description: 'Subharmonischer Abgrund-Ton: phrygische Schwere und erhabene Tiefe.',
+    description: 'Subharmonischer Abgrund-Ton: phrygische Schwere und erhabene analoge Tiefe.',
     volume: 0.54,
     settings: {
       timbre: 'warm',
+      ambientAlgorithm: 'harmonicDrone',
       density: 0.92
     }
   }
@@ -932,7 +1083,6 @@ export function detectActiveInstrumentPreset(layer: JamLayer): InstrumentPreset 
   if (presets.length === 0) return undefined;
 
   if (layer.role === 'drum') {
-    // Match by drumVoice patch pitch or first preset
     return presets.find(p => {
       const pPitch = p.settings.drumPatch?.pitch;
       const lPitch = layer.settings.drumPatch?.pitch;
@@ -940,7 +1090,28 @@ export function detectActiveInstrumentPreset(layer: JamLayer): InstrumentPreset 
     }) || presets[0];
   }
 
-  // For tonal layers, match by timbre or audioPatch characteristics
+  if (layer.role === 'chords') {
+    const exactDual = presets.find(
+      p => p.settings.timbre === layer.settings.timbre &&
+           p.settings.secondaryTimbre === layer.settings.secondaryTimbre &&
+           p.settings.chordPattern === layer.settings.chordPattern
+    );
+    if (exactDual) return exactDual;
+    const matchDual = presets.find(
+      p => p.settings.timbre === layer.settings.timbre &&
+           p.settings.secondaryTimbre === layer.settings.secondaryTimbre
+    );
+    if (matchDual) return matchDual;
+  }
+
+  if (layer.settings.audioPatch?.filterCutoff !== undefined) {
+    const matchPatch = presets.find(
+      p => p.settings.timbre === layer.settings.timbre &&
+           p.settings.audioPatch?.filterCutoff === layer.settings.audioPatch?.filterCutoff
+    );
+    if (matchPatch) return matchPatch;
+  }
+
   return presets.find(p => p.settings.timbre === layer.settings.timbre) || presets[0];
 }
 

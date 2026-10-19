@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Zap, VolumeX, Flame, Moon, Shuffle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Waves, RefreshCw, Music2, Sliders, Play, Plus, Trash2, ArrowRight, X, Dice5 } from 'lucide-react';
+import { Zap, VolumeX, Flame, Moon, Shuffle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Waves, RefreshCw, Music2, Sliders, Plus, Trash2, ArrowRight, X, Dice5 } from 'lucide-react';
 import { JamEngine, SOUNDSCAPE_PRESETS, SEQUENCE_TEMPLATES } from '../../engine/jam/JamEngine';
 import { RHYTHM_POOL, type RhythmPreset } from '../../engine/jam/rhythms';
 import type { ArrangementSection, JamPosition, JamSession, MacroName, SequenceBlock, Timbre, ChordPattern, ChordPace, ChordTexture } from '../../types/jam';
@@ -12,20 +12,27 @@ export function SoundscapeDeck({ session, onClose }: { session: JamSession; posi
   const currentChordTimbre = chordsLayer?.settings.timbre || 'wash';
   const currentChordPattern = chordsLayer?.settings.chordPattern || (session.style === 'techno' ? 'syncopated' : session.style === 'lofi' ? 'broken' : 'pad');
   const currentChordPace = chordsLayer?.settings.chordPace || '2-bars';
+  const secondaryEnabled = Boolean(chordsLayer?.settings.secondaryEnabled);
+  const secondaryTimbre = chordsLayer?.settings.secondaryTimbre || 'shimmer';
+  const secondaryPattern = chordsLayer?.settings.secondaryPattern || 'wave';
+  const secondaryVolume = chordsLayer?.settings.secondaryVolume ?? 0.45;
   const currentSpace = session.macros.space;
 
   return (
     <section className="soundscape-block" aria-label="Klangwelt & Streichorchester">
       <header className="soundscape-header">
         <div>
-          <span className="eyebrow">KLANGWELT & STREICHORCHESTER</span>
-          <h2>Akkorde, Hall & Atmosphäre aufeinander abstimmen.</h2>
-          <p className="helper">Großes Streichorchester, warmes Solina oder schwebender CBL-Wash – abgestimmt mit passendem Raumklang und Hintergrundtextur.</p>
+          <span className="eyebrow">KLANGWELT & DUAL-CHORD ARCHITEKTUR</span>
+          <h2>Akkorde A + B, Hall & Atmosphäre aufeinander abstimmen.</h2>
+          <p className="helper">Zwei harmonisch gekoppelte Akkordspuren (A + B) mit unabhängiger Klangfarbe & Gegenbewegung – inspiriert von CBL, S1gns Of L1fe, Aes Dana, Asura, Kupla & No Spirit.</p>
         </div>
         <div className="header-right-actions">
           <div className="chord-timbre-badge">
             <Music2 size={16} />
-            <span>Akkord-Klang: <strong>{currentChordTimbre === 'strings' ? 'Großes Streichorchester' : currentChordTimbre}</strong></span>
+            <span>
+              Akkord A: <strong>{currentChordTimbre === 'strings' ? 'Streichorchester' : currentChordTimbre}</strong>
+              {secondaryEnabled && <> + B: <strong>{secondaryTimbre} ({Math.round(secondaryVolume * 100)}%)</strong></>}
+            </span>
           </div>
           {onClose && (
             <button type="button" className="icon-button close-deck-btn" onClick={onClose} title="Deck schließen">
@@ -64,7 +71,7 @@ export function SoundscapeDeck({ session, onClose }: { session: JamSession; posi
       {/* Direct Chord, Pattern & Hall Controls */}
       <div className="soundscape-controls-bar">
         <div className="ctrl-group">
-          <label htmlFor="chord-timbre-select">Akkord-Klangfarbe</label>
+          <label htmlFor="chord-timbre-select">Akkordspur A (Fundament & Hauptklang)</label>
           <select
             id="chord-timbre-select"
             value={currentChordTimbre}
@@ -80,12 +87,12 @@ export function SoundscapeDeck({ session, onClose }: { session: JamSession; posi
             <option value="air">⛪ Ätherischer Chor & Dom (Luft & Vokale Textur)</option>
             <option value="dub">🌌 Deep Dub Stabs (Gefiltertes Tape-Echo)</option>
             <option value="organ">🎹 Sakralorgel (Feierlicher Nachhall)</option>
-            <option value="warm">🎛️ Analoger Synth (Klassischer Sägezahn)</option>
+            <option value="warm">🎛️ Analoger Synth (Asura / Vangelis Brass-Pad)</option>
           </select>
         </div>
 
         <div className="ctrl-group">
-          <label htmlFor="chord-pattern-select">Generatives Akkord-Muster</label>
+          <label htmlFor="chord-pattern-select">Muster Spur A</label>
           <select
             id="chord-pattern-select"
             value={currentChordPattern}
@@ -99,6 +106,71 @@ export function SoundscapeDeck({ session, onClose }: { session: JamSession; posi
             <option value="wave">🌊 Ozeanische Wellen (Zeitlich gestaffelte Voice-Einsätze)</option>
             <option value="cluster">✨ Schimmerndes Cluster-Gewebe (Polyzyklisch pulsierende Obertöne)</option>
           </select>
+        </div>
+
+        <div className="ctrl-group">
+          <div className="slider-label-row">
+            <label htmlFor="chord-b-timbre-select">Akkordspur B (Ätherischer / Droniger Konterpart)</label>
+            <label className="checkbox-label" title="Zweite harmonisch gekoppelte Akkordspur (Spur B) aktivieren">
+              <input
+                type="checkbox"
+                checked={secondaryEnabled}
+                onChange={e => engine.setSecondaryChord({ enabled: e.target.checked })}
+              />
+              <span>Spur B Aktiv</span>
+            </label>
+          </div>
+          <select
+            id="chord-b-timbre-select"
+            value={secondaryTimbre}
+            disabled={!secondaryEnabled}
+            onChange={e => engine.setSecondaryChord({ enabled: true, timbre: e.target.value as Timbre })}
+          >
+            <option value="shimmer">✨ Shimmer Pad (Ätherischer Oktav-Glanz)</option>
+            <option value="air">⛪ Ätherischer Vokal-Chor (S1gns Of L1fe / Aes Dana)</option>
+            <option value="solina">🎻 70s Solina String-Ensemble (Warmes Band-Ensemble)</option>
+            <option value="wash">🌊 CBL Atmospheric Wash (Tiefes schwebendes Pad)</option>
+            <option value="celeste">🔔 Celesta & Felt Piano (Kupla / No Spirit Glöckchen-Textur)</option>
+            <option value="glass">💎 Kristallines Glas (Feine Obertöne im hohen Register)</option>
+            <option value="strings">🎻 Symphonische Streicher (Breiter Bogen-Teppich)</option>
+            <option value="warm">🎛️ Analoger Synth-Drone (Asura Monolith Brass-Schicht)</option>
+            <option value="organ">🎹 Kathedral-Orgel (Mächtige Quint- & Oktav-Drone)</option>
+            <option value="keys">☕ Rhodes Keys (Sanfte Akkord-Antworten)</option>
+            <option value="dub">🌌 Dub Chord Echo (Synkopierte Filter-Antwort)</option>
+          </select>
+        </div>
+
+        <div className="ctrl-group">
+          <label htmlFor="chord-b-pattern-select">Gegenbewegung Spur B</label>
+          <select
+            id="chord-b-pattern-select"
+            value={secondaryPattern}
+            disabled={!secondaryEnabled}
+            onChange={e => engine.setSecondaryChord({ enabled: true, pattern: e.target.value as ChordPattern })}
+          >
+            <option value="wave">🌊 Atmende Gegenwelle (Sanft versetztes Aufblühen)</option>
+            <option value="pad">🕊️ Ätherischer Kathedral-Teppich (Langer Oberton-Bogen)</option>
+            <option value="broken">🎹 Zarte Arpeggio-Tropfen (Versetzte Einzelnoten)</option>
+            <option value="pulse">⚡ Polyrhythmischer Gegen-Puls (CBL / Aes Dana Drift)</option>
+            <option value="cluster">✨ Schimmer-Cluster (Hohe schwebende Voicings)</option>
+          </select>
+        </div>
+
+        <div className="ctrl-group hall-slider-group">
+          <div className="slider-label-row">
+            <label htmlFor="chord-b-volume-slider">Dual-Chord Mixer (Spur B Pegel)</label>
+            <output>{secondaryEnabled ? `${Math.round(secondaryVolume * 100)}%` : 'Aus'}</output>
+          </div>
+          <input
+            id="chord-b-volume-slider"
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            disabled={!secondaryEnabled}
+            value={secondaryVolume}
+            onChange={e => engine.setSecondaryChord({ enabled: true, volume: Number(e.target.value) })}
+          />
         </div>
 
         <div className="ctrl-group">
@@ -116,16 +188,16 @@ export function SoundscapeDeck({ session, onClose }: { session: JamSession; posi
         </div>
 
         <div className="ctrl-group">
-          <label htmlFor="chord-texture-select">Begleittextur / Shimmer Layer (Zweite Stimme)</label>
+          <label htmlFor="chord-texture-select">Intervall-Glanz (Sub-Voice)</label>
           <select
             id="chord-texture-select"
             value={chordsLayer?.settings.chordTexture || 'off'}
             onChange={e => engine.setChordTexture(e.target.value as ChordTexture)}
           >
-            <option value="off">Aus (Reiner Hauptakkord)</option>
-            <option value="shimmer">✨ Shimmer Layer (+12st Oktav-Glanz mit zartem Stereo-Offset)</option>
-            <option value="octave">⚡ Doppel-Oktave (+12st tragender Voicing-Aufbau)</option>
-            <option value="sub5th">🪐 Harmonische Quinte (+7st offener Weltraum-Klang)</option>
+            <option value="off">Aus (Reines A+B Voicing)</option>
+            <option value="shimmer">✨ Shimmer Layer (+12st Oktav-Glanz)</option>
+            <option value="octave">⚡ Doppel-Oktave (+12st tragender Aufbau)</option>
+            <option value="sub5th">🪐 Harmonische Quinte (+7st offener Raum)</option>
           </select>
         </div>
 
@@ -155,13 +227,13 @@ export function SoundscapeDeck({ session, onClose }: { session: JamSession; posi
             <Dice5 size={14} />
             <span>🎲 Re-Harmonisieren</span>
           </button>
-          <label className="checkbox-label" title="Passe Hintergrund-Atmosphäre (Air, Tape, Rain, Vinyl) automatisch dem gewählten Akkord-Klang an">
+          <label className="checkbox-label" title="Passe Hintergrund-Atmosphäre (Air, Tape, Rain, Vinyl, max 10%) automatisch dem gewählten Akkord-Klang an">
             <input
               type="checkbox"
               checked={matchAtmoWithChords}
               onChange={e => setMatchAtmoWithChords(e.target.checked)}
             />
-            <span>Atmosphäre koppeln</span>
+            <span>Atmosphäre koppeln (≤10%)</span>
           </label>
         </div>
       </div>
@@ -194,23 +266,29 @@ export function SequencerDeck({ session, position, onClose }: { session: JamSess
   };
 
   return (
-    <section className="sequencer-block" aria-label="Arrangement-Sequencer & Makro-Automation">
+    <section className={`sequencer-block ${!isSequencerActive ? 'is-seq-off' : ''}`} aria-label="Arrangement-Sequencer & Makro-Automation">
       <header className="sequencer-header">
         <div>
           <span className="eyebrow">ARRANGEMENT-SEQUENCER & MAKRO-AUTOMATION</span>
           <h2>Der Ablauf: 4 Takte dies, 4 Takte jenes.</h2>
-          <p className="helper">Baue deine Song-Dramaturgie. Die Abschnitte wechseln automatisch und lassen die Makros (Raum, Wärme, Dichte, Bewegung) langsam und organisch morphen.</p>
+          <p className="helper">
+            {isSequencerActive
+              ? 'Sequencer läuft aktiv. Die Abschnitte wechseln automatisch und lassen die Makros organisch morphen.'
+              : 'Sequencer ist aktuell AUS. Klicke auf den Schalter oder direkt auf einen beliebigen Block/Pfeil unten, um ihn sofort zu aktivieren.'}
+          </p>
         </div>
 
         <div className="sequencer-master-actions">
           <button
             type="button"
-            className={'button ' + (isSequencerActive ? 'primary' : '')}
+            role="switch"
+            aria-checked={isSequencerActive}
+            className={`hardware-switch-pill large ${isSequencerActive ? 'is-on' : 'is-off'}`}
             onClick={() => engine.toggleSequencer(!isSequencerActive)}
-            title="Sequencer an/ausschalten"
+            title="Sequencer ein-/ausschalten"
           >
-            <Play size={15} />
-            <span>{isSequencerActive ? 'Sequencer Aktiv (Läuft)' : 'Sequencer Einschalten'}</span>
+            <span className="switch-dot" />
+            <span>{isSequencerActive ? 'SEQUENCER: ON' : 'SEQUENCER: OFF'}</span>
           </button>
           {onClose && (
             <button type="button" className="icon-button close-deck-btn" onClick={onClose} title="Deck schließen">

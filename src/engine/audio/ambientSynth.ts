@@ -2,7 +2,7 @@ import type { AmbientSynthParams } from '../../types';
 
 interface Voice {
   id: string; note: number; start: number; releaseAt: number; end: number; sources: OscillatorNode[];
-  nodes: AudioNode[]; gain: GainNode; level: GainNode; layerVolume: number; pan: StereoPannerNode | null; driftUnits: number[]; subGain: GainNode | null; filters: BiquadFilterNode[]; lfo: OscillatorNode | null; lfoGain: GainNode | null; fading?: boolean;
+  nodes: AudioNode[]; gain: GainNode; level: GainNode; layerVolume: number; pan: StereoPannerNode | null; driftUnits: number[]; osc3IntervalCents: number; subGain: GainNode | null; filters: BiquadFilterNode[]; lfo: OscillatorNode | null; lfoGain: GainNode | null; fading?: boolean;
 }
 /** Native bounded polyphony. Oscillator onended owns graph cleanup; no per-note timers. */
 export class AmbientSynth {
@@ -11,6 +11,25 @@ export class AmbientSynth {
     private maxSoundingVoices = 6, private maxReleasingVoices = 6,
     private random: { next(): number } = { next: Math.random }) {}
   static midiToFreq(note: number, detuneCents = 0): number { return 440 * Math.pow(2, (note - 69 + detuneCents / 100) / 12); }
+  private static computeOsc3IntervalCents(params: AmbientSynthParams): number {
+    const isBass = params.filterCutoff < 980 && params.subLevel >= 0.25 && params.attack < 0.1;
+    if (isBass) return 0;
+    // Powerful drone / deep root foundation: pure fifth (+702 cents)
+    if (params.subLevel >= 0.25 && params.attack >= 1.5) return 702;
+    // Ethereal shimmer / glass / air / Solina / strings ensemble: octave halo (+1200 cents)
+    if (
+      (params.osc1Wave === 'sine' && params.osc3Wave === 'sawtooth') ||
+      (params.osc1Wave === 'sawtooth' && params.osc2Wave === 'sawtooth' && params.attack >= 0.8) ||
+      (params.filterCutoff >= 3000 && params.attack >= 0.5)
+    ) {
+      return 1200;
+    }
+    // Rhodes / Celeste / Bell pluck: crystalline 3rd harmonic tine overtone (+1902 cents = octave + 5th)
+    if (params.attack <= 0.04 && params.filterCutoff >= 1200) {
+      return 1902;
+    }
+    return 0;
+  }
   getActiveVoiceCount(): { sounding: number; releasing: number } {
     let sounding = 0; let releasing = 0; const time = this.ctx.currentTime;
     for (const voice of this.voices.values()) { if (time < voice.start) continue; if (time >= voice.end) { this.kill(voice.id); continue; } if (voice.fading) continue; if (time >= voice.releaseAt) releasing++; else sounding++; }
@@ -33,44 +52,63 @@ export class AmbientSynth {
     while (releasing.length > this.maxReleasingVoices) this.fade(releasing.shift()!);
     const id = `voice-${++this.counter}`; const nodes: AudioNode[] = [];
     const filter1 = this.ctx.createBiquadFilter(); const filter2 = this.ctx.createBiquadFilter(); nodes.push(filter1, filter2);
-    const baseCutoff = Math.max(20, Math.min(18000, params.filterCutoff)); const requestedAttack = Math.max(0.005, params.attack); const attack = Math.min(duration, requestedAttack); const attackFraction = Math.min(1, duration / requestedAttack);
+    const velNorm = Math.max(0, Math.min(127, velocity)) / 127;
+    const velFilterScale = 0.74 + 0.26 * velNorm;
+    const keyTrack = Math.pow(2, Math.max(-0.32, Math.min(0.32, (note - 60) / 54)));
+    const baseCutoff = Math.max(20, Math.min(18000, params.filterCutoff * velFilterScale * keyTrack));
+    const requestedAttack = Math.max(0.005, params.attack); const attack = Math.min(duration, requestedAttack); const attackFraction = Math.min(1, duration / requestedAttack);
     const userRes = Math.max(0.5, Math.min(15, params.filterResonance));
     filter1.type = 'lowpass'; filter1.frequency.setValueAtTime(baseCutoff, time);
-    filter1.Q.setValueAtTime(Math.min(3.5, userRes * 0.707), time);
-    filter1.frequency.linearRampToValueAtTime(Math.min(18000, baseCutoff * (1 + params.filterEnvAmount * 1.3 * attackFraction)), time + attack);
-    filter1.frequency.setTargetAtTime(baseCutoff, time + attack, Math.max(0.1, params.decay));
+    filter1.Q.setValueAtTime(Math.min(3.2, userRes * 0.68), time);
+    filter1.frequency.linearRampToValueAtTime(Math.min(18000, baseCutoff * (1 + params.filterEnvAmount * 1.35 * attackFraction)), time + attack);
+    filter1.frequency.setTargetAtTime(baseCutoff, time + attack, Math.max(0.12, params.decay));
 
-    filter2.type = 'lowpass'; filter2.frequency.setValueAtTime(baseCutoff, time);
-    filter2.Q.setValueAtTime(0.54, time); // Critically damped 2nd stage: silky analog roll-off, eliminates metallic chord ringing
-    filter2.frequency.linearRampToValueAtTime(Math.min(18000, baseCutoff * (1 + params.filterEnvAmount * 1.3 * attackFraction)), time + attack);
-    filter2.frequency.setTargetAtTime(baseCutoff, time + attack, Math.max(0.1, params.decay));
+    filter2.type = 'lowpass'; filter2.frequency.setValueAtTime(baseCutoff * 1.08, time);
+    filter2.Q.setValueAtTime(0.52, time); // Critically damped 2nd stage: silky analog roll-off, eliminates metallic chord ringing
+    filter2.frequency.linearRampToValueAtTime(Math.min(18000, baseCutoff * 1.08 * (1 + params.filterEnvAmount * 1.25 * attackFraction)), time + attack);
+    filter2.frequency.setTargetAtTime(baseCutoff * 1.08, time + attack, Math.max(0.12, params.decay));
     filter1.connect(filter2);
     const gain = this.ctx.createGain(); nodes.push(gain); filter2.connect(gain);
-    const peak = Math.max(0.0001, Math.max(0, Math.min(127, velocity)) / 127 * 0.55 / Math.sqrt(this.maxSoundingVoices));
+    const voiceNorm = Math.min(7, Math.max(1, this.maxSoundingVoices));
+    const peak = Math.max(0.0001, velNorm * 0.58 / Math.sqrt(voiceNorm));
     const sustain = Math.max(0.0001, duration < requestedAttack ? peak * attackFraction : peak * params.sustain); const release = Math.max(0.05, Math.min(12, params.release));
     const end = time + duration + release;
     gain.gain.setValueAtTime(0.0001, time); gain.gain.linearRampToValueAtTime(peak * attackFraction, time + attack);
-    gain.gain.setTargetAtTime(sustain, time + attack, Math.max(0.05, Math.min(duration * 0.3, params.decay)));
+    gain.gain.setTargetAtTime(sustain, time + attack, Math.max(0.05, Math.min(duration * 0.35, params.decay)));
     gain.gain.setValueAtTime(sustain, time + duration); gain.gain.exponentialRampToValueAtTime(0.0001, end);
     const level = this.ctx.createGain(); nodes.push(level); level.gain.setValueAtTime(Math.max(0, params.volume * layerVolume), time); gain.connect(level);
     const pan = this.ctx.createStereoPanner ? this.ctx.createStereoPanner() : null;
     if (pan) { nodes.push(pan); pan.pan.setValueAtTime(Math.max(-1, Math.min(1, ((note % 12) / 6 - 1) * params.voiceSpread)), time); level.connect(pan); pan.connect(this.outputNode); } else level.connect(this.outputNode);
     const sources: OscillatorNode[] = []; const driftUnits: number[] = []; const freq = AmbientSynth.midiToFreq(note);
+    const osc3IntervalCents = AmbientSynth.computeOsc3IntervalCents(params);
+    const isTinePluck = osc3IntervalCents === 1902;
+    const oscWeights = [0.50, 0.36, isTinePluck ? 0.24 : osc3IntervalCents === 1200 ? 0.20 : 0.26];
     [params.osc1Wave, params.osc2Wave, params.osc3Wave].forEach((wave, index) => {
       const osc = this.ctx.createOscillator(); osc.type = wave;
+      const oscGain = this.ctx.createGain(); nodes.push(oscGain);
+      oscGain.gain.setValueAtTime(oscWeights[index], time);
+      if (index === 2 && isTinePluck) {
+        // Delicate Rhodes / Celesta tine overtone decay: glassy wooden attack into warm fundamental body
+        oscGain.gain.setTargetAtTime(0.025, time + 0.008, 0.09);
+      }
       const driftUnit = this.random.next() * 2 - 1; driftUnits.push(driftUnit);
-      osc.frequency.setValueAtTime(freq, time); osc.detune.setValueAtTime((index === 1 ? -1 : index === 2 ? 1 : 0) * params.detuneSpread + driftUnit * params.driftAmount * 3, time);
-      osc.connect(filter1); osc.start(time); osc.stop(end + 0.03); sources.push(osc);
+      const intervalCents = index === 2 ? osc3IntervalCents : 0;
+      const startDetune = intervalCents + (index === 1 ? -1 : index === 2 ? 1 : -0.35) * params.detuneSpread + driftUnit * params.driftAmount * 4;
+      const endDetune = intervalCents + (index === 1 ? -1 : index === 2 ? 1 : 0.35) * params.detuneSpread - driftUnit * params.driftAmount * 6;
+      osc.frequency.setValueAtTime(freq, time);
+      osc.detune.setValueAtTime(startDetune, time);
+      osc.detune.linearRampToValueAtTime(endDetune, end);
+      osc.connect(oscGain); oscGain.connect(filter1); osc.start(time); osc.stop(end + 0.03); sources.push(osc);
     });
     let subGain: GainNode | null = null;
     if (params.subLevel > 0.01) { const sub = this.ctx.createOscillator(); subGain = this.ctx.createGain(); nodes.push(subGain);
-      sub.type = 'sine'; sub.frequency.setValueAtTime(freq * 0.5, time); subGain.gain.setValueAtTime(params.subLevel * 0.4, time);
+      sub.type = 'sine'; sub.frequency.setValueAtTime(freq * 0.5, time); subGain.gain.setValueAtTime(params.subLevel * 0.44, time);
       sub.connect(subGain); subGain.connect(filter1); sub.start(time); sub.stop(end + 0.03); sources.push(sub); }
     let lfo: OscillatorNode | null = null; let lfoGain: GainNode | null = null;
     if (params.lfoDepth > 0.001 && params.lfoRate > 0) { lfo = this.ctx.createOscillator(); lfoGain = this.ctx.createGain(); nodes.push(lfoGain);
       lfo.type = 'sine'; lfo.frequency.setValueAtTime(params.lfoRate, time); lfoGain.gain.setValueAtTime(baseCutoff * Math.max(0, Math.min(1, params.lfoDepth)), time);
       lfo.connect(lfoGain); lfoGain.connect(filter1.frequency); lfoGain.connect(filter2.frequency); lfo.start(time); lfo.stop(end + 0.03); sources.push(lfo); }
-    const voice: Voice = { id, note, start: time, releaseAt: time + duration, end, sources, nodes, gain, level, layerVolume, pan, driftUnits, subGain, filters: [filter1, filter2], lfo, lfoGain };
+    const voice: Voice = { id, note, start: time, releaseAt: time + duration, end, sources, nodes, gain, level, layerVolume, pan, driftUnits, osc3IntervalCents, subGain, filters: [filter1, filter2], lfo, lfoGain };
     this.voices.set(id, voice); sources[0].onended = () => this.kill(id); return id;
   }
   updateParams(params: AmbientSynthParams, layerVolume?: number): void {
@@ -80,23 +118,29 @@ export class AmbientSynth {
       if (layerVolume !== undefined) v.layerVolume = layerVolume;
       v.level.gain.setTargetAtTime(Math.max(0, params.volume * v.layerVolume), now, 0.09);
       const userRes = Math.max(0.5, Math.min(15, params.filterResonance));
-      v.filters[0]?.frequency.setTargetAtTime(Math.max(20, Math.min(18000, params.filterCutoff)), now, 0.7);
-      v.filters[0]?.Q.setTargetAtTime(Math.min(3.5, userRes * 0.707), now, 0.15);
-      v.filters[1]?.frequency.setTargetAtTime(Math.max(20, Math.min(18000, params.filterCutoff)), now, 0.7);
-      v.filters[1]?.Q.setTargetAtTime(0.54, now, 0.15);
+      const keyTrack = Math.pow(2, Math.max(-0.32, Math.min(0.32, (v.note - 60) / 54)));
+      const targetCutoff = Math.max(20, Math.min(18000, params.filterCutoff * keyTrack));
+      v.filters[0]?.frequency.setTargetAtTime(targetCutoff, now, 0.7);
+      v.filters[0]?.Q.setTargetAtTime(Math.min(3.2, userRes * 0.68), now, 0.15);
+      v.filters[1]?.frequency.setTargetAtTime(Math.min(18000, targetCutoff * 1.08), now, 0.7);
+      v.filters[1]?.Q.setTargetAtTime(0.52, now, 0.15);
       v.pan?.pan.setTargetAtTime(Math.max(-1, Math.min(1, ((v.note % 12) / 6 - 1) * params.voiceSpread)), now, 0.2);
-      [params.osc1Wave, params.osc2Wave, params.osc3Wave].forEach((wave, i) => { if (v.sources[i].type !== wave) v.sources[i].type = wave; /* re-assigning an unchanged type rebuilds the wavetable and clicks */ v.sources[i].detune.setTargetAtTime((i === 1 ? -1 : i === 2 ? 1 : 0) * params.detuneSpread + v.driftUnits[i] * params.driftAmount * 3, now, 0.2); });
+      [params.osc1Wave, params.osc2Wave, params.osc3Wave].forEach((wave, i) => {
+        if (v.sources[i].type !== wave) v.sources[i].type = wave; /* re-assigning an unchanged type rebuilds the wavetable and clicks */
+        const intervalCents = i === 2 ? v.osc3IntervalCents : 0;
+        v.sources[i].detune.setTargetAtTime(intervalCents + (i === 1 ? -1 : i === 2 ? 1 : 0) * params.detuneSpread + v.driftUnits[i] * params.driftAmount * 4, now, 0.2);
+      });
       if (!v.subGain && params.subLevel > 0.01 && now < v.releaseAt) {
         const sub = this.ctx.createOscillator(); v.subGain = this.ctx.createGain(); v.nodes.push(v.subGain); sub.type = 'sine';
         sub.frequency.setValueAtTime(AmbientSynth.midiToFreq(v.note) * 0.5, now); v.subGain.gain.setValueAtTime(0, now); sub.connect(v.subGain); v.subGain.connect(v.filters[0]); sub.start(now); sub.stop(v.end + 0.03); v.sources.push(sub);
       }
-      v.subGain?.gain.setTargetAtTime(Math.max(0, params.subLevel) * 0.4, now, 0.1);
+      v.subGain?.gain.setTargetAtTime(Math.max(0, params.subLevel) * 0.44, now, 0.1);
       if (!v.lfo && params.lfoDepth > 0.001 && params.lfoRate > 0 && now < v.releaseAt) {
         v.lfo = this.ctx.createOscillator(); v.lfoGain = this.ctx.createGain(); v.nodes.push(v.lfoGain); v.lfo.type = 'sine'; v.lfoGain.gain.setValueAtTime(0, now);
         v.lfo.connect(v.lfoGain); v.lfoGain.connect(v.filters[0].frequency); v.lfoGain.connect(v.filters[1].frequency); v.lfo.start(now); v.lfo.stop(v.end + 0.03); v.sources.push(v.lfo);
       }
       v.lfo?.frequency.setTargetAtTime(Math.max(0.001, params.lfoRate), now, 1);
-      v.lfoGain?.gain.setTargetAtTime(params.lfoRate <= 0 ? 0 : params.filterCutoff * Math.max(0, Math.min(1, params.lfoDepth)), now, 0.7);
+      v.lfoGain?.gain.setTargetAtTime(params.lfoRate <= 0 ? 0 : targetCutoff * Math.max(0, Math.min(1, params.lfoDepth)), now, 0.7);
     }
   }
   private release(voice: Voice, time: number, duration: number): void {

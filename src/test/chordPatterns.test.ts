@@ -200,3 +200,45 @@ test('Cell-Grade Timbres & Lo-Fi Drum Punch in JamEngine', () => {
   assert.ok(kickPatch.decay >= 0.30, `Lo-Fi kick decay should be fat and pillowy (got ${kickPatch.decay}s)`);
   assert.ok(kickPatch.drive >= 0.18, `Lo-Fi kick should have sweet analog tape drive (got ${kickPatch.drive})`);
 });
+
+test('Dual-Chord Layer B: generates harmonically matched counter-voices on subLayer chords_b and responds to setSecondaryChord', () => {
+  const session = createSession('cbl-hydroponic', 42);
+  const chordLayer = session.layers.find(l => l.role === 'chords');
+  assert.ok(chordLayer);
+  assert.equal(chordLayer.settings.secondaryEnabled, true);
+  assert.ok(chordLayer.settings.secondaryTimbre);
+  assert.ok((chordLayer.settings.secondaryVolume ?? 0) > 0);
+
+  const composer = new JamComposer();
+  const secondaryNotes: Array<{ step: number; note: number }> = [];
+
+  for (let step = 0; step < 64; step++) {
+    const harmony = composer.harmonyAt(step, session);
+    const allowedPitchClasses = new Set(harmony.notes.map(n => ((n % 12) + 12) % 12));
+    const planned = composer.planStep(step, session).filter(n => n.subLayer === 'chords_b');
+    for (const pn of planned) {
+      secondaryNotes.push({ step, note: pn.note });
+      const pc = ((pn.note % 12) + 12) % 12;
+      assert.ok(
+        allowedPitchClasses.has(pc),
+        `Dual-Chord B note ${pn.note} (pc ${pc}) must harmonically match active chord pitch classes [${[...allowedPitchClasses].join(', ')}]`
+      );
+    }
+  }
+
+  assert.ok(secondaryNotes.length >= 2, `Dual-Chord Layer B should articulate counter-voices across the phrase (got ${secondaryNotes.length})`);
+
+  // Verify Engine setSecondaryChord updates state cleanly
+  const engine = new JamEngine();
+  engine.setSecondaryChord({ enabled: true, timbre: 'air', volume: 0.58, pattern: 'pad' });
+  const updatedChords = engine.getState().layers.find(l => l.role === 'chords');
+  assert.equal(updatedChords?.settings.secondaryEnabled, true);
+  assert.equal(updatedChords?.settings.secondaryTimbre, 'air');
+  assert.equal(updatedChords?.settings.secondaryVolume, 0.58);
+  assert.equal(updatedChords?.settings.secondaryPattern, 'pad');
+
+  // Verify secondary timbre override in ambientPatch uses genuine secondary timbre patch
+  const primaryPatch = ambientPatch(updatedChords!, engine.getState(), 0);
+  const secondaryPatch = ambientPatch(updatedChords!, engine.getState(), 0, 0, updatedChords!.settings.secondaryTimbre);
+  assert.notDeepEqual(primaryPatch, secondaryPatch, 'Secondary chord synth patch should reflect secondaryTimbre independently of primary audioPatch');
+});

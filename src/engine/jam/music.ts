@@ -80,7 +80,7 @@ export function chordSuffix(intervals: number[]): string {
   return base;
 }
 export interface Harmony { degree: number; name: string; notes: number[]; root: number; index: number }
-export interface PlannedNote { layerId: string; note: number; velocity: number; durationBeats: number; microMs: number; offsetBeats?: number; channel?: number; /** Entered mid-phrase by an Evolve transition: use a short attack so it crossfades in. */ soft?: boolean }
+export interface PlannedNote { layerId: string; note: number; velocity: number; durationBeats: number; microMs: number; offsetBeats?: number; channel?: number; /** Entered mid-phrase by an Evolve transition: use a short attack so it crossfades in. */ soft?: boolean; /** Secondary Dual-Chord voice routed to Chord B synth & mixer. */ subLayer?: 'chords_b' }
 interface ComposerRuntime { epoch: number; harmonyIndex: number; harmony: Harmony; previousVoicing: number[]; frozen: Record<string, ClipNote[]>; frozenStarts: Record<string, number>; }
 /** Deterministic musical decisions; audio and MIDI both consume the returned notes. */
 export class JamComposer {
@@ -275,8 +275,21 @@ export class JamComposer {
     };
     if (layer.role === 'drone') {
       if (s.ambientAlgorithm === 'granularDrift') {
-        for (let step = 0; step < length; step++) if (rng.chance(density * 0.24)) { const degree = harmony.degree + rng.pick([0, 0, 2, 4, 6]); add(step, fit(scaleNote(session.root, session.scale, degree)), rng.pick([0.5, 0.75, 1.25, 2]), 0.2 + rng.next() * 0.2); }
-      } else if (density > 0 && (phraseIndex === 0 || rng.chance(Math.max(0.5, density)))) { add(0, fit(session.root - 12), s.phraseBars * 4 - 0.15, 0.32, false); if (density > 0.65) add(0, fit(session.root - 5), s.phraseBars * 4 - 0.3, 0.18, false); }
+        for (let step = 0; step < length; step++) {
+          if (rng.chance(density * 0.22)) {
+            const degree = harmony.degree + rng.pick([0, 0, 2, 4, 4, 6]);
+            add(step, fit(scaleNote(session.root, session.scale, degree)), rng.pick([0.75, 1.25, 1.75, 2.0]), 0.24 + rng.next() * 0.22);
+          }
+        }
+      } else if (density > 0 && (phraseIndex === 0 || rng.chance(Math.max(0.55, density)))) {
+        // Deep sub-fundamental anchor + harmonic fifth (AmbientSynth osc3 voices pure 5th/octave on top)
+        const rootNote = fit(session.root - 12);
+        add(0, rootNote, s.phraseBars * 4 - 0.12, 0.42, false, 0);
+        const fifthNote = fit(session.root - 5);
+        if (density > 0.42 && fifthNote !== rootNote) {
+          add(0, fifthNote, s.phraseBars * 4 - 0.24, 0.28, false, 0);
+        }
+      }
     } else if (layer.role === 'chords') {
       const pattern: ChordPattern | undefined = s.chordPattern;
       const roll = lofi ? rng.range(6, 28) : rng.range(35, 95);
@@ -423,7 +436,7 @@ export class JamComposer {
       }
 
       if (s.chordTexture && s.chordTexture !== 'off') {
-        const baseChordNotes = notes.filter(n => n.layerId === layer.id);
+        const baseChordNotes = notes.filter(n => n.layerId === layer.id && !n.subLayer);
         for (const cn of baseChordNotes) {
           let interval = 12;
           let velMult = 0.50;
@@ -456,6 +469,84 @@ export class JamComposer {
               microMs: cn.microMs + microOffset,
             });
           }
+        }
+      }
+
+      // Dual-Chord Engine (Layer B): Harmonically locked to the exact same chord (`harmony.notes`),
+      // voiced in an open spread inversion with antiphonal counter-rhythms so it always matches yet never sounds monotonous.
+      if (s.secondaryEnabled && (s.secondaryVolume ?? 0.55) > 0.01 && density > 0 && harmony.notes.length >= 2) {
+        const addSecondary = (step: number, note: number, duration: number, accent = 0.42, micro = 24) => {
+          if (!Number.isFinite(note) || step <= 0 || step >= length) return;
+          notes.push({
+            step,
+            layerId: layer.id,
+            subLayer: 'chords_b',
+            note: Math.round(clamp(note, 0, 127)),
+            durationBeats: Math.max(0.08, duration),
+            velocity: Math.round(clamp(s.velocityMin + (s.velocityMax - s.velocityMin) * clamp(accent + rng.range(-0.06, 0.06), 0, 1), 1, 127)),
+            microMs: micro,
+          });
+        };
+
+        // Build complementary open-spread voicing from harmony.notes (upper extensions + inverted root/5th)
+        const hn = harmony.notes;
+        const spreadCandidates = [
+          fit(hn[1] ?? hn[0]),
+          fit((hn[2] ?? hn[0]) + (s.secondaryTimbre === 'root' || s.secondaryTimbre === 'warm' ? 0 : 12)),
+          fit(hn[0] + 12),
+          fit((hn[3] ?? hn[hn.length - 1]) + 12),
+        ].filter(Number.isFinite);
+        const secVoicing = [...new Set(spreadCandidates)];
+        const secPattern: ChordPattern = s.secondaryPattern || (pattern === 'pad' ? 'wave' : pattern === 'wave' ? 'cluster' : pattern === 'broken' ? 'pad' : 'wave');
+
+        if (secPattern === 'wave') {
+          // Ethereal cascading counter-swell entering on off-steps (4, 8, 12...) as Chord A breathes
+          for (let bar = 0; bar < s.phraseBars; bar++) {
+            secVoicing.forEach((pitch, idx) => {
+              const stepPos = bar * 16 + ((idx + 1) * 4) % 16;
+              if (stepPos === 0) return;
+              if (bar > 0 && !rng.chance(Math.min(1, 0.45 + density * 0.55))) return;
+              addSecondary(stepPos, pitch, lofi ? 2.6 : 4.2 + rng.range(0, 1.4), 0.42 - idx * 0.03, 22 + idx * 18);
+            });
+          }
+        } else if (secPattern === 'pad') {
+          // Antiphonal counter-pad: blooms smoothly on beat 3 (step 8) bridging the harmonic space
+          for (let bar = 0; bar < s.phraseBars; bar += Math.max(1, Math.min(2, chordHoldBars))) {
+            const enterStep = bar * 16 + 8;
+            secVoicing.forEach((pitch, idx) => {
+              addSecondary(enterStep, pitch, Math.max(2.4, chordHoldBars * 3.2), 0.44 - idx * 0.03, 28 + idx * 24);
+            });
+          }
+        } else if (secPattern === 'broken') {
+          // Delicate broken celesta / felt-piano / glass arpeggio in the upper register
+          const slots = [2, 6, 10, 14];
+          for (let bar = 0; bar < s.phraseBars; bar++) {
+            slots.forEach((slot, si) => {
+              if (!rng.chance(Math.min(1, 0.48 + density * 0.52))) return;
+              const pitch = secVoicing[(bar + si) % secVoicing.length];
+              addSecondary(bar * 16 + slot, pitch, 2.0 + rng.range(0, 0.8), 0.38 + (slot === 6 ? 0.08 : 0), 16 + si * 8);
+            });
+          }
+        } else if (secPattern === 'pulse' || secPattern === 'syncopated' || secPattern === 'euclidean') {
+          // Interlocking stereo counter-pulses on off-beats
+          const counterSlots = [4, 10, 14];
+          for (let bar = 0; bar < s.phraseBars; bar++) {
+            counterSlots.forEach(slot => {
+              if (!rng.chance(Math.min(1, 0.45 + density * 0.55))) return;
+              secVoicing.slice(0, 3).forEach((pitch, idx) => {
+                addSecondary(bar * 16 + slot, pitch, 1.3 + rng.range(0, 0.5), 0.40 - idx * 0.03, 14 + idx * 12);
+              });
+            });
+          }
+        } else {
+          // 'cluster': Shimmering polyrhythmic tapestry
+          secVoicing.forEach((pitch, idx) => {
+            const strideSteps = [5, 7, 9, 11][idx % 4];
+            for (let stepPos = strideSteps; stepPos < length; stepPos += strideSteps) {
+              if (!rng.chance(Math.min(1, 0.38 + density * 0.55))) continue;
+              addSecondary(stepPos, pitch, 2.8 + rng.range(0, 1.0), 0.36, 20 + idx * 15);
+            }
+          });
         }
       }
     } else if (layer.role === 'bass' && techno) {
@@ -644,7 +735,7 @@ export class JamComposer {
       }
     }
     const unique = new Map<string, PlannedNote & { step: number }>();
-    for (const n of notes) { const key = `${n.step}:${n.note}`; const old = unique.get(key); if (!old || n.durationBeats > old.durationBeats) unique.set(key, n); }
+    for (const n of notes) { const key = `${n.step}:${n.note}:${n.subLayer || 'a'}`; const old = unique.get(key); if (!old || n.durationBeats > old.durationBeats) unique.set(key, n); }
     return [...unique.values()];
   }
 }

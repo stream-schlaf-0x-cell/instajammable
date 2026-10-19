@@ -4868,5 +4868,229 @@
   color: #fff;
 }
 
+.strip-dual-chord-bar {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 3px 4px;
+  background: #121718;
+  border: 1px solid #263131;
+  border-radius: 4px;
+}
 
+.dual-chord-toggle {
+  width: 100%;
+  font-size: 9px;
+  font-family: var(--mono);
+  font-weight: 600;
+  padding: 2px 4px;
+  border-radius: 3px;
+  background: #1a2122;
+  border: 1px solid #2e3b3a;
+  color: #8b9a97;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  text-align: center;
+}
 
+.dual-chord-toggle.active {
+  background: rgba(229, 179, 116, 0.12);
+  border-color: #e5b374;
+  color: #e5b374;
+}
+
+.dual-chord-blend-slider {
+  width: 100%;
+  height: 4px;
+  accent-color: #e5b374;
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   Single Drawer Console & Central Mixer Stage Styles
+   ========================================================================== */
+
+.central-mixer-stage {
+  margin-top: 18px;
+  background: #141b1d;
+  border: 1px solid #283736;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+}
+
+.mixer-stage-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #192324;
+  border-bottom: 1px solid #283736;
+}
+
+.mixer-stage-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #e4ebe9;
+}
+
+.mixer-stage-title strong {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.mixer-stage-badge {
+  font-size: 10px;
+  font-family: var(--mono);
+  color: #8b9794;
+  background: #111718;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #233030;
+}
+
+.mixer-collapse-btn {
+  font-size: 11px;
+  padding: 4px 10px;
+  color: #b0c0bc;
+}
+
+/* Single Drawer Console */
+.single-drawer-console {
+  margin-top: 20px;
+  margin-bottom: 30px;
+  background: #121719;
+  border: 1px solid #253332;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+}
+
+.drawer-tabs-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px;
+  background: #172022;
+  border-bottom: 1px solid #253332;
+}
+
+.drawer-tab-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 12px;
+  background: #1b2527;
+  border: 1px solid #2d3e3c;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+  font-size: 12px;
+  color: #c9d5d2;
+}
+
+.drawer-tab-item:hover {
+  background: #233133;
+  border-color: #3e5350;
+  color: #ffffff;
+}
+
+.drawer-tab-item.is-active {
+  background: #25393b;
+  border-color: #e5b374;
+  color: #f8fafc;
+  box-shadow: 0 0 10px rgba(229, 179, 116, 0.15);
+}
+
+.drawer-tab-item.is-module-off {
+  opacity: 0.65;
+}
+
+.drawer-tab-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.drawer-tab-title {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.drawer-panel-body {
+  padding: 18px;
+  background: #121819;
+  border-top: 1px solid rgba(255, 255, 255, 0.03);
+  animation: drawerFadeIn 0.15s ease-out;
+}
+
+@keyframes drawerFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Hardware Switch Pill (ON/OFF) */
+.hardware-switch-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border-radius: 10px;
+  border: 1px solid #364947;
+  background: #151d1e;
+  color: #8b9a97;
+  cursor: pointer;
+  line-height: 1;
+  transition: all 0.15s ease;
+}
+
+.hardware-switch-pill:hover {
+  border-color: #4a6361;
+}
+
+.hardware-switch-pill.is-on {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: #22c55e;
+  color: #4ade80;
+}
+
+.hardware-switch-pill.is-off {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: #ef4444;
+  color: #f87171;
+}
+
+.hardware-switch-pill .switch-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 4px currentColor;
+}
+
+@media (max-width: 768px) {
+  .drawer-tabs-bar {
+    gap: 6px;
+    padding: 6px;
+  }
+  .drawer-tab-item {
+    flex: 1 1 calc(50% - 6px);
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 480px) {
+  .drawer-tab-item {
+    flex: 1 1 100%;
+  }
+}
