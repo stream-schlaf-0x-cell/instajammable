@@ -636,7 +636,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
       secondaryTimbre: 'shimmer',
       secondaryVolume: 0.56,
       secondaryPattern: 'wave',
-      density: 0.82
+      density: 0.82,
+      audioPatch: {
+        osc1Wave: 'sawtooth',
+        osc2Wave: 'sawtooth',
+        osc3Wave: 'triangle',
+        detuneSpread: 18,
+        subLevel: 0.14,
+        filterCutoff: 2350,
+        filterResonance: 0.82,
+        filterEnvAmount: 0.24,
+        attack: 1.35,
+        decay: 2.8,
+        sustain: 0.88,
+        release: 5.4,
+        lfoRate: 0.22,
+        lfoDepth: 0.18,
+        driftAmount: 0.24,
+        voiceSpread: 0.96
+      }
     }
   },
   {
@@ -655,7 +673,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
       secondaryTimbre: 'air',
       secondaryVolume: 0.62,
       secondaryPattern: 'cluster',
-      density: 0.80
+      density: 0.80,
+      audioPatch: {
+        osc1Wave: 'sine',
+        osc2Wave: 'triangle',
+        osc3Wave: 'sawtooth',
+        detuneSpread: 16,
+        subLevel: 0.05,
+        filterCutoff: 3950,
+        filterResonance: 0.76,
+        filterEnvAmount: 0.28,
+        attack: 1.45,
+        decay: 3.0,
+        sustain: 0.84,
+        release: 6.8,
+        lfoRate: 0.12,
+        lfoDepth: 0.20,
+        driftAmount: 0.28,
+        voiceSpread: 0.98
+      }
     }
   },
   {
@@ -674,7 +710,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
       secondaryTimbre: 'solina',
       secondaryVolume: 0.66,
       secondaryPattern: 'wave',
-      density: 0.86
+      density: 0.86,
+      audioPatch: {
+        osc1Wave: 'sawtooth',
+        osc2Wave: 'sawtooth',
+        osc3Wave: 'sine',
+        detuneSpread: 11,
+        subLevel: 0.38,
+        filterCutoff: 1380,
+        filterResonance: 0.92,
+        filterEnvAmount: 0.22,
+        attack: 2.2,
+        decay: 3.2,
+        sustain: 0.92,
+        release: 6.0,
+        lfoRate: 0.09,
+        lfoDepth: 0.15,
+        driftAmount: 0.18,
+        voiceSpread: 0.82
+      }
     }
   },
   {
@@ -693,7 +747,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
       secondaryTimbre: 'solina',
       secondaryVolume: 0.58,
       secondaryPattern: 'broken',
-      density: 0.84
+      density: 0.84,
+      audioPatch: {
+        osc1Wave: 'sawtooth',
+        osc2Wave: 'triangle',
+        osc3Wave: 'sawtooth',
+        detuneSpread: 15,
+        subLevel: 0.14,
+        filterCutoff: 2150,
+        filterResonance: 0.84,
+        filterEnvAmount: 0.26,
+        attack: 1.65,
+        decay: 2.8,
+        sustain: 0.86,
+        release: 5.6,
+        lfoRate: 0.14,
+        lfoDepth: 0.18,
+        driftAmount: 0.22,
+        voiceSpread: 0.92
+      }
     }
   },
   {
@@ -712,7 +784,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
       secondaryTimbre: 'celeste',
       secondaryVolume: 0.52,
       secondaryPattern: 'broken',
-      density: 0.84
+      density: 0.84,
+      audioPatch: {
+        osc1Wave: 'triangle',
+        osc2Wave: 'sine',
+        osc3Wave: 'sine',
+        detuneSpread: 6,
+        subLevel: 0.12,
+        filterCutoff: 2250,
+        filterResonance: 0.76,
+        filterEnvAmount: 0.36,
+        attack: 0.012,
+        decay: 1.95,
+        sustain: 0.42,
+        release: 2.8,
+        lfoRate: 0.24,
+        lfoDepth: 0.11,
+        driftAmount: 0.16,
+        voiceSpread: 0.78
+      }
     }
   },
   {
@@ -731,7 +821,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
       secondaryTimbre: 'warm',
       secondaryVolume: 0.48,
       secondaryPattern: 'pad',
-      density: 0.85
+      density: 0.85,
+      audioPatch: {
+        osc1Wave: 'triangle',
+        osc2Wave: 'sine',
+        osc3Wave: 'triangle',
+        detuneSpread: 7.5,
+        subLevel: 0.14,
+        filterCutoff: 1980,
+        filterResonance: 0.82,
+        filterEnvAmount: 0.38,
+        attack: 0.010,
+        decay: 1.75,
+        sustain: 0.38,
+        release: 2.5,
+        lfoRate: 0.32,
+        lfoDepth: 0.14,
+        driftAmount: 0.20,
+        voiceSpread: 0.76
+      }
     }
   },
   {
@@ -750,7 +858,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
       secondaryTimbre: 'shimmer',
       secondaryVolume: 0.50,
       secondaryPattern: 'pad',
-      density: 0.80
+      density: 0.80,
+      audioPatch: {
+        osc1Wave: 'triangle',
+        osc2Wave: 'sine',
+        osc3Wave: 'triangle',
+        detuneSpread: 6.5,
+        subLevel: 0.08,
+        filterCutoff: 2680,
+        filterResonance: 0.74,
+        filterEnvAmount: 0.34,
+        attack: 0.015,
+        decay: 2.4,
+        sustain: 0.44,
+        release: 4.6,
+        lfoRate: 0.10,
+        lfoDepth: 0.10,
+        driftAmount: 0.16,
+        voiceSpread: 0.84
+      }
     }
   },
   {
@@ -769,7 +895,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
       secondaryTimbre: 'strings',
       secondaryVolume: 0.54,
       secondaryPattern: 'wave',
-      density: 0.78
+      density: 0.78,
+      audioPatch: {
+        osc1Wave: 'sawtooth',
+        osc2Wave: 'sawtooth',
+        osc3Wave: 'triangle',
+        detuneSpread: 16,
+        subLevel: 0.12,
+        filterCutoff: 1850,
+        filterResonance: 0.78,
+        filterEnvAmount: 0.22,
+        attack: 2.2,
+        decay: 3.0,
+        sustain: 0.86,
+        release: 6.4,
+        lfoRate: 0.08,
+        lfoDepth: 0.18,
+        driftAmount: 0.24,
+        voiceSpread: 0.94
+      }
     }
   },
   {
@@ -788,7 +932,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
       secondaryTimbre: 'air',
       secondaryVolume: 0.46,
       secondaryPattern: 'pad',
-      density: 0.82
+      density: 0.82,
+      audioPatch: {
+        osc1Wave: 'sawtooth',
+        osc2Wave: 'sawtooth',
+        osc3Wave: 'triangle',
+        detuneSpread: 10,
+        subLevel: 0.15,
+        filterCutoff: 880,
+        filterResonance: 1.55,
+        filterEnvAmount: 0.76,
+        attack: 0.008,
+        decay: 0.44,
+        sustain: 0.16,
+        release: 3.2,
+        lfoRate: 0.14,
+        lfoDepth: 0.08,
+        driftAmount: 0.12,
+        voiceSpread: 0.80
+      }
     }
   },
   {
@@ -807,7 +969,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
       secondaryTimbre: 'glass',
       secondaryVolume: 0.54,
       secondaryPattern: 'broken',
-      density: 0.80
+      density: 0.80,
+      audioPatch: {
+        osc1Wave: 'sine',
+        osc2Wave: 'sawtooth',
+        osc3Wave: 'sawtooth',
+        detuneSpread: 19,
+        subLevel: 0.06,
+        filterCutoff: 4300,
+        filterResonance: 0.80,
+        filterEnvAmount: 0.30,
+        attack: 1.15,
+        decay: 2.8,
+        sustain: 0.84,
+        release: 7.2,
+        lfoRate: 0.15,
+        lfoDepth: 0.22,
+        driftAmount: 0.30,
+        voiceSpread: 0.98
+      }
     }
   },
   {
@@ -826,7 +1006,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
       secondaryTimbre: 'strings',
       secondaryVolume: 0.48,
       secondaryPattern: 'wave',
-      density: 0.76
+      density: 0.76,
+      audioPatch: {
+        osc1Wave: 'triangle',
+        osc2Wave: 'sine',
+        osc3Wave: 'sine',
+        detuneSpread: 4.5,
+        subLevel: 0.14,
+        filterCutoff: 1620,
+        filterResonance: 0.72,
+        filterEnvAmount: 0.28,
+        attack: 0.016,
+        decay: 2.2,
+        sustain: 0.36,
+        release: 3.8,
+        lfoRate: 0.09,
+        lfoDepth: 0.07,
+        driftAmount: 0.15,
+        voiceSpread: 0.72
+      }
     }
   },
   {
@@ -845,7 +1043,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
       secondaryTimbre: 'air',
       secondaryVolume: 0.52,
       secondaryPattern: 'wave',
-      density: 0.75
+      density: 0.75,
+      audioPatch: {
+        osc1Wave: 'sine',
+        osc2Wave: 'triangle',
+        osc3Wave: 'square',
+        detuneSpread: 6,
+        subLevel: 0.24,
+        filterCutoff: 1680,
+        filterResonance: 0.78,
+        filterEnvAmount: 0.12,
+        attack: 0.18,
+        decay: 0.6,
+        sustain: 0.90,
+        release: 3.2,
+        lfoRate: 0.14,
+        lfoDepth: 0.10,
+        driftAmount: 0.14,
+        voiceSpread: 0.68
+      }
     }
   },
 
@@ -861,7 +1077,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     volume: 0.42,
     settings: {
       timbre: 'celeste',
-      density: 0.38
+      density: 0.38,
+      audioPatch: {
+        osc1Wave: 'triangle',
+        osc2Wave: 'sine',
+        osc3Wave: 'triangle',
+        detuneSpread: 7,
+        subLevel: 0.06,
+        filterCutoff: 2950,
+        filterResonance: 0.76,
+        filterEnvAmount: 0.38,
+        attack: 0.012,
+        decay: 2.3,
+        sustain: 0.36,
+        release: 4.4,
+        lfoRate: 0.12,
+        lfoDepth: 0.10,
+        driftAmount: 0.16,
+        voiceSpread: 0.76
+      }
     }
   },
   {
@@ -873,7 +1107,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     volume: 0.40,
     settings: {
       timbre: 'glass',
-      density: 0.42
+      density: 0.42,
+      audioPatch: {
+        osc1Wave: 'sine',
+        osc2Wave: 'triangle',
+        osc3Wave: 'sine',
+        detuneSpread: 9,
+        subLevel: 0.05,
+        filterCutoff: 3600,
+        filterResonance: 0.84,
+        filterEnvAmount: 0.44,
+        attack: 0.008,
+        decay: 1.5,
+        sustain: 0.24,
+        release: 3.6,
+        lfoRate: 0.14,
+        lfoDepth: 0.09,
+        driftAmount: 0.14,
+        voiceSpread: 0.72
+      }
     }
   },
   {
@@ -885,7 +1137,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     volume: 0.38,
     settings: {
       timbre: 'air',
-      density: 0.32
+      density: 0.32,
+      audioPatch: {
+        osc1Wave: 'triangle',
+        osc2Wave: 'sine',
+        osc3Wave: 'sawtooth',
+        detuneSpread: 11,
+        subLevel: 0.08,
+        filterCutoff: 2250,
+        filterResonance: 0.88,
+        filterEnvAmount: 0.22,
+        attack: 0.16,
+        decay: 1.8,
+        sustain: 0.78,
+        release: 3.2,
+        lfoRate: 0.38,
+        lfoDepth: 0.16,
+        driftAmount: 0.28,
+        voiceSpread: 0.62
+      }
     }
   },
   {
@@ -897,7 +1167,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     volume: 0.36,
     settings: {
       timbre: 'bell',
-      density: 0.35
+      density: 0.35,
+      audioPatch: {
+        osc1Wave: 'sine',
+        osc2Wave: 'triangle',
+        osc3Wave: 'sine',
+        detuneSpread: 5,
+        subLevel: 0.12,
+        filterCutoff: 2600,
+        filterResonance: 0.78,
+        filterEnvAmount: 0.26,
+        attack: 0.028,
+        decay: 1.9,
+        sustain: 0.55,
+        release: 3.0,
+        lfoRate: 0.28,
+        lfoDepth: 0.12,
+        driftAmount: 0.18,
+        voiceSpread: 0.58
+      }
     }
   },
   {
@@ -909,7 +1197,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     volume: 0.34,
     settings: {
       timbre: 'shimmer',
-      density: 0.28
+      density: 0.28,
+      audioPatch: {
+        osc1Wave: 'sine',
+        osc2Wave: 'triangle',
+        osc3Wave: 'sawtooth',
+        detuneSpread: 14,
+        subLevel: 0.04,
+        filterCutoff: 4200,
+        filterResonance: 0.76,
+        filterEnvAmount: 0.36,
+        attack: 0.022,
+        decay: 2.8,
+        sustain: 0.42,
+        release: 6.4,
+        lfoRate: 0.10,
+        lfoDepth: 0.16,
+        driftAmount: 0.24,
+        voiceSpread: 0.90
+      }
     }
   },
   {
@@ -921,7 +1227,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     volume: 0.38,
     settings: {
       timbre: 'keys',
-      density: 0.36
+      density: 0.36,
+      audioPatch: {
+        osc1Wave: 'triangle',
+        osc2Wave: 'sine',
+        osc3Wave: 'sine',
+        detuneSpread: 4.5,
+        subLevel: 0.12,
+        filterCutoff: 1850,
+        filterResonance: 0.72,
+        filterEnvAmount: 0.32,
+        attack: 0.014,
+        decay: 2.0,
+        sustain: 0.34,
+        release: 3.4,
+        lfoRate: 0.12,
+        lfoDepth: 0.08,
+        driftAmount: 0.14,
+        voiceSpread: 0.65
+      }
     }
   },
   {
@@ -933,7 +1257,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     volume: 0.44,
     settings: {
       timbre: 'warm',
-      density: 0.48
+      density: 0.48,
+      audioPatch: {
+        osc1Wave: 'sawtooth',
+        osc2Wave: 'triangle',
+        osc3Wave: 'sawtooth',
+        detuneSpread: 10,
+        subLevel: 0.14,
+        filterCutoff: 1450,
+        filterResonance: 1.35,
+        filterEnvAmount: 0.62,
+        attack: 0.008,
+        decay: 0.58,
+        sustain: 0.22,
+        release: 1.6,
+        lfoRate: 0.18,
+        lfoDepth: 0.12,
+        driftAmount: 0.16,
+        voiceSpread: 0.74
+      }
     }
   },
 
@@ -950,7 +1292,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     settings: {
       timbre: 'root',
       ambientAlgorithm: 'harmonicDrone',
-      density: 0.95
+      density: 0.95,
+      audioPatch: {
+        osc1Wave: 'sawtooth',
+        osc2Wave: 'triangle',
+        osc3Wave: 'sine',
+        subLevel: 0.36,
+        filterCutoff: 960,
+        filterResonance: 0.78,
+        filterEnvAmount: 0.14,
+        attack: 2.5,
+        decay: 3.0,
+        sustain: 0.92,
+        release: 5.8,
+        detuneSpread: 7,
+        lfoRate: 0.07,
+        lfoDepth: 0.12,
+        driftAmount: 0.14,
+        voiceSpread: 0.58
+      }
     }
   },
   {
@@ -966,15 +1326,21 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
       density: 0.96,
       audioPatch: {
         osc1Wave: 'sawtooth',
-        osc2Wave: 'triangle',
-        osc3Wave: 'sine',
-        subLevel: 0.40,
-        filterCutoff: 1180,
-        filterResonance: 0.85,
+        osc2Wave: 'sawtooth',
+        osc3Wave: 'triangle',
+        subLevel: 0.42,
+        filterCutoff: 1220,
+        filterResonance: 0.92,
+        filterEnvAmount: 0.20,
         attack: 2.8,
+        decay: 3.4,
+        sustain: 0.94,
         release: 6.5,
-        detuneSpread: 9,
-        voiceSpread: 0.72
+        detuneSpread: 11,
+        lfoRate: 0.08,
+        lfoDepth: 0.16,
+        driftAmount: 0.18,
+        voiceSpread: 0.76
       }
     }
   },
@@ -988,7 +1354,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     settings: {
       timbre: 'shimmer',
       ambientAlgorithm: 'granularDrift',
-      density: 0.88
+      density: 0.88,
+      audioPatch: {
+        osc1Wave: 'sine',
+        osc2Wave: 'triangle',
+        osc3Wave: 'sawtooth',
+        subLevel: 0.08,
+        filterCutoff: 3650,
+        filterResonance: 0.75,
+        filterEnvAmount: 0.24,
+        attack: 2.2,
+        decay: 3.0,
+        sustain: 0.86,
+        release: 7.0,
+        detuneSpread: 16,
+        lfoRate: 0.11,
+        lfoDepth: 0.18,
+        driftAmount: 0.26,
+        voiceSpread: 0.95
+      }
     }
   },
   {
@@ -1001,7 +1385,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     settings: {
       timbre: 'air',
       ambientAlgorithm: 'granularDrift',
-      density: 0.90
+      density: 0.90,
+      audioPatch: {
+        osc1Wave: 'sine',
+        osc2Wave: 'triangle',
+        osc3Wave: 'sine',
+        subLevel: 0.10,
+        filterCutoff: 2850,
+        filterResonance: 0.74,
+        filterEnvAmount: 0.18,
+        attack: 2.0,
+        decay: 2.8,
+        sustain: 0.84,
+        release: 6.2,
+        detuneSpread: 13,
+        lfoRate: 0.09,
+        lfoDepth: 0.15,
+        driftAmount: 0.22,
+        voiceSpread: 0.90
+      }
     }
   },
   {
@@ -1014,7 +1416,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     settings: {
       timbre: 'strings',
       ambientAlgorithm: 'harmonicDrone',
-      density: 0.88
+      density: 0.88,
+      audioPatch: {
+        osc1Wave: 'sawtooth',
+        osc2Wave: 'sawtooth',
+        osc3Wave: 'triangle',
+        subLevel: 0.22,
+        filterCutoff: 2150,
+        filterResonance: 0.84,
+        filterEnvAmount: 0.26,
+        attack: 2.4,
+        decay: 3.2,
+        sustain: 0.90,
+        release: 6.4,
+        detuneSpread: 17,
+        lfoRate: 0.15,
+        lfoDepth: 0.16,
+        driftAmount: 0.24,
+        voiceSpread: 0.92
+      }
     }
   },
   {
@@ -1027,7 +1447,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     settings: {
       timbre: 'solina',
       ambientAlgorithm: 'harmonicDrone',
-      density: 0.90
+      density: 0.90,
+      audioPatch: {
+        osc1Wave: 'sawtooth',
+        osc2Wave: 'sawtooth',
+        osc3Wave: 'sawtooth',
+        subLevel: 0.18,
+        filterCutoff: 1950,
+        filterResonance: 0.82,
+        filterEnvAmount: 0.22,
+        attack: 2.1,
+        decay: 2.8,
+        sustain: 0.88,
+        release: 5.8,
+        detuneSpread: 21,
+        lfoRate: 0.19,
+        lfoDepth: 0.20,
+        driftAmount: 0.28,
+        voiceSpread: 0.96
+      }
     }
   },
   {
@@ -1040,7 +1478,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     settings: {
       timbre: 'glass',
       ambientAlgorithm: 'granularDrift',
-      density: 0.82
+      density: 0.82,
+      audioPatch: {
+        osc1Wave: 'sine',
+        osc2Wave: 'triangle',
+        osc3Wave: 'sine',
+        subLevel: 0.16,
+        filterCutoff: 2650,
+        filterResonance: 0.90,
+        filterEnvAmount: 0.30,
+        attack: 0.85,
+        decay: 2.6,
+        sustain: 0.72,
+        release: 6.5,
+        detuneSpread: 8,
+        lfoRate: 0.12,
+        lfoDepth: 0.14,
+        driftAmount: 0.18,
+        voiceSpread: 0.82
+      }
     }
   },
   {
@@ -1053,7 +1509,25 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     settings: {
       timbre: 'warm',
       ambientAlgorithm: 'harmonicDrone',
-      density: 0.92
+      density: 0.92,
+      audioPatch: {
+        osc1Wave: 'sine',
+        osc2Wave: 'sawtooth',
+        osc3Wave: 'triangle',
+        subLevel: 0.45,
+        filterCutoff: 540,
+        filterResonance: 0.86,
+        filterEnvAmount: 0.12,
+        attack: 3.0,
+        decay: 3.5,
+        sustain: 0.95,
+        release: 6.8,
+        detuneSpread: 9,
+        lfoRate: 0.06,
+        lfoDepth: 0.12,
+        driftAmount: 0.16,
+        voiceSpread: 0.60
+      }
     }
   }
 ];
@@ -1083,11 +1557,36 @@ export function detectActiveInstrumentPreset(layer: JamLayer): InstrumentPreset 
   if (presets.length === 0) return undefined;
 
   if (layer.role === 'drum') {
+    const exactDrum = presets.find(p => {
+      const pPitch = p.settings.drumPatch?.pitch;
+      const lPitch = layer.settings.drumPatch?.pitch;
+      const pDecay = p.settings.drumPatch?.decay;
+      const lDecay = layer.settings.drumPatch?.decay;
+      return pPitch !== undefined && lPitch !== undefined && pPitch === lPitch &&
+             pDecay !== undefined && lDecay !== undefined && Math.abs(pDecay - lDecay) < 0.005;
+    });
+    if (exactDrum) return exactDrum;
+
     return presets.find(p => {
       const pPitch = p.settings.drumPatch?.pitch;
       const lPitch = layer.settings.drumPatch?.pitch;
       return pPitch !== undefined && lPitch !== undefined && Math.abs(pPitch - lPitch) <= 2;
     }) || presets[0];
+  }
+
+  if (layer.settings.audioPatch?.filterCutoff !== undefined) {
+    const exactPatch = presets.find(
+      p => p.settings.timbre === layer.settings.timbre &&
+           p.settings.audioPatch?.filterCutoff === layer.settings.audioPatch?.filterCutoff &&
+           (!layer.settings.secondaryTimbre || p.settings.secondaryTimbre === layer.settings.secondaryTimbre)
+    );
+    if (exactPatch) return exactPatch;
+
+    const cutoffPatch = presets.find(
+      p => p.settings.timbre === layer.settings.timbre &&
+           p.settings.audioPatch?.filterCutoff === layer.settings.audioPatch?.filterCutoff
+    );
+    if (cutoffPatch) return cutoffPatch;
   }
 
   if (layer.role === 'chords') {
@@ -1102,14 +1601,6 @@ export function detectActiveInstrumentPreset(layer: JamLayer): InstrumentPreset 
            p.settings.secondaryTimbre === layer.settings.secondaryTimbre
     );
     if (matchDual) return matchDual;
-  }
-
-  if (layer.settings.audioPatch?.filterCutoff !== undefined) {
-    const matchPatch = presets.find(
-      p => p.settings.timbre === layer.settings.timbre &&
-           p.settings.audioPatch?.filterCutoff === layer.settings.audioPatch?.filterCutoff
-    );
-    if (matchPatch) return matchPatch;
   }
 
   return presets.find(p => p.settings.timbre === layer.settings.timbre) || presets[0];
@@ -1132,14 +1623,12 @@ export function applyInstrumentPreset(
     const mergedSettings: LayerSettings = {
       ...layer.settings,
       ...preset.settings,
-      audioPatch: {
-        ...(layer.settings.audioPatch || {}),
-        ...(preset.settings.audioPatch || {})
-      },
-      drumPatch: {
-        ...(layer.settings.drumPatch || {}),
-        ...(preset.settings.drumPatch || {})
-      }
+      audioPatch: preset.settings.audioPatch
+        ? { ...preset.settings.audioPatch }
+        : layer.settings.audioPatch,
+      drumPatch: preset.settings.drumPatch
+        ? { ...preset.settings.drumPatch }
+        : layer.settings.drumPatch
     };
 
     return {

@@ -38,6 +38,7 @@ interface LayerTuning {
   timbre?: JamLayer['settings']['timbre'];
   velocityMax?: number;
   humanizeMs?: number;
+  audioPatch?: JamLayer['settings']['audioPatch'];
   drumPatch?: JamLayer['settings']['drumPatch'];
   rhythmAlgorithm?: JamLayer['settings']['rhythmAlgorithm'];
   chordPattern?: JamLayer['settings']['chordPattern'];
@@ -502,6 +503,7 @@ export function createSession(sceneId = 'dorian-dawn', seed = 142857): JamSessio
     if (t.volume !== undefined) layer.volume = t.volume; if (t.muted !== undefined) layer.muted = t.muted;
     if (t.density !== undefined) layer.settings.density = t.density; if (t.timbre) layer.settings.timbre = t.timbre;
     if (t.velocityMax !== undefined) layer.settings.velocityMax = t.velocityMax; if (t.humanizeMs !== undefined) layer.settings.humanizeMs = t.humanizeMs;
+    if (t.audioPatch) layer.settings.audioPatch = { ...t.audioPatch };
     if (t.drumPatch) layer.settings.drumPatch = { ...t.drumPatch };
     if (t.rhythmAlgorithm) layer.settings.rhythmAlgorithm = t.rhythmAlgorithm;
     if (t.chordPattern) layer.settings.chordPattern = t.chordPattern;

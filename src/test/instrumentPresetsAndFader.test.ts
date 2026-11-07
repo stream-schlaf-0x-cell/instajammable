@@ -170,3 +170,36 @@ test('Calibrated Fader Decibel Grid: monotonic scale with exact reference points
   engine.updateLayer(kick.id, { volume: 0.0 }); // -inf
   assert.equal(engine.getState().layers.find(l => l.id === kick.id)!.volume, 0.0);
 });
+
+test('Multi-Oscillator Synthesis: every tonal preset has a complete bespoke audioPatch and switches cleanly without leakage', () => {
+  const tonalRoles: LayerRole[] = ['drone', 'chords', 'bass', 'melody'];
+  for (const role of tonalRoles) {
+    const presets = getInstrumentPresets(role);
+    for (const preset of presets) {
+      const patch = preset.settings.audioPatch;
+      assert.ok(patch, `Preset ${preset.id} (${role}) must define its own bespoke audioPatch`);
+      assert.ok(patch.osc1Wave, `Preset ${preset.id} must define osc1Wave`);
+      assert.ok(patch.osc2Wave, `Preset ${preset.id} must define osc2Wave`);
+      assert.ok(patch.osc3Wave, `Preset ${preset.id} must define osc3Wave`);
+      assert.ok(patch.filterCutoff !== undefined && patch.filterCutoff > 0, `Preset ${preset.id} must define filterCutoff`);
+      assert.ok(patch.attack !== undefined && patch.attack > 0, `Preset ${preset.id} must define attack`);
+      assert.ok(patch.release !== undefined && patch.release > 0, `Preset ${preset.id} must define release`);
+    }
+  }
+
+  // Verify switching presets on a layer replaces audioPatch cleanly and is detected accurately
+  const engine = new JamEngine(createSession('dorian-dawn'));
+  for (const role of tonalRoles) {
+    const layer = engine.getState().layers.find(l => l.role === role)!;
+    const presets = getInstrumentPresets(role);
+    for (const preset of presets) {
+      engine.applyInstrumentPreset(layer.id, preset.id);
+      const updatedLayer = engine.getState().layers.find(l => l.id === layer.id)!;
+      assert.equal(updatedLayer.settings.audioPatch?.filterCutoff, preset.settings.audioPatch?.filterCutoff);
+      assert.equal(updatedLayer.settings.audioPatch?.osc1Wave, preset.settings.audioPatch?.osc1Wave);
+      assert.equal(updatedLayer.settings.audioPatch?.osc2Wave, preset.settings.audioPatch?.osc2Wave);
+      const detected = detectActiveInstrumentPreset(updatedLayer);
+      assert.equal(detected?.id, preset.id, `Should accurately detect active preset ${preset.id}`);
+    }
+  }
+});

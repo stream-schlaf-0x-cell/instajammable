@@ -30,15 +30,19 @@ export function QuickMixerDeck({ session }: QuickMixerDeckProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
       if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
         setActiveMenuLayerId(null);
       }
     };
     if (activeMenuLayerId) {
       document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside, { passive: true });
     }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
   }, [activeMenuLayerId]);
 
   const setVolume = (id: string, vol: number) => {
@@ -121,12 +125,13 @@ export function QuickMixerDeck({ session }: QuickMixerDeckProps) {
 
       {/* 8 Channel Strips Grid */}
       <div className="mixer-strips-grid">
-        {layers.map(layer => {
+        {layers.map((layer, index) => {
           const pct = Math.round(layer.volume * 100);
           const isSilent = layer.muted || (layers.some(l => l.solo) && !layer.solo);
           const activePreset: InstrumentPreset | undefined = detectActiveInstrumentPreset(layer);
           const availablePresets = getInstrumentPresets(layer.role, layer.drumVoice);
           const isMenuOpen = activeMenuLayerId === layer.id;
+          const isRightAlignedPopover = index % 4 >= 2;
 
           return (
             <div
@@ -187,7 +192,7 @@ export function QuickMixerDeck({ session }: QuickMixerDeckProps) {
 
                 {/* Preset Popover Menu */}
                 {isMenuOpen && (
-                  <div className="strip-preset-popover" ref={popoverRef}>
+                  <div className={`strip-preset-popover ${isRightAlignedPopover ? 'align-right' : 'align-left'}`} ref={popoverRef}>
                     <div className="preset-popover-header">
                       <span className="preset-popover-title">{layer.name} Presets</span>
                       <button

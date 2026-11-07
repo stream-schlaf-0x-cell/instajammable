@@ -26,11 +26,12 @@ export class DrumSynth {
     const gain = this.ctx.createGain();
     const panner = this.ctx.createStereoPanner ? this.ctx.createStereoPanner() : null;
 
-    // Pitch Envelope: Warm analog punch drop from chest-thump down to sub fundamental
+    // Pitch Envelope: 3-stage warm analog punch drop from beater snap -> chest-thump -> sub fundamental
     osc.type = 'sine';
-    const startFreq = baseFreq * (2.6 + (params.drive ?? 0) * 1.4);
+    const startFreq = baseFreq * (2.75 + (params.drive ?? 0) * 1.45);
     osc.frequency.setValueAtTime(startFreq, time);
-    osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.18, time + 0.032);
+    osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.26, time + 0.022);
+    osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.02, time + Math.min(decay * 0.45, 0.075));
     osc.frequency.exponentialRampToValueAtTime(Math.max(22, baseFreq * 0.88), time + decay);
 
     // Amplitude Envelope with layerVolume scaling
@@ -39,14 +40,14 @@ export class DrumSynth {
     gain.gain.linearRampToValueAtTime(peakGain, time + 0.003);
     gain.gain.exponentialRampToValueAtTime(0.0001, time + decay);
 
-    // Warm Felt / Vinyl Beater Transient (avoids harsh high-frequency digital beep)
+    // Warm Felt / Wooden Beater Transient (avoids harsh high-frequency digital beep)
     const clickOsc = this.ctx.createOscillator();
     const clickGain = this.ctx.createGain();
-    clickOsc.type = 'sine';
-    clickOsc.frequency.setValueAtTime(baseFreq * 2.2, time);
-    clickOsc.frequency.exponentialRampToValueAtTime(baseFreq, time + 0.014);
-    clickGain.gain.setValueAtTime(peakGain * (0.22 + (params.tone ?? 0.5) * 0.32), time);
-    clickGain.gain.exponentialRampToValueAtTime(0.0001, time + 0.014);
+    clickOsc.type = 'triangle';
+    clickOsc.frequency.setValueAtTime(baseFreq * 2.35, time);
+    clickOsc.frequency.exponentialRampToValueAtTime(baseFreq * 0.95, time + 0.015);
+    clickGain.gain.setValueAtTime(peakGain * (0.20 + (params.tone ?? 0.5) * 0.34), time);
+    clickGain.gain.exponentialRampToValueAtTime(0.0001, time + 0.015);
 
     clickOsc.connect(clickGain);
     clickGain.connect(gain);
@@ -80,15 +81,24 @@ export class DrumSynth {
     const peakGain = (params.volume ?? 0.8) * layerVolume * vel * 0.85;
     const tone = params.tone ?? 0.5;
 
-    // 1. Warm Woody Tonal Body (Rim / Shell resonance)
+    // 1. Warm Dual-Oscillator Woody Tonal Body (Fundamental Shell + Acoustic 1.58x Rim Overtone)
     const bodyOsc = this.ctx.createOscillator();
     const bodyGain = this.ctx.createGain();
     bodyOsc.type = 'triangle';
     bodyOsc.frequency.setValueAtTime(basePitch * 1.48, time);
     bodyOsc.frequency.exponentialRampToValueAtTime(basePitch, time + 0.036);
 
-    bodyGain.gain.setValueAtTime(peakGain * (0.95 - tone * 0.35), time);
-    bodyGain.gain.exponentialRampToValueAtTime(0.0001, time + decay * 0.68);
+    bodyGain.gain.setValueAtTime(peakGain * (0.88 - tone * 0.30), time);
+    bodyGain.gain.exponentialRampToValueAtTime(0.0001, time + decay * 0.72);
+
+    const rimOsc = this.ctx.createOscillator();
+    const rimGain = this.ctx.createGain();
+    rimOsc.type = 'sine';
+    rimOsc.frequency.setValueAtTime(basePitch * 2.12, time);
+    rimOsc.frequency.exponentialRampToValueAtTime(basePitch * 1.58, time + 0.024);
+    const rimDecay = Math.min(decay * 0.55, 0.065);
+    rimGain.gain.setValueAtTime(peakGain * (0.28 + tone * 0.32), time);
+    rimGain.gain.exponentialRampToValueAtTime(0.0001, time + rimDecay);
 
     // 2. Dusty Organic Noise Component (Highpass + Warm Analog Lowpass Roll-Off)
     const noiseBuffer = this.generateWhiteNoiseBuffer(decay + 0.05);
@@ -116,6 +126,8 @@ export class DrumSynth {
     const snareDrive = this.saturate(masterSnareGain, params.drive);
     bodyOsc.connect(bodyGain);
     bodyGain.connect(masterSnareGain);
+    rimOsc.connect(rimGain);
+    rimGain.connect(masterSnareGain);
     noiseGain.connect(masterSnareGain);
 
     const panner = this.ctx.createStereoPanner ? this.ctx.createStereoPanner() : null;
@@ -128,10 +140,12 @@ export class DrumSynth {
     }
 
     bodyOsc.start(time);
+    rimOsc.start(time);
     noiseSource.start(time);
     bodyOsc.stop(time + decay + 0.05);
+    rimOsc.stop(time + rimDecay + 0.02);
     noiseSource.stop(time + decay + 0.05);
-    this.track([bodyOsc, noiseSource], [bodyGain, noiseFilter, noiseLowpass, noiseGain, masterSnareGain, ...snareDrive.nodes, ...(panner ? [panner] : [])], noiseSource, 'snare');
+    this.track([bodyOsc, rimOsc, noiseSource], [bodyGain, rimGain, noiseFilter, noiseLowpass, noiseGain, masterSnareGain, ...snareDrive.nodes, ...(panner ? [panner] : [])], noiseSource, 'snare');
   }
 
   // Trigger synthesized Hi-Hat
@@ -140,26 +154,42 @@ export class DrumSynth {
     const vel = velocity / 127.0;
     const decay = Math.max(0.03, params.decay ?? 0.07);
     const peakGain = (params.volume ?? 0.75) * layerVolume * vel * 0.72;
+    const pitchVal = params.pitch ?? 40;
+    const toneVal = params.tone ?? 0.1;
 
     const noiseBuffer = this.generateWhiteNoiseBuffer(decay + 0.05);
     const noiseSource = this.ctx.createBufferSource();
     noiseSource.buffer = noiseBuffer;
 
+    // Dual-Oscillator Metallic Cymbal Shimmer Partials (subtle 808/909/cymbal sheen blended with organic shaker noise)
+    const metalOsc1 = this.ctx.createOscillator();
+    const metalOsc2 = this.ctx.createOscillator();
+    const metalGain = this.ctx.createGain();
+    metalOsc1.type = 'square';
+    metalOsc2.type = 'triangle';
+    metalOsc1.frequency.setValueAtTime(2950 + pitchVal * 32, time);
+    metalOsc2.frequency.setValueAtTime(4410 + pitchVal * 48, time);
+    metalGain.gain.setValueAtTime(peakGain * (0.05 + toneVal * 0.22), time);
+    metalGain.gain.exponentialRampToValueAtTime(0.0001, time + decay * 0.75);
+
     const highpass = this.ctx.createBiquadFilter();
     highpass.type = 'highpass';
-    highpass.frequency.setValueAtTime(5200 + (params.tone ?? 0.5) * 4000, time);
+    highpass.frequency.setValueAtTime(5000 + toneVal * 4000, time);
 
     const bandpass = this.ctx.createBiquadFilter();
     bandpass.type = 'bandpass';
-    const centerFreq = 7600 + ((params.pitch ?? 60) - 60) * 110;
+    const centerFreq = 7600 + (pitchVal - 60) * 110;
     bandpass.frequency.setValueAtTime(Math.max(2200, Math.min(14500, centerFreq)), time);
-    bandpass.Q.setValueAtTime(1.8, time);
+    bandpass.Q.setValueAtTime(1.65, time);
 
     const gain = this.ctx.createGain();
     gain.gain.setValueAtTime(0, time);
     gain.gain.linearRampToValueAtTime(peakGain, time + 0.002);
     gain.gain.exponentialRampToValueAtTime(0.0001, time + decay);
 
+    metalOsc1.connect(metalGain);
+    metalOsc2.connect(metalGain);
+    metalGain.connect(highpass);
     noiseSource.connect(highpass);
     highpass.connect(bandpass);
     bandpass.connect(gain);
@@ -175,8 +205,12 @@ export class DrumSynth {
     }
 
     noiseSource.start(time);
+    metalOsc1.start(time);
+    metalOsc2.start(time);
     noiseSource.stop(time + decay + 0.05);
-    this.track([noiseSource], [highpass, bandpass, gain, ...hatDrive.nodes, ...(panner ? [panner] : [])], noiseSource, 'hihat');
+    metalOsc1.stop(time + decay + 0.03);
+    metalOsc2.stop(time + decay + 0.03);
+    this.track([noiseSource, metalOsc1, metalOsc2], [metalGain, highpass, bandpass, gain, ...hatDrive.nodes, ...(panner ? [panner] : [])], noiseSource, 'hihat');
   }
 
   // Trigger Percussion / FM Woodblock / Rim
@@ -186,31 +220,39 @@ export class DrumSynth {
     const baseFreq = params.pitch ? params.pitch * 6.5 : 420;
     const decay = Math.max(0.03, params.decay ?? 0.12);
     const peakGain = (params.volume ?? 0.8) * layerVolume * vel * 0.8;
+    const toneVal = params.tone ?? 0.25;
 
     const carrier = this.ctx.createOscillator();
     const modulator = this.ctx.createOscillator();
     const modGain = this.ctx.createGain();
+    const percFilter = this.ctx.createBiquadFilter();
     const gain = this.ctx.createGain();
 
     carrier.type = 'sine';
     carrier.frequency.setValueAtTime(baseFreq, time);
-    carrier.frequency.exponentialRampToValueAtTime(baseFreq * 0.9, time + decay);
+    carrier.frequency.exponentialRampToValueAtTime(baseFreq * 0.89, time + decay);
 
     modulator.type = 'triangle';
     modulator.frequency.setValueAtTime(baseFreq * 1.48, time);
 
-    const modIndex = baseFreq * (0.8 + (params.tone ?? 0.5) * 1.5);
+    const modIndex = baseFreq * (0.75 + toneVal * 1.45);
     modGain.gain.setValueAtTime(modIndex, time);
     modGain.gain.exponentialRampToValueAtTime(1, time + decay * 0.5);
 
     modulator.connect(modGain);
     modGain.connect(carrier.frequency);
 
+    // Warm resonant cavity filter for natural wood/conga/drop body
+    percFilter.type = 'lowpass';
+    percFilter.frequency.setValueAtTime(Math.min(12000, baseFreq * (2.6 + toneVal * 4.2)), time);
+    percFilter.Q.setValueAtTime(1.2, time);
+
     gain.gain.setValueAtTime(0, time);
     gain.gain.linearRampToValueAtTime(peakGain, time + 0.002);
     gain.gain.exponentialRampToValueAtTime(0.0001, time + decay);
 
-    carrier.connect(gain);
+    carrier.connect(percFilter);
+    percFilter.connect(gain);
     const percDrive = this.saturate(gain, params.drive);
 
     const panner = this.ctx.createStereoPanner ? this.ctx.createStereoPanner() : null;
@@ -226,7 +268,7 @@ export class DrumSynth {
     modulator.start(time);
     carrier.stop(time + decay + 0.05);
     modulator.stop(time + decay + 0.05);
-    this.track([carrier, modulator], [modGain, gain, ...percDrive.nodes, ...(panner ? [panner] : [])], carrier, 'perc');
+    this.track([carrier, modulator], [modGain, percFilter, gain, ...percDrive.nodes, ...(panner ? [panner] : [])], carrier, 'perc');
   }
 
   private saturate(input: AudioNode, drive: number): { output: AudioNode; nodes: AudioNode[] } {

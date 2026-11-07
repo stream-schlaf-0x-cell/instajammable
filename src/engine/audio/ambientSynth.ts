@@ -7,26 +7,43 @@ interface Voice {
 /** Native bounded polyphony. Oscillator onended owns graph cleanup; no per-note timers. */
 export class AmbientSynth {
   private voices = new Map<string, Voice>(); private counter = 0;
+  private static analogCurve: Float32Array | null = null;
+  private static getAnalogCurve(): Float32Array {
+    if (!this.analogCurve) {
+      const curve = new Float32Array(257);
+      const drive = 1.32;
+      const norm = Math.tanh(drive);
+      for (let i = 0; i < curve.length; i++) {
+        const x = (i * 2) / (curve.length - 1) - 1;
+        curve[i] = Math.tanh(x * drive) / norm;
+      }
+      this.analogCurve = curve;
+    }
+    return this.analogCurve;
+  }
   constructor(private ctx: AudioContext, private outputNode: AudioNode,
     private maxSoundingVoices = 6, private maxReleasingVoices = 6,
     private random: { next(): number } = { next: Math.random }) {}
   static midiToFreq(note: number, detuneCents = 0): number { return 440 * Math.pow(2, (note - 69 + detuneCents / 100) / 12); }
   private static computeOsc3IntervalCents(params: AmbientSynthParams): number {
     const isBass = params.filterCutoff < 980 && params.subLevel >= 0.25 && params.attack < 0.1;
-    if (isBass) return 0;
+    if (isBass) {
+      // Fretless / Funk / Moog upper harmonic presence when filter is open
+      return params.filterCutoff >= 620 && params.filterEnvAmount >= 0.24 ? 1200 : 0;
+    }
     // Powerful drone / deep root foundation: pure fifth (+702 cents)
-    if (params.subLevel >= 0.25 && params.attack >= 1.5) return 702;
+    if (params.subLevel >= 0.22 && params.attack >= 1.2) return 702;
+    // Rhodes / Celeste / Bell / Glass pluck: crystalline 3rd harmonic tine overtone (+1902 cents = octave + 5th)
+    if (params.attack <= 0.08 && params.filterCutoff >= 1100) {
+      return 1902;
+    }
     // Ethereal shimmer / glass / air / Solina / strings ensemble: octave halo (+1200 cents)
     if (
       (params.osc1Wave === 'sine' && params.osc3Wave === 'sawtooth') ||
-      (params.osc1Wave === 'sawtooth' && params.osc2Wave === 'sawtooth' && params.attack >= 0.8) ||
-      (params.filterCutoff >= 3000 && params.attack >= 0.5)
+      (params.osc1Wave === 'sawtooth' && params.osc2Wave === 'sawtooth' && params.attack >= 0.6) ||
+      (params.filterCutoff >= 2400 && params.attack >= 0.45)
     ) {
       return 1200;
-    }
-    // Rhodes / Celeste / Bell pluck: crystalline 3rd harmonic tine overtone (+1902 cents = octave + 5th)
-    if (params.attack <= 0.04 && params.filterCutoff >= 1200) {
-      return 1902;
     }
     return 0;
   }
@@ -67,7 +84,15 @@ export class AmbientSynth {
     filter2.Q.setValueAtTime(0.52, time); // Critically damped 2nd stage: silky analog roll-off, eliminates metallic chord ringing
     filter2.frequency.linearRampToValueAtTime(Math.min(18000, baseCutoff * 1.08 * (1 + params.filterEnvAmount * 1.25 * attackFraction)), time + attack);
     filter2.frequency.setTargetAtTime(baseCutoff * 1.08, time + attack, Math.max(0.12, params.decay));
-    filter1.connect(filter2);
+    if (this.ctx.createWaveShaper && (params.subLevel >= 0.08 || params.filterResonance >= 0.85 || params.osc1Wave === 'sawtooth')) {
+      const shaper = this.ctx.createWaveShaper();
+      shaper.curve = AmbientSynth.getAnalogCurve() as Float32Array<ArrayBuffer>;
+      nodes.push(shaper);
+      filter1.connect(shaper);
+      shaper.connect(filter2);
+    } else {
+      filter1.connect(filter2);
+    }
     const gain = this.ctx.createGain(); nodes.push(gain); filter2.connect(gain);
     const voiceNorm = Math.min(7, Math.max(1, this.maxSoundingVoices));
     const peak = Math.max(0.0001, velNorm * 0.58 / Math.sqrt(voiceNorm));
@@ -82,7 +107,7 @@ export class AmbientSynth {
     const sources: OscillatorNode[] = []; const driftUnits: number[] = []; const freq = AmbientSynth.midiToFreq(note);
     const osc3IntervalCents = AmbientSynth.computeOsc3IntervalCents(params);
     const isTinePluck = osc3IntervalCents === 1902;
-    const oscWeights = [0.50, 0.36, isTinePluck ? 0.24 : osc3IntervalCents === 1200 ? 0.20 : 0.26];
+    const oscWeights = [0.52, 0.42, isTinePluck ? 0.25 : osc3IntervalCents === 1200 ? 0.22 : osc3IntervalCents === 702 ? 0.30 : 0.26];
     [params.osc1Wave, params.osc2Wave, params.osc3Wave].forEach((wave, index) => {
       const osc = this.ctx.createOscillator(); osc.type = wave;
       const oscGain = this.ctx.createGain(); nodes.push(oscGain);
@@ -100,14 +125,30 @@ export class AmbientSynth {
       osc.detune.linearRampToValueAtTime(endDetune, end);
       osc.connect(oscGain); oscGain.connect(filter1); osc.start(time); osc.stop(end + 0.03); sources.push(osc);
     });
+    if (isTinePluck && sources.length >= 3) {
+      // 2-Operator FM Tine / Mallet Transient: Osc 3 briefly phase-modulates Osc 1 on attack for authentic Rhodes / Celesta / Kalimba chime
+      const fmGain = this.ctx.createGain(); nodes.push(fmGain);
+      fmGain.gain.setValueAtTime(Math.min(165, freq * (0.12 + velNorm * 0.14)), time);
+      fmGain.gain.setTargetAtTime(0.0001, time + 0.004, 0.022);
+      sources[2].connect(fmGain); fmGain.connect(sources[0].frequency);
+    }
     let subGain: GainNode | null = null;
     if (params.subLevel > 0.01) { const sub = this.ctx.createOscillator(); subGain = this.ctx.createGain(); nodes.push(subGain);
-      sub.type = 'sine'; sub.frequency.setValueAtTime(freq * 0.5, time); subGain.gain.setValueAtTime(params.subLevel * 0.44, time);
+      sub.type = 'sine'; sub.frequency.setValueAtTime(freq * 0.5, time); subGain.gain.setValueAtTime(params.subLevel * 0.48, time);
       sub.connect(subGain); subGain.connect(filter1); sub.start(time); sub.stop(end + 0.03); sources.push(sub); }
     let lfo: OscillatorNode | null = null; let lfoGain: GainNode | null = null;
     if (params.lfoDepth > 0.001 && params.lfoRate > 0) { lfo = this.ctx.createOscillator(); lfoGain = this.ctx.createGain(); nodes.push(lfoGain);
       lfo.type = 'sine'; lfo.frequency.setValueAtTime(params.lfoRate, time); lfoGain.gain.setValueAtTime(baseCutoff * Math.max(0, Math.min(1, params.lfoDepth)), time);
-      lfo.connect(lfoGain); lfoGain.connect(filter1.frequency); lfoGain.connect(filter2.frequency); lfo.start(time); lfo.stop(end + 0.03); sources.push(lfo); }
+      lfo.connect(lfoGain); lfoGain.connect(filter1.frequency); lfoGain.connect(filter2.frequency);
+      if (sources.length >= 2) {
+        // Quadrature Dual-Oscillator Chorus: opposite-polarity pitch modulation on Osc 1 & Osc 2 (Eminent 310 / Prophet / Juno ensemble)
+        const chorusCents = Math.min(8.5, 1.4 + params.detuneSpread * 0.24 + params.lfoDepth * 12);
+        const lfoPitch1 = this.ctx.createGain(); const lfoPitch2 = this.ctx.createGain(); nodes.push(lfoPitch1, lfoPitch2);
+        lfoPitch1.gain.setValueAtTime(chorusCents, time); lfoPitch2.gain.setValueAtTime(-chorusCents, time);
+        lfo.connect(lfoPitch1); lfoPitch1.connect(sources[0].detune);
+        lfo.connect(lfoPitch2); lfoPitch2.connect(sources[1].detune);
+      }
+      lfo.start(time); lfo.stop(end + 0.03); sources.push(lfo); }
     const voice: Voice = { id, note, start: time, releaseAt: time + duration, end, sources, nodes, gain, level, layerVolume, pan, driftUnits, osc3IntervalCents, subGain, filters: [filter1, filter2], lfo, lfoGain };
     this.voices.set(id, voice); sources[0].onended = () => this.kill(id); return id;
   }
