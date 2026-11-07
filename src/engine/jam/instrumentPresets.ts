@@ -630,7 +630,7 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     settings: {
       timbre: 'solina',
       chordPattern: 'pulse',
-      chordPace: '2-bars',
+      chordPace: '4-bars',
       chordTexture: 'shimmer',
       secondaryEnabled: true,
       secondaryTimbre: 'shimmer',
@@ -741,7 +741,7 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     settings: {
       timbre: 'wash',
       chordPattern: 'pulse',
-      chordPace: '2-bars',
+      chordPace: '4-bars',
       chordTexture: 'shimmer',
       secondaryEnabled: true,
       secondaryTimbre: 'solina',
@@ -852,7 +852,7 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     settings: {
       timbre: 'celeste',
       chordPattern: 'wave',
-      chordPace: '2-bars',
+      chordPace: '4-bars',
       chordTexture: 'shimmer',
       secondaryEnabled: true,
       secondaryTimbre: 'shimmer',
@@ -1000,7 +1000,7 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     settings: {
       timbre: 'keys',
       chordPattern: 'broken',
-      chordPace: '2-bars',
+      chordPace: '4-bars',
       chordTexture: 'sub5th',
       secondaryEnabled: true,
       secondaryTimbre: 'strings',

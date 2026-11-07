@@ -4,29 +4,29 @@ import type { AtmosphereSettings, FlowSettings, JamLayer, JamSession, MacroName,
  * one entry in SCENE_TUNING below. Everything else (UI list, preview, validation) picks it up.
  */
 export const SCENES: SceneDefinition[] = [
-  { id: 'dorian-dawn', name: 'Dorian Dawn', description: 'Warm, open chords with an ethereal shimmer halo. Quiet motifs. Room for your keys.', style: 'ambient', bpm: 78, root: 50, scale: 'dorian', mood: 'Ambient · S1gns Of L1fe' },
+  { id: 'dorian-dawn', name: 'Dorian Dawn', description: 'Warm, open chords with an ethereal shimmer halo. Quiet motifs. Room for your keys.', style: 'ambient', bpm: 78, root: 50, scale: 'aeolian', mood: 'Ambient · S1gns Of L1fe' },
   { id: 'tidal-glass', name: 'Tidal Glass', description: 'Luminous suspended harmony, crystalline glass pads and bell-like fragments.', style: 'ambient', bpm: 72, root: 48, scale: 'lydian', mood: 'Ambient · Spotify' },
   { id: 'night-orbit', name: 'Night Orbit', description: 'Deep cathedral fifth-drones, minor dual-pads and a slow cosmic pulse.', style: 'ambient', bpm: 66, root: 45, scale: 'aeolian', mood: 'Ambient · Asura' },
-  { id: 'moss-pulse', name: 'Moss Pulse', description: 'A repeating organic groove underneath interwoven CBL pads.', style: 'ambient', bpm: 92, root: 55, scale: 'dorian', mood: 'Groove · CBL' },
+  { id: 'moss-pulse', name: 'Moss Pulse', description: 'A repeating organic groove underneath interwoven CBL pads.', style: 'ambient', bpm: 92, root: 55, scale: 'aeolian', mood: 'Groove · CBL' },
   { id: 'ultimae-drift', name: 'Ultimae Drift', description: 'Deep, wide Solina & Shimmer dual-pads over a slow half-time pulse. Bells drift on top.', style: 'ambient', bpm: 84, root: 45, scale: 'aeolian', mood: 'Ultimae · Aes Dana' },
   { id: 'still-water', name: 'Still Water', description: 'No drums. A held root, slow breathing dual-pads and long silences.', style: 'ambient', bpm: 56, root: 48, scale: 'lydian', mood: 'Calm · Spotify' },
   { id: 'rain-window', name: 'Rain Window', description: 'Soft minor felt keys & celeste overtones under steady rain. Nothing hurries.', style: 'ambient', bpm: 62, root: 43, scale: 'aeolian', mood: 'Calm · Kupla' },
-  { id: 'deep-dub', name: 'Deep Dub', description: 'Slow deep techno: sub kick, Aes Dana dub chord stabs and airy tape echoes.', style: 'techno', bpm: 116, root: 45, scale: 'dorian', mood: 'Deep Techno · Aes Dana' },
+  { id: 'deep-dub', name: 'Deep Dub', description: 'Slow deep techno: sub kick, Aes Dana dub chord stabs and airy tape echoes.', style: 'techno', bpm: 116, root: 45, scale: 'aeolian', mood: 'Deep Techno · Aes Dana' },
   { id: 'night-rumble', name: 'Night Rumble', description: 'Heavy, hypnotic and sparse. Phrygian bass under dark Asura power-drones.', style: 'techno', bpm: 108, root: 43, scale: 'phrygian', mood: 'Deep Techno · Asura' },
   { id: 'dusty-keys', name: 'Dusty Keys', description: 'Warm Rhodes 7th/9th chords, celeste halo, jazz bass and a thick backbeat.', style: 'lofi', bpm: 82, root: 50, scale: 'dorian', mood: 'Lo-Fi · Chillhop' },
   { id: 'late-train', name: 'Late Train', description: 'No Spirit & Kupla vibes: Minor felt keys, warm pad bed and a lightly swung groove.', style: 'lofi', bpm: 74, root: 48, scale: 'aeolian', mood: 'Lo-Fi · No Spirit' },
-  { id: 'blue-hour', name: 'Blue Hour', description: 'Atmospheric lo-fi that breathes with the kick and shifts gently every few bars.', style: 'lofi', bpm: 78, root: 50, scale: 'dorian', mood: 'Lo-Fi · Kupla' },
+  { id: 'blue-hour', name: 'Blue Hour', description: 'Atmospheric lo-fi that breathes with the kick and shifts gently every few bars.', style: 'lofi', bpm: 78, root: 50, scale: 'aeolian', mood: 'Lo-Fi · Kupla' },
   { id: 'streamlight', name: 'Streamlight', description: 'Rainy lo-fi made for long improvised sessions. Felt celeste & warm shimmer pads.', style: 'lofi', bpm: 70, root: 46, scale: 'aeolian', mood: 'Lo-Fi · Chillhop' },
-  { id: 'cbl-hydroponic', name: 'Hydroponic Drift', description: 'Carbon Based Lifeforms vibes. Rolling sub, 7/8 polymetric shakers and lush dual-pads.', style: 'ambient', bpm: 86, root: 50, scale: 'dorian', mood: 'Psybient · CBL' },
+  { id: 'cbl-hydroponic', name: 'Hydroponic Drift', description: 'Carbon Based Lifeforms vibes. Rolling sub, 7/8 polymetric shakers and lush dual-pads.', style: 'ambient', bpm: 86, root: 50, scale: 'aeolian', mood: 'Psybient · CBL' },
   { id: 'cbl-interloper', name: 'Interloper Sky', description: 'Deep psybient downtempo. Resonant warm bass, Solina + Shimmer pads and wide tape delays.', style: 'ambient', bpm: 90, root: 45, scale: 'aeolian', mood: 'Psybient · CBL' },
-  { id: 'symphonic-dawn', name: 'Symphonic Strings', description: 'Großes Streichorchester mit Solina-Ensemble, Kathedralen-Hall und sanft atmender Atmosphäre.', style: 'ambient', bpm: 72, root: 50, scale: 'dorian', mood: 'Orchestral' },
-  { id: 'cbl-carbon-oasis', name: 'Carbon Oasis', description: 'CBL Psybient: polymetrische Shaker, warmer Subbass und Solina/Shimmer Dual-Pads in endlosen Delays.', style: 'ambient', bpm: 88, root: 50, scale: 'dorian', mood: 'Psybient · CBL' },
+  { id: 'symphonic-dawn', name: 'Symphonic Strings', description: 'Großes Streichorchester mit Solina-Ensemble, Kathedralen-Hall und sanft atmender Atmosphäre.', style: 'ambient', bpm: 72, root: 50, scale: 'aeolian', mood: 'Orchestral' },
+  { id: 'cbl-carbon-oasis', name: 'Carbon Oasis', description: 'CBL Psybient: polymetrische Shaker, warmer Subbass und Solina/Shimmer Dual-Pads in endlosen Delays.', style: 'ambient', bpm: 88, root: 50, scale: 'lydian', mood: 'Psybient · CBL' },
   { id: 'nils-felt-hall', name: 'Nordic Felt Hall', description: 'Gefilzte Klaviertöne mit ätherischem Air-Teppich, weiter Kathedralen-Raum und warmer Kontrabass.', style: 'ambient', bpm: 68, root: 48, scale: 'aeolian', mood: 'Neo-Classical' },
   { id: 'solar-fields-orbit', name: 'Solar Fields Orbit', description: 'Ultimae Downtempo: 16tel Sub-Arpeggio, luminöse Glas- & Shimmer-Flächen und weite Stereo-Echos.', style: 'ambient', bpm: 94, root: 45, scale: 'lydian', mood: 'Psybient · Ultimae' },
-  { id: 'berlin-dub-techno', name: 'Berlin 4AM Dub', description: 'Hypnotischer Dub-Techno: Sub-schwere Kick, gefilterte Moll-Akkorde, Air-Wash und analoges Band-Echo.', style: 'techno', bpm: 114, root: 43, scale: 'dorian', mood: 'Deep Techno' },
+  { id: 'berlin-dub-techno', name: 'Berlin 4AM Dub', description: 'Hypnotischer Dub-Techno: Sub-schwere Kick, gefilterte Moll-Akkorde, Air-Wash und analoges Band-Echo.', style: 'techno', bpm: 114, root: 43, scale: 'aeolian', mood: 'Deep Techno' },
   { id: 'jon-hopkins-pulse', name: 'Singularity Pulse', description: 'Organische IDM: Lebendige Glockenmuster, Shimmer/Solina Dual-Flächen und warmer Bass-Puls.', style: 'ambient', bpm: 84, root: 46, scale: 'aeolian', mood: 'Organic IDM' },
   { id: 'eno-apollo-zero', name: 'Apollo Zero Gravity', description: 'S1gns Of L1fe & Eno Space Ambient: Unendlicher Hall, schwebende Lydische Dual-Flächen, Schwerelosigkeit.', style: 'ambient', bpm: 52, root: 52, scale: 'lydian', mood: 'Deep Space' },
-  { id: 'tokyo-midnight-rain', name: 'Tokyo Midnight Rain', description: 'Kupla & Chillhop Flow: Warme Rhodes mit Celeste/Shimmer-Pad, Fensterregen, dicke Drums und Jazz-Bass.', style: 'lofi', bpm: 72, root: 50, scale: 'dorian', mood: 'Lo-Fi Chill' },
+  { id: 'tokyo-midnight-rain', name: 'Tokyo Midnight Rain', description: 'Kupla & Chillhop Flow: Warme Rhodes mit Celeste/Shimmer-Pad, Fensterregen, dicke Drums und Jazz-Bass.', style: 'lofi', bpm: 72, root: 50, scale: 'aeolian', mood: 'Lo-Fi Chill' },
   { id: 'cathedral-adagio', name: 'Cathedral Adagio', description: 'Großes Streicher-Adagio: butterweicher Bogenstrich (Solina + Strings), sakrale Weite und mächtige Drones.', style: 'ambient', bpm: 62, root: 45, scale: 'aeolian', mood: 'Orchestral · Asura' },
 ];
 const COLORS = ['#9bbba7', '#e4be76', '#9dadd5', '#d39cac', '#db9d76', '#c8be93', '#93c2c6', '#b2a5cf'];
@@ -54,9 +54,8 @@ interface Tuning {
   layers?: Partial<Record<string, LayerTuning>>;
 }
 const NO_DRUMS: Tuning['layers'] = { kick: { muted: true }, snare: { muted: true }, hihat: { muted: true }, perc: { muted: true } };
-const bed = (kind: AtmosphereSettings['kind'], level: number, tone = 0.5, movement = 0.4): AtmosphereSettings => {
-  const cap = 0.10;
-  return { kind, level: Math.min(cap, level), tone, movement };
+const bed = (kind: AtmosphereSettings['kind'], _level: number, tone = 0.5, movement = 0.4): AtmosphereSettings => {
+  return { kind, level: 0, tone, movement };
 };
 const SCENE_TUNING: Record<string, Tuning> = {
   'symphonic-dawn': {
@@ -81,7 +80,7 @@ const SCENE_TUNING: Record<string, Tuning> = {
     layers: {
       drone: { timbre: 'root', volume: 0.54 },
       chords: {
-        timbre: 'solina', volume: 0.54, chordPattern: 'pad', chordPace: '2-bars', chordTexture: 'shimmer',
+        timbre: 'solina', volume: 0.54, chordPattern: 'pad', chordPace: '4-bars', chordTexture: 'shimmer',
         secondaryEnabled: true, secondaryTimbre: 'shimmer', secondaryVolume: 0.55, secondaryPattern: 'wave'
       }
     }
@@ -116,7 +115,7 @@ const SCENE_TUNING: Record<string, Tuning> = {
     layers: {
       drone: { timbre: 'root', volume: 0.52 },
       chords: {
-        timbre: 'wash', volume: 0.54, chordPattern: 'pulse', chordTexture: 'sub5th',
+        timbre: 'wash', volume: 0.54, chordPattern: 'pulse', chordPace: '4-bars', chordTexture: 'sub5th',
         secondaryEnabled: true, secondaryTimbre: 'shimmer', secondaryVolume: 0.52, secondaryPattern: 'wave'
       }
     }
@@ -129,7 +128,7 @@ const SCENE_TUNING: Record<string, Tuning> = {
     layers: {
       drone: { timbre: 'root', volume: 0.60 },
       chords: {
-        timbre: 'solina', volume: 0.56, density: 0.82, chordPattern: 'pulse', chordPace: '2-bars', chordTexture: 'shimmer',
+        timbre: 'solina', volume: 0.56, density: 0.82, chordPattern: 'pulse', chordPace: '4-bars', chordTexture: 'shimmer',
         secondaryEnabled: true, secondaryTimbre: 'shimmer', secondaryVolume: 0.56, secondaryPattern: 'wave'
       },
       bass: { volume: 0.62, density: 0.58 },
@@ -161,7 +160,7 @@ const SCENE_TUNING: Record<string, Tuning> = {
       ...NO_DRUMS,
       drone: { timbre: 'root', volume: 0.50 },
       chords: {
-        timbre: 'keys', volume: 0.54, chordPattern: 'broken', chordPace: '2-bars', chordTexture: 'octave',
+        timbre: 'keys', volume: 0.54, chordPattern: 'broken', chordPace: '4-bars', chordTexture: 'octave',
         secondaryEnabled: true, secondaryTimbre: 'shimmer', secondaryVolume: 0.50, secondaryPattern: 'wave'
       },
       bass: { volume: 0.32, density: 0.30 },
@@ -177,7 +176,7 @@ const SCENE_TUNING: Record<string, Tuning> = {
     layers: {
       drone: { timbre: 'root', volume: 0.40, density: 0.82 },
       chords: {
-        timbre: 'dub', volume: 0.60, density: 0.85, chordPattern: 'syncopated',
+        timbre: 'dub', volume: 0.60, density: 0.85, chordPattern: 'syncopated', chordPace: '4-bars',
         secondaryEnabled: true, secondaryTimbre: 'air', secondaryVolume: 0.48, secondaryPattern: 'pad'
       },
       bass: { timbre: 'warm', volume: 0.72, density: 0.90 },
@@ -292,7 +291,7 @@ const SCENE_TUNING: Record<string, Tuning> = {
     layers: {
       drone: { timbre: 'root', volume: 0.54 },
       chords: {
-        timbre: 'shimmer', volume: 0.56, density: 0.82, chordPattern: 'pulse', chordPace: '2-bars', chordTexture: 'shimmer',
+        timbre: 'shimmer', volume: 0.56, density: 0.82, chordPattern: 'pulse', chordPace: '4-bars', chordTexture: 'shimmer',
         secondaryEnabled: true, secondaryTimbre: 'solina', secondaryVolume: 0.58, secondaryPattern: 'wave'
       },
       bass: { timbre: 'warm', volume: 0.70, density: 0.88 },
@@ -310,7 +309,7 @@ const SCENE_TUNING: Record<string, Tuning> = {
     layers: {
       drone: { timbre: 'root', volume: 0.52 },
       chords: {
-        timbre: 'solina', volume: 0.56, density: 0.78, chordPattern: 'pulse', chordPace: '2-bars', chordTexture: 'sub5th',
+        timbre: 'solina', volume: 0.56, density: 0.78, chordPattern: 'pulse', chordPace: '4-bars', chordTexture: 'sub5th',
         secondaryEnabled: true, secondaryTimbre: 'shimmer', secondaryVolume: 0.55, secondaryPattern: 'broken'
       },
       bass: { timbre: 'warm', volume: 0.72, density: 0.90 },
@@ -330,7 +329,7 @@ const SCENE_TUNING: Record<string, Tuning> = {
     layers: {
       drone: { timbre: 'root', volume: 0.52, density: 0.85 },
       chords: {
-        timbre: 'solina', volume: 0.56, density: 0.82, chordPattern: 'pulse', chordPace: '2-bars', chordTexture: 'shimmer',
+        timbre: 'solina', volume: 0.56, density: 0.82, chordPattern: 'pulse', chordPace: '4-bars', chordTexture: 'shimmer',
         secondaryEnabled: true, secondaryTimbre: 'air', secondaryVolume: 0.56, secondaryPattern: 'wave'
       },
       bass: { timbre: 'warm', volume: 0.70, density: 0.90 },
@@ -347,7 +346,7 @@ const SCENE_TUNING: Record<string, Tuning> = {
     layers: {
       drone: { timbre: 'root', volume: 0.48 },
       chords: {
-        timbre: 'celeste', volume: 0.62, density: 0.80, chordPattern: 'broken', chordPace: '2-bars', chordTexture: 'octave',
+        timbre: 'celeste', volume: 0.62, density: 0.80, chordPattern: 'broken', chordPace: '4-bars', chordTexture: 'octave',
         secondaryEnabled: true, secondaryTimbre: 'air', secondaryVolume: 0.54, secondaryPattern: 'wave'
       },
       bass: { timbre: 'warm', volume: 0.50, density: 0.45 },
@@ -366,7 +365,7 @@ const SCENE_TUNING: Record<string, Tuning> = {
     layers: {
       drone: { timbre: 'air', volume: 0.54 },
       chords: {
-        timbre: 'glass', volume: 0.54, density: 0.78, chordPattern: 'cluster', chordPace: '2-bars', chordTexture: 'shimmer',
+        timbre: 'glass', volume: 0.54, density: 0.78, chordPattern: 'cluster', chordPace: '4-bars', chordTexture: 'shimmer',
         secondaryEnabled: true, secondaryTimbre: 'shimmer', secondaryVolume: 0.56, secondaryPattern: 'broken'
       },
       bass: { timbre: 'warm', volume: 0.72, density: 0.92 },
@@ -386,7 +385,7 @@ const SCENE_TUNING: Record<string, Tuning> = {
     layers: {
       drone: { timbre: 'root', volume: 0.42, density: 0.85 },
       chords: {
-        timbre: 'dub', volume: 0.64, density: 0.88, chordPattern: 'syncopated', chordPace: '2-bars',
+        timbre: 'dub', volume: 0.64, density: 0.88, chordPattern: 'syncopated', chordPace: '4-bars',
         secondaryEnabled: true, secondaryTimbre: 'wash', secondaryVolume: 0.50, secondaryPattern: 'pad'
       },
       bass: { timbre: 'warm', volume: 0.72, density: 0.94 },
@@ -406,7 +405,7 @@ const SCENE_TUNING: Record<string, Tuning> = {
     layers: {
       drone: { timbre: 'root', volume: 0.50 },
       chords: {
-        timbre: 'shimmer', volume: 0.54, density: 0.80, chordPattern: 'cluster', chordPace: '2-bars', chordTexture: 'shimmer',
+        timbre: 'shimmer', volume: 0.54, density: 0.80, chordPattern: 'cluster', chordPace: '4-bars', chordTexture: 'shimmer',
         secondaryEnabled: true, secondaryTimbre: 'solina', secondaryVolume: 0.54, secondaryPattern: 'pulse'
       },
       bass: { timbre: 'warm', volume: 0.68, density: 0.88 },

@@ -63,7 +63,8 @@ export const ATMOSPHERE_LABELS: Record<AtmosphereSettings['kind'], string> = { o
 interface Running { kind: AtmosphereSettings['kind']; source: AudioBufferSourceNode; gain: GainNode; filter: BiquadFilterNode; nodes: AudioNode[]; lfo: OscillatorNode | null; lfoFilter: GainNode | null; lfoLevel: GainNode | null; base: number }
 
 export class AtmosphereBed {
-  private running: Running | null = null; private settings: AtmosphereSettings = { kind: 'off', level: 0.08, tone: 0.5, movement: 0.4 };
+  private running: Running | null = null; private fading = new Set<Running>();
+  private settings: AtmosphereSettings = { kind: 'off', level: 0, tone: 0.5, movement: 0.4 };
   private cache = new Map<string, AudioBuffer>(); private sample: { buffer: AudioBuffer; name: string } | null = null; private active = false;
   constructor(private ctx: AudioContext, private output: AudioNode) {}
   static supported(ctx: BaseAudioContext): boolean { return typeof ctx.createBufferSource === 'function' && typeof ctx.createBuffer === 'function'; }
@@ -81,13 +82,31 @@ export class AtmosphereBed {
   configure(settings: AtmosphereSettings): void {
     const kindChanged = settings.kind !== this.settings.kind; this.settings = { ...settings };
     if (!this.active || !AtmosphereBed.supported(this.ctx)) return;
+    if (this.settings.kind === 'off' || this.settings.level <= 0) { this.fadeOut(0.03); return; }
     if (kindChanged || !this.running) this.rebuild(); else this.update();
   }
   setActive(on: boolean): void {
     if (on === this.active) return; this.active = on;
-    if (on) this.rebuild(); else this.fadeOut(1.4);
+    if (on) this.rebuild(); else this.fadeOut(0.03);
   }
-  stopNow(): void { this.active = false; this.fadeOut(0.05); }
+  stopNow(): void {
+    this.active = false;
+    const now = this.ctx.currentTime;
+    const all = [...(this.running ? [this.running] : []), ...this.fading];
+    this.running = null;
+    this.fading.clear();
+    for (const r of all) {
+      try {
+        r.gain.gain.cancelScheduledValues(now);
+        r.gain.gain.setValueAtTime(0, now);
+        r.source.stop(now);
+      } catch { /* already stopped */ }
+      try { r.lfo?.stop(now); } catch { /* stopped */ }
+      for (const n of [r.source, ...r.nodes]) {
+        try { n.disconnect(); } catch { /* disconnected */ }
+      }
+    }
+  }
   private bufferFor(kind: AtmosphereSettings['kind']): AudioBuffer | null {
     if (kind === 'sample') return this.sample?.buffer ?? null;
     if (kind === 'off') return null;
@@ -96,8 +115,18 @@ export class AtmosphereBed {
   }
   private fadeOut(seconds: number): void {
     const old = this.running; this.running = null; if (!old) return; const now = this.ctx.currentTime;
-    try { old.gain.gain.cancelScheduledValues(now); old.gain.gain.setValueAtTime(old.gain.gain.value, now); old.gain.gain.setTargetAtTime(0, now, seconds / 4); old.source.stop(now + seconds + 0.1); } catch { /* already stopped */ }
-    old.source.onended = () => { for (const n of [old.source, ...old.nodes]) { try { n.disconnect(); } catch { /* disconnected */ } } try { old.lfo?.stop(); } catch { /* stopped */ } };
+    this.fading.add(old);
+    try { old.lfoFilter?.disconnect(); old.lfoLevel?.disconnect(); old.lfo?.stop(now); } catch { /* stopped */ }
+    try {
+      old.gain.gain.cancelScheduledValues(now);
+      old.gain.gain.setValueAtTime(Math.max(0, old.gain.gain.value), now);
+      old.gain.gain.setTargetAtTime(0, now, Math.max(0.005, seconds / 4));
+      old.source.stop(now + seconds + 0.02);
+    } catch { /* already stopped */ }
+    old.source.onended = () => {
+      this.fading.delete(old);
+      for (const n of [old.source, ...old.nodes]) { try { n.disconnect(); } catch { /* disconnected */ } }
+    };
   }
   private targetGain(): number {
     const def = this.settings.kind === 'sample' ? { gain: 0.6 } : ATMOSPHERE_SOURCES[this.settings.kind as Generated];
@@ -109,14 +138,14 @@ export class AtmosphereBed {
     return range[0] * Math.pow(range[1] / range[0], this.settings.tone);
   }
   private rebuild(): void {
-    this.fadeOut(0.5);
+    this.fadeOut(0.03);
     const kind = this.settings.kind; const data = this.bufferFor(kind); if (!data || this.settings.level <= 0 || !this.active) return;
     const ctx = this.ctx; const now = ctx.currentTime; const nodes: AudioNode[] = [];
     const source = ctx.createBufferSource(); source.buffer = data; source.loop = true;
     if (kind !== 'sample') { source.loopStart = 0; source.loopEnd = Math.max(1, data.duration - SEAM_SECONDS); }
     const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.setValueAtTime(kind === 'sample' ? 40 : ATMOSPHERE_SOURCES[kind as Generated].highpass, now);
     const filter = ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.setValueAtTime(this.filterFrequency(), now); filter.Q.setValueAtTime(0.5, now);
-    const gain = ctx.createGain(); gain.gain.setValueAtTime(0.0001, now); gain.gain.setTargetAtTime(this.targetGain(), now, 0.7);
+    const gain = ctx.createGain(); gain.gain.setValueAtTime(0.0001, now); gain.gain.setTargetAtTime(this.targetGain(), now, 1.8);
     source.connect(hp); hp.connect(filter); filter.connect(gain); gain.connect(this.output); nodes.push(hp, filter, gain);
     let lfo: OscillatorNode | null = null, lfoFilter: GainNode | null = null, lfoLevel: GainNode | null = null;
     if (ctx.createOscillator) {

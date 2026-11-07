@@ -75,16 +75,18 @@ export class AmbientSynth {
     const baseCutoff = Math.max(20, Math.min(18000, params.filterCutoff * velFilterScale * keyTrack));
     const requestedAttack = Math.max(0.005, params.attack); const attack = Math.min(duration, requestedAttack); const attackFraction = Math.min(1, duration / requestedAttack);
     const userRes = Math.max(0.5, Math.min(15, params.filterResonance));
+    const isBass = params.filterCutoff < 980 && params.subLevel >= 0.25 && params.attack < 0.1;
+    const filter2Ratio = isBass ? 1.05 : 0.78;
     filter1.type = 'lowpass'; filter1.frequency.setValueAtTime(baseCutoff, time);
-    filter1.Q.setValueAtTime(Math.min(3.2, userRes * 0.68), time);
-    filter1.frequency.linearRampToValueAtTime(Math.min(18000, baseCutoff * (1 + params.filterEnvAmount * 1.35 * attackFraction)), time + attack);
-    filter1.frequency.setTargetAtTime(baseCutoff, time + attack, Math.max(0.12, params.decay));
+    filter1.Q.setValueAtTime(isBass ? Math.min(2.8, userRes * 0.65) : Math.min(1.35, userRes * 0.48), time);
+    filter1.frequency.linearRampToValueAtTime(Math.min(18000, baseCutoff * (1 + params.filterEnvAmount * (isBass ? 1.25 : 0.75) * attackFraction)), time + attack);
+    filter1.frequency.setTargetAtTime(baseCutoff, time + attack, Math.max(0.18, params.decay));
 
-    filter2.type = 'lowpass'; filter2.frequency.setValueAtTime(baseCutoff * 1.08, time);
-    filter2.Q.setValueAtTime(0.52, time); // Critically damped 2nd stage: silky analog roll-off, eliminates metallic chord ringing
-    filter2.frequency.linearRampToValueAtTime(Math.min(18000, baseCutoff * 1.08 * (1 + params.filterEnvAmount * 1.25 * attackFraction)), time + attack);
-    filter2.frequency.setTargetAtTime(baseCutoff * 1.08, time + attack, Math.max(0.12, params.decay));
-    if (this.ctx.createWaveShaper && (params.subLevel >= 0.08 || params.filterResonance >= 0.85 || params.osc1Wave === 'sawtooth')) {
+    filter2.type = 'lowpass'; filter2.frequency.setValueAtTime(baseCutoff * filter2Ratio, time);
+    filter2.Q.setValueAtTime(0.48, time); // Critically damped 2nd stage: warm 24dB/oct analog roll-off without nasal reed formants
+    filter2.frequency.linearRampToValueAtTime(Math.min(18000, baseCutoff * filter2Ratio * (1 + params.filterEnvAmount * (isBass ? 1.15 : 0.65) * attackFraction)), time + attack);
+    filter2.frequency.setTargetAtTime(baseCutoff * filter2Ratio, time + attack, Math.max(0.18, params.decay));
+    if (this.ctx.createWaveShaper && isBass) {
       const shaper = this.ctx.createWaveShaper();
       shaper.curve = AmbientSynth.getAnalogCurve() as Float32Array<ArrayBuffer>;
       nodes.push(shaper);
@@ -95,11 +97,11 @@ export class AmbientSynth {
     }
     const gain = this.ctx.createGain(); nodes.push(gain); filter2.connect(gain);
     const voiceNorm = Math.min(7, Math.max(1, this.maxSoundingVoices));
-    const peak = Math.max(0.0001, velNorm * 0.58 / Math.sqrt(voiceNorm));
-    const sustain = Math.max(0.0001, duration < requestedAttack ? peak * attackFraction : peak * params.sustain); const release = Math.max(0.05, Math.min(12, params.release));
+    const peak = Math.max(0.0001, velNorm * 0.56 / Math.sqrt(voiceNorm));
+    const sustain = Math.max(0.0001, duration < requestedAttack ? peak * attackFraction : peak * params.sustain); const release = Math.max(0.08, Math.min(12, params.release));
     const end = time + duration + release;
     gain.gain.setValueAtTime(0.0001, time); gain.gain.linearRampToValueAtTime(peak * attackFraction, time + attack);
-    gain.gain.setTargetAtTime(sustain, time + attack, Math.max(0.05, Math.min(duration * 0.35, params.decay)));
+    gain.gain.setTargetAtTime(sustain, time + attack, Math.max(0.08, Math.min(duration * 0.45, params.decay)));
     gain.gain.setValueAtTime(sustain, time + duration); gain.gain.exponentialRampToValueAtTime(0.0001, end);
     const level = this.ctx.createGain(); nodes.push(level); level.gain.setValueAtTime(Math.max(0, params.volume * layerVolume), time); gain.connect(level);
     const pan = this.ctx.createStereoPanner ? this.ctx.createStereoPanner() : null;
@@ -107,53 +109,45 @@ export class AmbientSynth {
     const sources: OscillatorNode[] = []; const driftUnits: number[] = []; const freq = AmbientSynth.midiToFreq(note);
     const osc3IntervalCents = AmbientSynth.computeOsc3IntervalCents(params);
     const isTinePluck = osc3IntervalCents === 1902;
-    const oscWeights = [0.52, 0.42, isTinePluck ? 0.25 : osc3IntervalCents === 1200 ? 0.22 : osc3IntervalCents === 702 ? 0.30 : 0.26];
+    const isDualSawPad = !isBass && params.osc1Wave === 'sawtooth' && params.osc2Wave === 'sawtooth';
+    const oscWeights = isDualSawPad
+      ? [0.46, 0.21, osc3IntervalCents === 1200 ? 0.18 : 0.22]
+      : [0.54, 0.30, isTinePluck ? 0.14 : osc3IntervalCents === 1200 ? 0.18 : osc3IntervalCents === 702 ? 0.26 : 0.20];
+    const effectiveSpread = isBass ? Math.min(1.8, params.detuneSpread * 0.14) : Math.min(3.4, params.detuneSpread * 0.17);
+    const effectiveDrift = params.driftAmount * 1.1;
     [params.osc1Wave, params.osc2Wave, params.osc3Wave].forEach((wave, index) => {
       const osc = this.ctx.createOscillator(); osc.type = wave;
       const oscGain = this.ctx.createGain(); nodes.push(oscGain);
       oscGain.gain.setValueAtTime(oscWeights[index], time);
       if (index === 2 && isTinePluck) {
-        // Delicate Rhodes / Celesta tine overtone decay: glassy wooden attack into warm fundamental body
-        oscGain.gain.setTargetAtTime(0.025, time + 0.008, 0.09);
+        // Gentle bell/celesta harmonic overtone decay without woody FM transient
+        oscGain.gain.setTargetAtTime(0.018, time + 0.012, 0.14);
       }
       const driftUnit = this.random.next() * 2 - 1; driftUnits.push(driftUnit);
       const intervalCents = index === 2 ? osc3IntervalCents : 0;
-      const startDetune = intervalCents + (index === 1 ? -1 : index === 2 ? 1 : -0.35) * params.detuneSpread + driftUnit * params.driftAmount * 4;
-      const endDetune = intervalCents + (index === 1 ? -1 : index === 2 ? 1 : 0.35) * params.detuneSpread - driftUnit * params.driftAmount * 6;
+      const detuneCents = intervalCents + (index === 1 ? -1 : index === 2 ? 0.82 : -0.12) * effectiveSpread + driftUnit * effectiveDrift;
       osc.frequency.setValueAtTime(freq, time);
-      osc.detune.setValueAtTime(startDetune, time);
-      osc.detune.linearRampToValueAtTime(endDetune, end);
+      osc.detune.setValueAtTime(detuneCents, time);
       osc.connect(oscGain); oscGain.connect(filter1); osc.start(time); osc.stop(end + 0.03); sources.push(osc);
     });
-    if (isTinePluck && sources.length >= 3) {
-      // 2-Operator FM Tine / Mallet Transient: Osc 3 briefly phase-modulates Osc 1 on attack for authentic Rhodes / Celesta / Kalimba chime
-      const fmGain = this.ctx.createGain(); nodes.push(fmGain);
-      fmGain.gain.setValueAtTime(Math.min(165, freq * (0.12 + velNorm * 0.14)), time);
-      fmGain.gain.setTargetAtTime(0.0001, time + 0.004, 0.022);
-      sources[2].connect(fmGain); fmGain.connect(sources[0].frequency);
-    }
     let subGain: GainNode | null = null;
     if (params.subLevel > 0.01) { const sub = this.ctx.createOscillator(); subGain = this.ctx.createGain(); nodes.push(subGain);
-      sub.type = 'sine'; sub.frequency.setValueAtTime(freq * 0.5, time); subGain.gain.setValueAtTime(params.subLevel * 0.48, time);
+      sub.type = 'sine'; sub.frequency.setValueAtTime(freq * 0.5, time); subGain.gain.setValueAtTime(params.subLevel * 0.52, time);
       sub.connect(subGain); subGain.connect(filter1); sub.start(time); sub.stop(end + 0.03); sources.push(sub); }
     let lfo: OscillatorNode | null = null; let lfoGain: GainNode | null = null;
     if (params.lfoDepth > 0.001 && params.lfoRate > 0) { lfo = this.ctx.createOscillator(); lfoGain = this.ctx.createGain(); nodes.push(lfoGain);
-      lfo.type = 'sine'; lfo.frequency.setValueAtTime(params.lfoRate, time); lfoGain.gain.setValueAtTime(baseCutoff * Math.max(0, Math.min(1, params.lfoDepth)), time);
+      lfo.type = 'sine'; lfo.frequency.setValueAtTime(params.lfoRate, time); lfoGain.gain.setValueAtTime(baseCutoff * Math.max(0, Math.min(0.45, params.lfoDepth * 0.65)), time);
       lfo.connect(lfoGain); lfoGain.connect(filter1.frequency); lfoGain.connect(filter2.frequency);
-      if (sources.length >= 2) {
-        // Quadrature Dual-Oscillator Chorus: opposite-polarity pitch modulation on Osc 1 & Osc 2 (Eminent 310 / Prophet / Juno ensemble)
-        const chorusCents = Math.min(8.5, 1.4 + params.detuneSpread * 0.24 + params.lfoDepth * 12);
-        const lfoPitch1 = this.ctx.createGain(); const lfoPitch2 = this.ctx.createGain(); nodes.push(lfoPitch1, lfoPitch2);
-        lfoPitch1.gain.setValueAtTime(chorusCents, time); lfoPitch2.gain.setValueAtTime(-chorusCents, time);
-        lfo.connect(lfoPitch1); lfoPitch1.connect(sources[0].detune);
-        lfo.connect(lfoPitch2); lfoPitch2.connect(sources[1].detune);
-      }
       lfo.start(time); lfo.stop(end + 0.03); sources.push(lfo); }
     const voice: Voice = { id, note, start: time, releaseAt: time + duration, end, sources, nodes, gain, level, layerVolume, pan, driftUnits, osc3IntervalCents, subGain, filters: [filter1, filter2], lfo, lfoGain };
     this.voices.set(id, voice); sources[0].onended = () => this.kill(id); return id;
   }
   updateParams(params: AmbientSynthParams, layerVolume?: number): void {
     const now = this.ctx.currentTime;
+    const isBass = params.filterCutoff < 980 && params.subLevel >= 0.25 && params.attack < 0.1;
+    const filter2Ratio = isBass ? 1.05 : 0.78;
+    const effectiveSpread = isBass ? Math.min(1.8, params.detuneSpread * 0.14) : Math.min(3.4, params.detuneSpread * 0.17);
+    const effectiveDrift = params.driftAmount * 1.1;
     for (const v of this.voices.values()) {
       if (now >= v.end) continue;
       if (layerVolume !== undefined) v.layerVolume = layerVolume;
@@ -162,14 +156,14 @@ export class AmbientSynth {
       const keyTrack = Math.pow(2, Math.max(-0.32, Math.min(0.32, (v.note - 60) / 54)));
       const targetCutoff = Math.max(20, Math.min(18000, params.filterCutoff * keyTrack));
       v.filters[0]?.frequency.setTargetAtTime(targetCutoff, now, 0.7);
-      v.filters[0]?.Q.setTargetAtTime(Math.min(3.2, userRes * 0.68), now, 0.15);
-      v.filters[1]?.frequency.setTargetAtTime(Math.min(18000, targetCutoff * 1.08), now, 0.7);
-      v.filters[1]?.Q.setTargetAtTime(0.52, now, 0.15);
+      v.filters[0]?.Q.setTargetAtTime(isBass ? Math.min(2.8, userRes * 0.65) : Math.min(1.35, userRes * 0.48), now, 0.15);
+      v.filters[1]?.frequency.setTargetAtTime(Math.min(18000, targetCutoff * filter2Ratio), now, 0.7);
+      v.filters[1]?.Q.setTargetAtTime(0.48, now, 0.15);
       v.pan?.pan.setTargetAtTime(Math.max(-1, Math.min(1, ((v.note % 12) / 6 - 1) * params.voiceSpread)), now, 0.2);
       [params.osc1Wave, params.osc2Wave, params.osc3Wave].forEach((wave, i) => {
         if (v.sources[i].type !== wave) v.sources[i].type = wave; /* re-assigning an unchanged type rebuilds the wavetable and clicks */
         const intervalCents = i === 2 ? v.osc3IntervalCents : 0;
-        v.sources[i].detune.setTargetAtTime(intervalCents + (i === 1 ? -1 : i === 2 ? 1 : 0) * params.detuneSpread + v.driftUnits[i] * params.driftAmount * 4, now, 0.2);
+        v.sources[i].detune.setTargetAtTime(intervalCents + (i === 1 ? -1 : i === 2 ? 0.82 : -0.12) * effectiveSpread + v.driftUnits[i] * effectiveDrift, now, 0.2);
       });
       if (!v.subGain && params.subLevel > 0.01 && now < v.releaseAt) {
         const sub = this.ctx.createOscillator(); v.subGain = this.ctx.createGain(); v.nodes.push(v.subGain); sub.type = 'sine';

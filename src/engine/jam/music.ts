@@ -51,14 +51,14 @@ export const holdBarsFor = (style: JamSession['style'], pace?: ChordPace): numbe
   if (pace === 'dynamic') return 2;
   return style === 'lofi' ? 2 : 4;
 };
-/** Scale-degree offsets above the chord root. Add a row to introduce a new voicing; weights favour the lush ones. */
+/** Scale-degree offsets above the chord root. Ambient & Techno favour pure triads, sus2/sus4 and open add9 (non-jazzy). */
 export const VOICINGS: ReadonlyArray<{ offsets: number[]; weight: number; minMovement: number }> = [
-  { offsets: [0, 2, 4, 6], weight: 3, minMovement: 0 },       // seventh chord
-  { offsets: [0, 2, 6, 8], weight: 3, minMovement: 0 },       // root, third, seventh, ninth: the classic min9 shell
-  { offsets: [0, 4, 6, 8], weight: 2, minMovement: 0.15 },    // open ninth without the third
-  { offsets: [0, 2, 4, 6, 8], weight: 2, minMovement: 0.3 },  // full ninth chord
-  { offsets: [0, 1, 4, 6], weight: 1.5, minMovement: 0.25 },  // suspended second with a seventh
-  { offsets: [0, 3, 4, 6], weight: 1.2, minMovement: 0.35 },  // suspended fourth
+  { offsets: [0, 2, 4], weight: 3.4, minMovement: 0 },        // pure open triad (minor / major - timeless, zero jazz clutter)
+  { offsets: [0, 1, 4], weight: 3.0, minMovement: 0 },        // pure sus2 (open fifth + second, CBL / S1gns Of L1fe signature)
+  { offsets: [0, 2, 4, 8], weight: 2.8, minMovement: 0 },     // open add9 without seventh (wide cinematic triad + 9th)
+  { offsets: [0, 3, 4], weight: 2.2, minMovement: 0.12 },     // pure sus4 (cathedral / Asura suspension)
+  { offsets: [0, 4, 6, 8], weight: 1.6, minMovement: 0.22 },  // open fifth + seventh + ninth (no third)
+  { offsets: [0, 2, 6, 8], weight: 1.2, minMovement: 0.35 },  // lush ninth shell at higher movement
 ];
 const PC_NAMES = NOTE_NAMES;
 /** Chord symbol from the semitone intervals of the chord above its root. */
@@ -148,7 +148,7 @@ export class JamComposer {
         [0, 6, 5, 3], // i - VII - VI - iv (descending melancholic)
         [0, 4, 3, 5], // i - v - iv - VI
         [0, 5, 4, 2], // i - VI - v - III
-        [0, 1, 4, 5], // i - II - v - VI (Phrygian / exotic)
+        [0, 5, 2, 4], // i - VI - III - v (pure consonant minor/major degrees)
         [0, 3, 2, 4], // i - iv - III - v
       ];
     const rng = new PRNG(streamSeed(session.seed, 'harmony', Math.floor(index / 4) + epoch * 131));
@@ -297,79 +297,77 @@ export class JamComposer {
       const chordStride = Math.max(16, chordHoldBars * 16);
 
       if (pattern === 'pulse') {
-        // CBL / Jon Hopkins syncopated 3/16 and dotted-8th rhythmic pulses with velocity breathing
+        // CBL / Ultimae floating harmonic pad foundation with gentle dotted-8th upper-voice pulses (never choppy block stabs)
         const pulseRhythms = [
-          [0, 3, 6, 8, 11, 14],
-          [0, 3, 6, 9, 12, 14],
-          [0, 2, 6, 8, 10, 14],
-          [0, 4, 6, 10, 12, 14],
+          [0, 6, 12],
+          [0, 6, 10, 14],
+          [0, 4, 10],
+          [0, 6, 14],
         ];
-        // Ensure step 0 has rolled chord foundation
-        harmony.notes.forEach((pitch, i) => add(0, fit(pitch), 1.8, 0.54 - i * 0.03, false, i * roll));
+        // Step 0 lays a long, continuous rolled pad bed so the chord never sounds chopped or wooden
+        harmony.notes.forEach((pitch, i) => add(0, fit(pitch), Math.max(3.6, chordHoldBars * 2), 0.50 - i * 0.03, false, i * roll));
         for (let bar = 0; bar < s.phraseBars; bar++) {
           if (density <= 0 || (phraseIndex !== 0 && !rng.chance(Math.max(0.45, density)))) continue;
           const positions = pulseRhythms[(bar + Math.floor(phraseIndex)) % pulseRhythms.length];
           for (let pi = 0; pi < positions.length; pi++) {
             const pos = positions[pi];
             if (bar === 0 && pos === 0) continue; // already added step 0
-            if (!rng.chance(Math.min(1, 0.4 + density * 0.7))) continue;
+            if (!rng.chance(Math.min(1, 0.4 + density * 0.65))) continue;
             const isDownbeat = pos === 0;
-            const breath = 0.38 + 0.22 * Math.sin((pos / 16) * Math.PI);
-            const vel = (isDownbeat ? 0.56 : breath) * (0.85 + rng.range(0, 0.25));
-            const duration = isDownbeat ? 1.8 : 0.85 + rng.range(0, 0.4);
-            const voicing = isDownbeat || rng.chance(0.65) ? harmony.notes : harmony.notes.slice(-3);
+            const breath = 0.34 + 0.16 * Math.sin((pos / 16) * Math.PI);
+            const vel = (isDownbeat ? 0.48 : breath) * (0.85 + rng.range(0, 0.2));
+            const duration = isDownbeat ? 3.6 : 1.9 + rng.range(0, 0.8);
+            const voicing = isDownbeat ? harmony.notes : harmony.notes.slice(-2);
             voicing.forEach((pitch, i) => {
-              add(bar * 16 + pos, fit(pitch), duration, Math.max(0.15, vel - i * 0.03), false, i * (isDownbeat ? roll : Math.round(roll * 0.4)));
+              add(bar * 16 + pos, fit(pitch), duration, Math.max(0.15, vel - i * 0.03), false, i * (isDownbeat ? roll : Math.round(roll * 0.5)));
             });
           }
         }
       } else if (pattern === 'broken') {
-        // Neo-Classical / Nils Frahm broken arpeggiated voicings: rolling bottom-up and top-down figures
-        harmony.notes.forEach((pitch, i) => add(0, fit(pitch), 3.2, 0.48 - i * 0.03, false, i * roll));
+        // Neo-Classical / Nils Frahm pedal-held arpeggiated voicings: long overlapping sustain
+        harmony.notes.forEach((pitch, i) => add(0, fit(pitch), 3.8, 0.46 - i * 0.03, false, i * roll));
         for (let bar = 0; bar < s.phraseBars; bar++) {
           if (density <= 0 || (phraseIndex !== 0 && !rng.chance(Math.max(0.45, density)))) continue;
-          const stepSlots = [0, 2, 4, 6, 8, 10, 12, 14];
+          const stepSlots = lofi ? [0, 3, 6, 10, 12, 14] : [0, 4, 8, 12];
           const count = harmony.notes.length;
           const voiceSeq = bar % 2 === 0
-            ? [0, 1, 2, Math.min(3, count - 1), Math.max(0, count - 2), 1, 0, 2]
-            : [0, 2, 1, Math.min(3, count - 1), 0, 1, 2, Math.max(0, count - 1)];
+            ? [0, 1, 2, Math.min(3, count - 1), Math.max(0, count - 2), 1]
+            : [0, 2, 1, Math.min(3, count - 1), 0, 2];
           stepSlots.forEach((slot, si) => {
             if (bar === 0 && slot === 0) return;
-            if (!rng.chance(Math.min(1, 0.4 + density * 0.7))) return;
+            if (!rng.chance(Math.min(1, 0.42 + density * 0.65))) return;
             const voiceIdx = voiceSeq[si % voiceSeq.length] % count;
             const pitch = harmony.notes[voiceIdx];
-            const octaveOffset = (si >= 4 && rng.chance(0.35)) ? 12 : 0;
-            const vel = 0.36 + rng.range(0, 0.2) + (slot % 4 === 0 ? 0.08 : 0);
-            add(bar * 16 + slot, fit(pitch + octaveOffset), 2.2 + rng.range(0, 0.8), vel, false, rng.range(5, 20));
+            const octaveOffset = (si >= 3 && rng.chance(0.3)) ? 12 : 0;
+            const vel = 0.34 + rng.range(0, 0.16) + (slot % 4 === 0 ? 0.06 : 0);
+            add(bar * 16 + slot, fit(pitch + octaveOffset), 3.0 + rng.range(0, 1.2), vel, false, rng.range(8, 28));
           });
         }
       } else if (pattern === 'syncopated' || (techno && !pattern)) {
-        // Dub-techno / funk off-beat stabs with ghost hits
+        // Dub-techno / funk off-beat stabs with space for tape echoes
         const compPatterns = [
-          [2, 6, 10, 14],
-          [3, 6, 11, 14],
-          [4, 10],
-          [2, 6, 11],
-          [6, 9, 14],
           [6, 14],
           [3, 10],
+          [4, 10],
+          [2, 11],
+          [6, 12],
         ];
-        harmony.notes.forEach((pitch, i) => add(0, fit(pitch), 2.5, 0.5 - i * 0.04, false, i * roll));
+        harmony.notes.forEach((pitch, i) => add(0, fit(pitch), 2.8, 0.48 - i * 0.04, false, i * roll));
         for (let bar = 0; bar < s.phraseBars; bar++) {
           if (density <= 0 || (phraseIndex !== 0 && !rng.chance(Math.max(0.5, density)))) continue;
           const positions = compPatterns[(bar + Math.floor(phraseIndex)) % compPatterns.length];
-          const voicing = rng.chance(0.4) ? harmony.notes.slice(-3) : harmony.notes;
+          const voicing = rng.chance(0.5) ? harmony.notes.slice(-3) : harmony.notes;
           for (const pos of positions) {
             if (bar === 0 && pos === 0) continue;
-            if (!rng.chance(Math.min(1, 0.45 + density * 0.65))) continue;
-            const duration = 0.5 + rng.range(0, 0.4);
-            const vel = (pos === 6 || pos === 14 ? 0.54 : 0.4) + rng.range(0, 0.1);
-            voicing.forEach((pitch, i) => add(bar * 16 + pos, fit(pitch), duration, Math.max(0.15, vel - i * 0.04), false, rng.chance(0.4) ? i * rng.range(4, 14) : 0));
+            if (!rng.chance(Math.min(1, 0.45 + density * 0.6))) continue;
+            const duration = 0.9 + rng.range(0, 0.6);
+            const vel = (pos === 6 || pos === 14 ? 0.50 : 0.38) + rng.range(0, 0.08);
+            voicing.forEach((pitch, i) => add(bar * 16 + pos, fit(pitch), duration, Math.max(0.15, vel - i * 0.04), false, rng.chance(0.4) ? i * rng.range(6, 16) : 0));
           }
         }
       } else if (pattern === 'euclidean') {
-        // Algorithmic Euclidean pulses
-        const k = density > 0.7 ? 5 : density > 0.4 ? 4 : 3;
+        // Algorithmic Euclidean pulses with warm sustain
+        const k = density > 0.65 ? 4 : 3;
         const euclideanSteps: number[] = [];
         for (let i = 0; i < 16; i++) {
           if (Math.floor((i * k) / 16) !== Math.floor(((i - 1) * k) / 16)) {
@@ -380,38 +378,38 @@ export class JamComposer {
           if (density <= 0 || (phraseIndex !== 0 && !rng.chance(Math.max(0.45, density)))) continue;
           euclideanSteps.forEach((stepPos, si) => {
             if (bar === 0 && stepPos === 0) {
-              harmony.notes.forEach((pitch, i) => add(0, fit(pitch), 2.2, 0.5 - i * 0.04, false, i * roll));
+              harmony.notes.forEach((pitch, i) => add(0, fit(pitch), 3.2, 0.48 - i * 0.04, false, i * roll));
               return;
             }
-            if (!rng.chance(Math.min(1, 0.5 + density * 0.6))) return;
+            if (!rng.chance(Math.min(1, 0.48 + density * 0.55))) return;
             const isAccent = si === 0 || stepPos === 0;
-            const vel = (isAccent ? 0.52 : 0.38) + rng.range(0, 0.14);
-            const voicing = isAccent || rng.chance(0.5) ? harmony.notes : harmony.notes.slice(-3);
-            voicing.forEach((pitch, i) => add(bar * 16 + stepPos, fit(pitch), 1.4 + rng.range(0, 0.6), Math.max(0.15, vel - i * 0.03), false, i * Math.round(roll * 0.5)));
+            const vel = (isAccent ? 0.48 : 0.34) + rng.range(0, 0.12);
+            const voicing = isAccent ? harmony.notes : harmony.notes.slice(-2);
+            voicing.forEach((pitch, i) => add(bar * 16 + stepPos, fit(pitch), 2.2 + rng.range(0, 0.8), Math.max(0.15, vel - i * 0.03), false, i * Math.round(roll * 0.5)));
           });
         }
       } else if (pattern === 'wave') {
-        // Cascading oceanic swell: staggered voice entrances creating undulating harmonic waves
+        // Cascading oceanic swell: long, overlapping legato waves
         for (let bar = 0; bar < s.phraseBars; bar += 2) {
           if (density <= 0 || (phraseIndex !== 0 && !rng.chance(Math.max(0.45, density)))) continue;
           if (bar === 0) {
-            harmony.notes.forEach((pitch, i) => add(0, fit(pitch), 3.8, 0.48 - i * 0.03, false, i * roll));
+            harmony.notes.forEach((pitch, i) => add(0, fit(pitch), Math.max(7.2, chordHoldBars * 3.6), 0.46 - i * 0.03, false, i * roll));
           } else {
             harmony.notes.forEach((pitch, i) => {
-              const voiceDelaySteps = (i * 3) % 16;
-              add(bar * 16 + voiceDelaySteps, fit(pitch), 6.5, 0.44 - i * 0.03, false, rng.range(10, 40));
+              const voiceDelaySteps = (i * 4) % 16;
+              add(bar * 16 + voiceDelaySteps, fit(pitch), 7.5, 0.40 - i * 0.03, false, rng.range(15, 50));
             });
           }
         }
       } else if (pattern === 'cluster') {
-        // Shimmering polyrhythmic tapestry: individual chord tones pulse at independent prime rates
+        // Shimmering polyrhythmic tapestry: slow independent voice breathing
         harmony.notes.forEach((pitch, i) => {
-          add(0, fit(pitch), 3.4, 0.46 - i * 0.03, false, i * roll);
-          const intervalSteps = [6, 8, 10, 12][i % 4];
+          add(0, fit(pitch), 5.5, 0.44 - i * 0.03, false, i * roll);
+          const intervalSteps = [8, 12, 16, 20][i % 4];
           for (let step = intervalSteps; step < length; step += intervalSteps) {
-            if (!rng.chance(Math.min(1, 0.4 + density * 0.7))) continue;
-            const vel = 0.32 + rng.range(0, 0.18);
-            add(step, fit(pitch), 2.8 + rng.range(0, 0.8), vel, false, rng.range(10, 50));
+            if (!rng.chance(Math.min(1, 0.38 + density * 0.6))) continue;
+            const vel = 0.30 + rng.range(0, 0.14);
+            add(step, fit(pitch), 4.2 + rng.range(0, 1.2), vel, false, rng.range(15, 60));
           }
         });
       } else {
@@ -420,15 +418,15 @@ export class JamComposer {
         for (let step = 0; step < length; step += stride) {
           if (density <= 0 || (phraseIndex !== 0 && !rng.chance(Math.max(0.5, density)))) continue;
           const restab = lofi && density > 0.75 && rng.chance(movement * 0.5);
-          harmony.notes.forEach((pitch, i) => add(step, fit(pitch), lofi ? (restab ? 2.8 : 3.25 + rng.range(0, 0.45)) : Math.max(1, chordHoldBars * 4 - 0.3), 0.5 - i * 0.04, false, i * roll));
-          if (restab) harmony.notes.forEach(p => add(step + 12, fit(p), 0.7, 0.25));
+          harmony.notes.forEach((pitch, i) => add(step, fit(pitch), lofi ? (restab ? 2.8 : 3.4 + rng.range(0, 0.45)) : Math.max(3.8, chordHoldBars * 4 - 0.15), 0.48 - i * 0.04, false, i * roll));
+          if (restab) harmony.notes.forEach(p => add(step + 12, fit(p), 0.9, 0.24));
           if (!lofi) {
-            // Mid-phrase response: upper notes or complementary harmonic tones answer
-            if (s.phraseBars >= 2 && rng.chance(0.35 + movement * 0.45)) {
-              const upper = rng.chance(0.5) ? harmony.notes.slice(-3) : harmony.notes.slice(1, 4);
+            // Mid-phrase response: delicate upper dyad blooms smoothly halfway through the hold
+            if (s.phraseBars >= 2 && rng.chance(0.32 + movement * 0.38)) {
+              const upper = harmony.notes.slice(-2);
               const at = step + Math.min(16, stride / 2);
               if (at < length) {
-                upper.forEach((pitch, i) => add(at, fit(pitch + (rng.chance(0.35) ? 12 : 0)), Math.max(1, (stride - (at - step)) / 4 - 0.3), 0.32 - i * 0.03, false, i * rng.range(30, 90)));
+                upper.forEach((pitch, i) => add(at, fit(pitch + (rng.chance(0.3) ? 12 : 0)), Math.max(2.5, (stride - (at - step)) / 4), 0.28 - i * 0.03, false, i * rng.range(35, 95)));
               }
             }
           }
@@ -436,54 +434,64 @@ export class JamComposer {
       }
 
       if (s.chordTexture && s.chordTexture !== 'off') {
-        const baseChordNotes = notes.filter(n => n.layerId === layer.id && !n.subLayer);
-        for (const cn of baseChordNotes) {
-          let interval = 12;
-          let velMult = 0.50;
-          let durMult = 1.3;
-          let microOffset = 18;
-          if (s.chordTexture === 'shimmer') {
-            interval = 12;
-            velMult = 0.48;
-            durMult = 1.4;
-            microOffset = 22;
-          } else if (s.chordTexture === 'octave') {
-            interval = 12;
-            velMult = 0.62;
-            durMult = 1.0;
-            microOffset = 10;
-          } else if (s.chordTexture === 'sub5th') {
-            interval = 7;
-            velMult = 0.52;
-            durMult = 1.15;
-            microOffset = 14;
+        // Only add companion texture voices on bar downbeats (up to 2 upper tones per bar) to prevent voice-stealing & mud
+        const byStep = new Map<number, Array<PlannedNote & { step: number }>>();
+        for (const n of notes) {
+          if (n.layerId === layer.id && !n.subLayer && n.step % 16 === 0) {
+            const arr = byStep.get(n.step) || [];
+            arr.push(n);
+            byStep.set(n.step, arr);
           }
-          const texturePitch = fit(cn.note + interval);
-          if (Number.isFinite(texturePitch) && texturePitch <= 127) {
-            notes.push({
-              step: cn.step,
-              layerId: layer.id,
-              note: texturePitch,
-              durationBeats: Math.max(0.06, cn.durationBeats * durMult),
-              velocity: Math.max(1, Math.round(cn.velocity * velMult)),
-              microMs: cn.microMs + microOffset,
-            });
+        }
+        for (const barNotes of byStep.values()) {
+          for (const cn of barNotes.slice(0, 2)) {
+            let interval = 12;
+            let velMult = 0.46;
+            let durMult = 1.25;
+            let microOffset = 20;
+            if (s.chordTexture === 'shimmer') {
+              interval = 12;
+              velMult = 0.45;
+              durMult = 1.35;
+              microOffset = 22;
+            } else if (s.chordTexture === 'octave') {
+              interval = 12;
+              velMult = 0.56;
+              durMult = 1.05;
+              microOffset = 14;
+            } else if (s.chordTexture === 'sub5th') {
+              interval = 7;
+              velMult = 0.48;
+              durMult = 1.15;
+              microOffset = 16;
+            }
+            const texturePitch = fit(cn.note + interval);
+            if (Number.isFinite(texturePitch)) {
+              notes.push({
+                step: cn.step,
+                layerId: layer.id,
+                note: texturePitch,
+                durationBeats: Math.max(0.06, cn.durationBeats * durMult),
+                velocity: Math.max(1, Math.min(62, Math.round(cn.velocity * velMult))),
+                microMs: cn.microMs + microOffset,
+              });
+            }
           }
         }
       }
 
       // Dual-Chord Engine (Layer B): Harmonically locked to the exact same chord (`harmony.notes`),
-      // voiced in an open spread inversion with antiphonal counter-rhythms so it always matches yet never sounds monotonous.
+      // voiced in an open spread inversion with slow, floating counter-swells so it blends seamlessly.
       if (s.secondaryEnabled && (s.secondaryVolume ?? 0.55) > 0.01 && density > 0 && harmony.notes.length >= 2) {
-        const addSecondary = (step: number, note: number, duration: number, accent = 0.42, micro = 24) => {
+        const addSecondary = (step: number, note: number, duration: number, accent = 0.38, micro = 28) => {
           if (!Number.isFinite(note) || step <= 0 || step >= length) return;
           notes.push({
             step,
             layerId: layer.id,
             subLayer: 'chords_b',
             note: Math.round(clamp(note, 0, 127)),
-            durationBeats: Math.max(0.08, duration),
-            velocity: Math.round(clamp(s.velocityMin + (s.velocityMax - s.velocityMin) * clamp(accent + rng.range(-0.06, 0.06), 0, 1), 1, 127)),
+            durationBeats: Math.max(0.12, duration),
+            velocity: Math.round(clamp(s.velocityMin + (s.velocityMax - s.velocityMin) * clamp(accent + rng.range(-0.05, 0.05), 0, 1), 1, 127)),
             microMs: micro,
           });
         };
@@ -494,57 +502,53 @@ export class JamComposer {
           fit(hn[1] ?? hn[0]),
           fit((hn[2] ?? hn[0]) + (s.secondaryTimbre === 'root' || s.secondaryTimbre === 'warm' ? 0 : 12)),
           fit(hn[0] + 12),
-          fit((hn[3] ?? hn[hn.length - 1]) + 12),
         ].filter(Number.isFinite);
         const secVoicing = [...new Set(spreadCandidates)];
-        const secPattern: ChordPattern = s.secondaryPattern || (pattern === 'pad' ? 'wave' : pattern === 'wave' ? 'cluster' : pattern === 'broken' ? 'pad' : 'wave');
+        const secPattern: ChordPattern = s.secondaryPattern || (pattern === 'pad' ? 'wave' : pattern === 'wave' ? 'pad' : 'wave');
 
         if (secPattern === 'wave') {
-          // Ethereal cascading counter-swell entering on off-steps (4, 8, 12...) as Chord A breathes
-          for (let bar = 0; bar < s.phraseBars; bar++) {
+          // Ethereal cascading counter-swell entering gently across the phrase
+          for (let bar = 0; bar < s.phraseBars; bar += 2) {
             secVoicing.forEach((pitch, idx) => {
               const stepPos = bar * 16 + ((idx + 1) * 4) % 16;
               if (stepPos === 0) return;
-              if (bar > 0 && !rng.chance(Math.min(1, 0.45 + density * 0.55))) return;
-              addSecondary(stepPos, pitch, lofi ? 2.6 : 4.2 + rng.range(0, 1.4), 0.42 - idx * 0.03, 22 + idx * 18);
+              addSecondary(stepPos, pitch, lofi ? 3.4 : 6.2 + rng.range(0, 1.5), 0.38 - idx * 0.03, 26 + idx * 20);
             });
           }
         } else if (secPattern === 'pad') {
           // Antiphonal counter-pad: blooms smoothly on beat 3 (step 8) bridging the harmonic space
-          for (let bar = 0; bar < s.phraseBars; bar += Math.max(1, Math.min(2, chordHoldBars))) {
+          for (let bar = 0; bar < s.phraseBars; bar += Math.max(2, chordHoldBars)) {
             const enterStep = bar * 16 + 8;
             secVoicing.forEach((pitch, idx) => {
-              addSecondary(enterStep, pitch, Math.max(2.4, chordHoldBars * 3.2), 0.44 - idx * 0.03, 28 + idx * 24);
+              addSecondary(enterStep, pitch, Math.max(3.6, chordHoldBars * 3.6), 0.40 - idx * 0.03, 30 + idx * 24);
             });
           }
         } else if (secPattern === 'broken') {
-          // Delicate broken celesta / felt-piano / glass arpeggio in the upper register
-          const slots = [2, 6, 10, 14];
+          // Delicate sparse celesta / felt-piano / glass notes in the upper register
+          const slots = [4, 12];
           for (let bar = 0; bar < s.phraseBars; bar++) {
             slots.forEach((slot, si) => {
-              if (!rng.chance(Math.min(1, 0.48 + density * 0.52))) return;
+              if (!rng.chance(Math.min(1, 0.48 + density * 0.45))) return;
               const pitch = secVoicing[(bar + si) % secVoicing.length];
-              addSecondary(bar * 16 + slot, pitch, 2.0 + rng.range(0, 0.8), 0.38 + (slot === 6 ? 0.08 : 0), 16 + si * 8);
+              addSecondary(bar * 16 + slot, pitch, 3.0 + rng.range(0, 1.0), 0.34, 20 + si * 12);
             });
           }
         } else if (secPattern === 'pulse' || secPattern === 'syncopated' || secPattern === 'euclidean') {
-          // Interlocking stereo counter-pulses on off-beats
-          const counterSlots = [4, 10, 14];
-          for (let bar = 0; bar < s.phraseBars; bar++) {
+          // Gentle interlocking stereo counter-pulses on beat 2.5 and 4 (steps 6, 12)
+          const counterSlots = [6, 12];
+          for (let bar = 0; bar < s.phraseBars; bar += 2) {
             counterSlots.forEach(slot => {
-              if (!rng.chance(Math.min(1, 0.45 + density * 0.55))) return;
-              secVoicing.slice(0, 3).forEach((pitch, idx) => {
-                addSecondary(bar * 16 + slot, pitch, 1.3 + rng.range(0, 0.5), 0.40 - idx * 0.03, 14 + idx * 12);
+              secVoicing.slice(0, 2).forEach((pitch, idx) => {
+                addSecondary(bar * 16 + slot, pitch, 2.6 + rng.range(0, 0.8), 0.36 - idx * 0.03, 18 + idx * 14);
               });
             });
           }
         } else {
-          // 'cluster': Shimmering polyrhythmic tapestry
+          // 'cluster': Slow shimmering upper-register halo
           secVoicing.forEach((pitch, idx) => {
-            const strideSteps = [5, 7, 9, 11][idx % 4];
-            for (let stepPos = strideSteps; stepPos < length; stepPos += strideSteps) {
-              if (!rng.chance(Math.min(1, 0.38 + density * 0.55))) continue;
-              addSecondary(stepPos, pitch, 2.8 + rng.range(0, 1.0), 0.36, 20 + idx * 15);
+            const strideSteps = [8, 12, 16][idx % 3];
+            for (let stepPos = strideSteps; stepPos < length; stepPos += strideSteps * 2) {
+              addSecondary(stepPos, pitch, 4.2 + rng.range(0, 1.2), 0.34, 24 + idx * 18);
             }
           });
         }

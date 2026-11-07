@@ -257,8 +257,8 @@ export function modulationAt(session: JamSession, recent: JamEvent[], beat: numb
 
 /** Sounding / releasing voice limits. Releasing is generous for pads: cutting a long tail early is audible. */
 export function voiceBudget(layer: JamLayer, lowResource: boolean): [number, number] {
-  const sounding = layer.role === 'chords' ? 10 : layer.role === 'drone' ? 5 : layer.role === 'bass' ? 2 : 4;
-  const releasing = layer.role === 'chords' ? 12 : layer.role === 'drone' ? 6 : 6;
+  const sounding = layer.role === 'chords' ? 16 : layer.role === 'drone' ? 6 : layer.role === 'bass' ? 2 : 5;
+  const releasing = layer.role === 'chords' ? 18 : layer.role === 'drone' ? 8 : 6;
   return lowResource ? [Math.min(sounding, layer.role === 'chords' ? 5 : 3), Math.min(releasing, 4)] : [sounding, releasing];
 }
 
@@ -1029,14 +1029,12 @@ export class JamEngine {
     if (chordL?.settings.chordPattern) notes.push(`Muster: ${chordL.settings.chordPattern}`);
     if (melodyPick) notes.push(`Melody: ${melodyPick}`);
 
-    // 6. Atmosphere Settings (strictly capped at <= 0.10)
+    // 6. Atmosphere Settings (silent by default so preset switches never trigger white/pink noise bursts)
     const atmoKinds: AtmosphereKind[] = ['air', 'rain', 'tape', 'vinyl'];
     const chosenAtmoKind = rng.pick(atmoKinds);
-    const maxAtmo = 0.10;
-    const chosenAtmoLevel = Math.min(maxAtmo, Number(rng.range(0.03, maxAtmo).toFixed(3)));
     this.state.atmosphere = {
       kind: chosenAtmoKind,
-      level: chosenAtmoLevel,
+      level: 0,
       tone: Number(rng.range(0.40, 0.65).toFixed(2)),
       movement: Number(rng.range(0.35, 0.55).toFixed(2)),
     };
@@ -1553,6 +1551,9 @@ export class JamEngine {
       }
     }
     this.state.atmosphere = { ...preset.atmosphere, level: Math.min(0.10, preset.atmosphere.level) };
+    if (preset.scale) {
+      this.state.scale = preset.scale;
+    }
     if (preset.macros) {
       for (const [k, v] of Object.entries(preset.macros) as [MacroName, number][]) {
         if (v !== undefined) this.state.macros[k] = clamp(v, 0, 1);
@@ -1572,24 +1573,25 @@ export class JamEngine {
     if (!chordsLayer) return;
     chordsLayer.settings.timbre = timbre;
     if (matchAtmosphere) {
+      const currentLevel = this.state.atmosphere?.level ?? 0;
       if (timbre === 'strings' || timbre === 'solina') {
-        this.state.atmosphere = { kind: 'air', level: 0.06, tone: 0.58, movement: 0.48 };
+        this.state.atmosphere = { kind: 'air', level: currentLevel, tone: 0.58, movement: 0.48 };
         this.state.macros.space = Math.max(this.state.macros.space, 0.84);
         this.state.macros.warmth = Math.max(this.state.macros.warmth, 0.68);
       } else if (timbre === 'shimmer' || timbre === 'air') {
-        this.state.atmosphere = { kind: 'air', level: 0.05, tone: 0.64, movement: 0.44 };
+        this.state.atmosphere = { kind: 'air', level: currentLevel, tone: 0.64, movement: 0.44 };
         this.state.macros.space = Math.max(this.state.macros.space, 0.86);
       } else if (timbre === 'wash') {
-        this.state.atmosphere = { kind: 'tape', level: 0.06, tone: 0.50, movement: 0.45 };
+        this.state.atmosphere = { kind: 'tape', level: currentLevel, tone: 0.50, movement: 0.45 };
         this.state.macros.space = Math.max(this.state.macros.space, 0.78);
       } else if (timbre === 'glass' || timbre === 'celeste') {
-        this.state.atmosphere = { kind: 'air', level: 0.05, tone: 0.62, movement: 0.40 };
+        this.state.atmosphere = { kind: 'air', level: currentLevel, tone: 0.62, movement: 0.40 };
         this.state.macros.space = Math.max(this.state.macros.space, 0.82);
       } else if (timbre === 'keys') {
-        this.state.atmosphere = { kind: 'rain', level: 0.07, tone: 0.52, movement: 0.35 };
+        this.state.atmosphere = { kind: 'rain', level: currentLevel, tone: 0.52, movement: 0.35 };
         this.state.macros.space = 0.54;
       } else if (timbre === 'dub' || timbre === 'root') {
-        this.state.atmosphere = { kind: 'tape', level: 0.06, tone: 0.38, movement: 0.42 };
+        this.state.atmosphere = { kind: 'tape', level: currentLevel, tone: 0.38, movement: 0.42 };
       }
     }
     this.addChange(`Akkord-Klang: ${timbre === 'strings' ? 'Großes Streichorchester' : timbre}`);
