@@ -25,8 +25,8 @@ export class StereoEnsemble {
       return;
     }
 
-    this.dryGain.gain.setValueAtTime(0.7, now);
-    this.wetGain.gain.setValueAtTime(0.55 * this.amount, now);
+    this.dryGain.gain.setValueAtTime(0.68, now);
+    this.wetGain.gain.setValueAtTime(0.48 * this.amount, now);
     this.input.connect(this.dryGain);
     this.dryGain.connect(this.output);
     this.wetGain.connect(this.output);
@@ -88,7 +88,7 @@ export class StereoEnsemble {
     this.amount = Math.max(0, Math.min(1, Number.isFinite(amount) ? amount : 0.6));
     if (this.bypassed) return;
     const now = this.ctx.currentTime;
-    this.wetGain.gain.setTargetAtTime(0.55 * this.amount, now, 0.06);
+    this.wetGain.gain.setTargetAtTime(0.48 * this.amount, now, 0.06);
   }
 
   public destroy(): void {

@@ -98,13 +98,16 @@ export class EffectsRack {
     this.delayWet.gain.setValueAtTime(0.3, now);
     this.inputNode.connect(this.delayInput); this.delayInput.connect(this.delayLeft);
     // Feedback path: low-pass (tape darkening) -> high-pass (keeps repeats out of the low end) ->
-    // optional soft saturation (repeats get warmer, not louder).
+    // wide-headroom oversampled soft saturation (warms peaks smoothly without flat-clipping).
     this.delayLeft.connect(this.delayFilter); this.delayFilter.connect(delayHighpass);
     let loop: AudioNode = delayHighpass;
     if (ctx.createWaveShaper) {
-      const shaper = this.keep(ctx.createWaveShaper()); const curve = new Float32Array(257);
-      for (let i = 0; i < curve.length; i++) { const x = i * 2 / (curve.length - 1) - 1; curve[i] = Math.tanh(x * 1.6) / 1.6; } // unity slope at zero, so the saturator never adds loop gain
-      shaper.curve = curve; loop.connect(shaper); loop = shaper;
+      const prePad = this.keep(ctx.createGain());
+      prePad.gain.setValueAtTime(0.25, now);
+      const shaper = this.keep(ctx.createWaveShaper());
+      shaper.curve = MasterAudio.createWideSoftClipCurve(4097, 4.0, 0.72) as Float32Array<ArrayBuffer>;
+      if ('oversample' in shaper) shaper.oversample = '2x';
+      loop.connect(prePad); prePad.connect(shaper); loop = shaper;
     }
     loop.connect(this.delayFeedbackLeft);
     this.delayFeedbackLeft.connect(this.delayRight); this.delayRight.connect(this.delayFeedbackRight);
@@ -112,8 +115,8 @@ export class EffectsRack {
     if (ctx.createStereoPanner) {
       const left = this.keep(ctx.createStereoPanner()), right = this.keep(ctx.createStereoPanner());
       left.pan.setValueAtTime(-0.7, now); right.pan.setValueAtTime(0.7, now);
-      this.delayLeft.connect(left); this.delayRight.connect(right); left.connect(this.delayWet); right.connect(this.delayWet);
-    } else { this.delayLeft.connect(this.delayWet); this.delayRight.connect(this.delayWet); }
+      this.delayFilter.connect(left); this.delayRight.connect(right); left.connect(this.delayWet); right.connect(this.delayWet);
+    } else { this.delayFilter.connect(this.delayWet); this.delayRight.connect(this.delayWet); }
     this.delayWet.connect(this.eqMasterBus);
     if (ctx.createOscillator) {
       this.delayFlutterOsc = this.keep(ctx.createOscillator()); this.delayFlutterGain = this.keep(ctx.createGain());
@@ -139,47 +142,50 @@ export class EffectsRack {
   }
   private setupReverb(): void {
     const ctx = this.ctx, now = ctx.currentTime;
-    // Pre-delay separates the dry attack from the wash; the high-pass keeps low-end mud out of the tail.
+    // Pre-delay separates the dry attack from the wash; the 180 Hz high-pass keeps sub-bass out of comb tanks.
     const preDelay = this.keep(ctx.createDelay(0.2)); preDelay.delayTime.setValueAtTime(0.032, now);
-    const highpass = this.keep(ctx.createBiquadFilter()); highpass.type = 'highpass'; highpass.frequency.setValueAtTime(150, now); highpass.Q.setValueAtTime(FLAT_Q, now);
+    const highpass = this.keep(ctx.createBiquadFilter()); highpass.type = 'highpass'; highpass.frequency.setValueAtTime(180, now); highpass.Q.setValueAtTime(FLAT_Q, now);
     this.reverbInput.connect(preDelay); preDelay.connect(highpass);
     if (ctx.createOscillator) {
       this.reverbLfo = this.keep(ctx.createOscillator()); this.reverbLfo.frequency.setValueAtTime(0.13, now); this.reverbLfo.start();
     }
     const bank = (delays: number[]): GainNode => {
-      const output = this.keep(ctx.createGain()); output.gain.setValueAtTime(1 / Math.sqrt(delays.length) * 0.42, now);
+      const output = this.keep(ctx.createGain()); output.gain.setValueAtTime(1 / Math.sqrt(delays.length) * 0.36, now);
       for (const baseDelay of delays) {
         const delay = this.keep(ctx.createDelay(0.25)); delay.delayTime.setValueAtTime(baseDelay, now);
         const damping = this.keep(ctx.createBiquadFilter()); damping.type = 'lowpass'; damping.frequency.setValueAtTime(3300, now); damping.Q.setValueAtTime(FLAT_Q, now);
         const feedback = this.keep(ctx.createGain()); feedback.gain.setValueAtTime(0.8, now);
         highpass.connect(delay); delay.connect(damping); damping.connect(feedback); feedback.connect(delay); delay.connect(output);
-        // A very slow, sub-millisecond wobble keeps the tail from ringing metallically. It is constant, never user-driven.
-        if (this.reverbLfo) { const wobble = this.keep(ctx.createGain()); wobble.gain.setValueAtTime(0.0003 * (1 + baseDelay * 8), now); this.reverbLfo.connect(wobble); wobble.connect(delay.delayTime); }
+        if (this.reverbLfo) { const wobble = this.keep(ctx.createGain()); wobble.gain.setValueAtTime(0.00028 * (1 + baseDelay * 8), now); this.reverbLfo.connect(wobble); wobble.connect(delay.delayTime); }
         this.combFilters.push({ delay, feedback, damping, baseDelay });
       }
       return output;
     };
-    const left = bank(REVERB_BANK_LEFT), right = bank(REVERB_BANK_RIGHT);
-    // Diffusion is applied to the summed banks; the raw banks are additionally spread left/right.
-    const sum = this.keep(ctx.createGain()); left.connect(sum); right.connect(sum);
-    let previous: AudioNode = sum;
-    for (const time of [0.0051, 0.0017]) {
+    const diffuseChannel = (input: AudioNode, time: number): AudioNode => {
       const mix = this.keep(ctx.createGain()), output = this.keep(ctx.createGain());
       const delay = this.keep(ctx.createDelay(0.1)); delay.delayTime.setValueAtTime(time, now);
       const feedback = this.keep(ctx.createGain()), feedforward = this.keep(ctx.createGain());
       feedback.gain.setValueAtTime(0.7, now); feedforward.gain.setValueAtTime(-0.7, now);
-      // H(z) = (z^-D - g) / (1 - g z^-D): genuine allpass, not two FIR taps.
-      previous.connect(mix); mix.connect(delay); mix.connect(feedforward); feedforward.connect(output);
+      // H(z) = (z^-D - g) / (1 - g z^-D): genuine unity-gain allpass diffusion removes metallic comb grain
+      input.connect(mix); mix.connect(delay); mix.connect(feedforward); feedforward.connect(output);
       delay.connect(output); delay.connect(feedback); feedback.connect(mix);
-      previous = output;
-    }
-    const diffuse = this.keep(ctx.createGain()); diffuse.gain.setValueAtTime(0.5, now); previous.connect(diffuse);
+      const airSmooth = this.keep(ctx.createBiquadFilter());
+      airSmooth.type = 'lowpass'; airSmooth.frequency.setValueAtTime(7600, now); airSmooth.Q.setValueAtTime(FLAT_Q, now);
+      output.connect(airSmooth);
+      return airSmooth;
+    };
+    const left = diffuseChannel(bank(REVERB_BANK_LEFT), 0.0051);
+    const right = diffuseChannel(bank(REVERB_BANK_RIGHT), 0.0017);
     if (ctx.createStereoPanner) {
       const panLeft = this.keep(ctx.createStereoPanner()), panRight = this.keep(ctx.createStereoPanner());
-      panLeft.pan.setValueAtTime(-0.85, now); panRight.pan.setValueAtTime(0.85, now);
-      left.connect(panLeft); right.connect(panRight); panLeft.connect(this.reverbWet); panRight.connect(this.reverbWet);
+      const crossLR = this.keep(ctx.createGain()), crossRL = this.keep(ctx.createGain());
+      crossLR.gain.setValueAtTime(0.2, now); crossRL.gain.setValueAtTime(0.2, now);
+      panLeft.pan.setValueAtTime(-0.82, now); panRight.pan.setValueAtTime(0.82, now);
+      left.connect(panLeft); right.connect(panRight);
+      left.connect(crossLR); crossLR.connect(panRight);
+      right.connect(crossRL); crossRL.connect(panLeft);
+      panLeft.connect(this.reverbWet); panRight.connect(this.reverbWet);
     } else { left.connect(this.reverbWet); right.connect(this.reverbWet); }
-    diffuse.connect(this.reverbWet);
   }
   public updateParams(params: EffectsParams): void {
     this.params = { ...params };
@@ -197,8 +203,8 @@ export class EffectsRack {
     this.delayRight.delayTime.setTargetAtTime(bounded(params.delayTime, 0.04, 2), now, 0.2);
     this.delayFeedbackLeft.gain.setTargetAtTime(bounded(params.delayFeedback, 0, 0.9), now, SMOOTH);
     this.delayFeedbackRight.gain.setTargetAtTime(bounded(params.delayFeedback, 0, 0.9), now, SMOOTH);
-    this.delayWet.gain.setTargetAtTime(delayBypassed ? 0 : bounded(params.delayMix, 0, 0.8), now, SMOOTH);
-    this.delayFlutterGain?.gain.setTargetAtTime(flutterBypassed ? 0 : bounded(params.delayFlutter, 0, 1) * 0.004, now, SMOOTH);
+    this.delayWet.gain.setTargetAtTime(delayBypassed ? 0 : bounded(params.delayMix, 0, 0.72), now, SMOOTH);
+    this.delayFlutterGain?.gain.setTargetAtTime(flutterBypassed ? 0 : bounded(params.delayFlutter, 0, 1) * 0.0032, now, SMOOTH);
     const tone = bounded(params.delayTone ?? 0.45, 0, 1);
     this.delayFilter.frequency.setTargetAtTime(700 * Math.pow(9, tone), now, 0.2);
     // RT60 mapping: with a loop delay d and decay T, g = 10^(-3d/T) falls exactly 60 dB after T seconds.
@@ -207,14 +213,14 @@ export class EffectsRack {
     const damping = bounded(params.reverbDamping ?? 0.55, 0, 1);
     for (const comb of this.combFilters) {
       comb.feedback.gain.setTargetAtTime(bounded(Math.pow(10, -3 * comb.baseDelay / decay), 0.2, 0.96), now, SMOOTH);
-      comb.damping.frequency.setTargetAtTime(1000 + (1 - damping) * 7000, now, 0.2);
+      comb.damping.frequency.setTargetAtTime(1000 + (1 - damping) * 6500, now, 0.2);
     }
-    this.reverbWet.gain.setTargetAtTime(reverbBypassed ? 0 : bounded(params.reverbMix, 0, 0.8), now, SMOOTH);
+    this.reverbWet.gain.setTargetAtTime(reverbBypassed ? 0 : bounded(params.reverbMix, 0, 0.72), now, SMOOTH);
     if (params.masterDrive !== undefined) this.onDrive(warmthBypassed ? 0 : params.masterDrive);
 
-    // Apply inter-effect routing gains
-    const d2r = !delayBypassed && !reverbBypassed && this.routingMode === 'delay-into-reverb' ? 0.65 : 0;
-    const r2d = !delayBypassed && !reverbBypassed && this.routingMode === 'reverb-into-delay' ? 0.65 : 0;
+    // Apply inter-effect routing gains cleanly without overflowing downstream headroom
+    const d2r = !delayBypassed && !reverbBypassed && this.routingMode === 'delay-into-reverb' ? 0.45 : 0;
+    const r2d = !delayBypassed && !reverbBypassed && this.routingMode === 'reverb-into-delay' ? 0.45 : 0;
     this.delayToReverbGain?.gain.setTargetAtTime(d2r, now, SMOOTH);
     this.reverbToDelayGain?.gain.setTargetAtTime(r2d, now, SMOOTH);
 

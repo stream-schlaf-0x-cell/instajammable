@@ -4,6 +4,7 @@ import { EffectsRack } from '../engine/audio/effects';
 import { MasterAudio } from '../engine/audio/audioContext';
 import { AtmosphereBed, ATMOSPHERE_SOURCES } from '../engine/audio/atmosphere';
 import { AmbientSynth } from '../engine/audio/ambientSynth';
+import { DrumSynth } from '../engine/audio/drumSynth';
 import { JamEngine, TIMBRE_PALETTES, effectiveEffects, validateSession, voiceBudget } from '../engine/jam/JamEngine';
 import { MusicalClock } from '../engine/clock';
 import { createSession, SCENES } from '../engine/jam/scenes';
@@ -15,7 +16,7 @@ import { ATMOSPHERE_KINDS } from '../types/jam';
 interface Recorded { name: string; args: number[] }
 function param(log: Recorded[], name: string) {
   return { value: 0.5, setValueAtTime(...a: number[]) { log.push({ name: name + '.set', args: a }); }, setTargetAtTime(...a: number[]) { log.push({ name: name + '.target', args: a }); },
-    linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {}, cancelScheduledValues(...a: number[]) { log.push({ name: name + '.cancel', args: a }); } };
+    linearRampToValueAtTime(...a: number[]) { log.push({ name: name + '.linear', args: a }); }, exponentialRampToValueAtTime(...a: number[]) { log.push({ name: name + '.exp', args: a }); }, cancelScheduledValues(...a: number[]) { log.push({ name: name + '.cancel', args: a }); } };
 }
 function fakeNode(log: Recorded[], kind: string, extra: Record<string, unknown> = {}) {
   const node: any = { kind, connections: [] as unknown[], disconnected: false, type: '', loop: false, started: undefined as number | undefined, stopped: undefined as number | undefined, onended: null as null | (() => void),
@@ -297,5 +298,114 @@ test('MasterAudio.volumeToGain maps perceptually, monotonically from 0 to 1.25',
     const v = MasterAudio.volumeToGain(i / 20);
     assert.ok(v > prev, `volumeToGain(${i / 20}) should be strictly increasing`);
     prev = v;
+  }
+});
+
+test('wide-headroom soft-clip curve is odd-symmetric, zero-DC, unity-slope, and strictly monotonic without flat walls', () => {
+  const curve = MasterAudio.createWideSoftClipCurve(4097, 4.0, 0.42);
+  assert.equal(curve.length, 4097);
+  const mid = (curve.length - 1) / 2;
+  assert.equal(curve[mid], 0, 'center sample must have zero DC offset');
+  for (let i = 0; i < mid; i++) {
+    assert.ok(Math.abs(curve[i] + curve[curve.length - 1 - i]) < 1e-6, 'symmetrical odd response');
+  }
+  for (let i = 1; i < curve.length; i++) {
+    assert.ok(curve[i] > curve[i - 1], `strictly monotonic at ${i} (no flat hard-clip wall)`);
+  }
+  const du = 8.0 / (curve.length - 1);
+  const smallSignalSlope = (curve[mid + 1] - curve[mid]) / du;
+  assert.ok(Math.abs(smallSignalSlope - 1.0) < 0.005, `small-signal gain near unity (${smallSignalSlope})`);
+});
+
+test('AmbientSynth envelope continuity: release stage starts at the exact instantaneous decay gain with zero step click', () => {
+  const cases = [
+    { name: 'short pluck', duration: 0.4, attack: 0.015, decay: 1.85, sustain: 0.38 },
+    { name: 'acid bass', duration: 0.25, attack: 0.008, decay: 0.45, sustain: 0.72 },
+    { name: 'pad interrupted mid-attack', duration: 0.6, attack: 2.2, decay: 3.0, sustain: 0.85 },
+  ];
+  for (const c of cases) {
+    const log: Recorded[] = []; const ctx = fakeContext(log);
+    const synth = new AmbientSynth(ctx, fakeNode(log, 'out'), 4, 4);
+    const params = {
+      osc1Wave: 'triangle', osc2Wave: 'sine', osc3Wave: 'sine', detuneSpread: 5, subLevel: 0.3,
+      filterCutoff: 600, filterResonance: 2.2, filterEnvAmount: 0.3, attack: c.attack, decay: c.decay,
+      sustain: c.sustain, release: 2.0, lfoRate: 0.2, lfoDepth: 0.9, driftAmount: 0.1, voiceSpread: 0.5, volume: 0.7
+    } as any;
+    ctx.currentTime = 1;
+    synth.triggerNote(1, 48, 100, c.duration, params, 0.8);
+
+    // Collect only the voice envelope gain events (first gain node created after filter1/filter2 is `gain` -> has `.set` at t=1 and t=1+duration)
+    const sets = log.filter(e => e.name === 'gain.gain.set' && Math.abs(e.args[1] - (1 + c.duration)) < 1e-6);
+    assert.equal(sets.length, 1, `${c.name}: release boundary gain must be set cleanly at note-off`);
+    const releaseStart = sets[0].args[0];
+
+    const linears = log.filter(e => e.name === 'gain.gain.linear');
+    assert.ok(linears.length >= 1);
+    const attackPeak = linears[0].args[0];
+    const reqAtk = Math.max(0.006, c.attack);
+    const atk = Math.min(c.duration, reqAtk);
+    const sustainGain = c.duration < reqAtk ? attackPeak : (attackPeak / Math.min(1, c.duration / reqAtk)) * c.sustain;
+    const tau = Math.max(0.08, Math.min(c.duration * 0.45, c.decay));
+    const expected = sustainGain + (attackPeak - sustainGain) * Math.exp(-Math.max(0, c.duration - atk) / tau);
+    assert.ok(Math.abs(releaseStart - expected) < 1e-5, `${c.name}: release gain ${releaseStart} matches continuous decay ${expected}`);
+
+    // updateParams LFO depth must stay bounded to avoid filter Nyquist/zero sweeps
+    log.length = 0;
+    synth.updateParams({ ...params, filterCutoff: 2000, lfoDepth: 1.0, lfoRate: 20 });
+    const lfoTarget = log.filter(e => e.name === 'gain.gain.target').at(-1);
+    assert.ok(lfoTarget && lfoTarget.args[0] <= 2000 * 0.45 + 1e-6, 'updateParams clamps filter LFO swing <= 45% of cutoff');
+  }
+});
+
+test('DrumSynth uses click-free attack ramps on every voice model and wide-headroom saturation', () => {
+  const { ctx } = bufferContext([]);
+  ctx.sampleRate = 44100;
+  // Re-attach parameter logger per trigger call so each strike is inspected individually
+  for (const [kind, model] of [
+    ['kick', undefined],
+    ['snare', 'acoustic'],
+    ['snare', 'clap'],
+    ['snare', 'brush'],
+    ['snare', 'rim'],
+    ['hihat', 'closedHat'],
+    ['hihat', 'shakerHat'],
+    ['perc', 'shaker'],
+    ['perc', 'rim'],
+    ['perc', 'vinylTick'],
+    ['perc', 'tick808'],
+    ['perc', 'woodblock'],
+  ] as const) {
+    const callLog: Recorded[] = [];
+    let gainSeq = 0;
+    const trackedCtx = {
+      ...ctx,
+      currentTime: 0,
+      createGain: () => fakeNode(callLog, `gain-${gainSeq++}`),
+      createOscillator: () => fakeNode(callLog, 'osc'),
+      createBiquadFilter: () => fakeNode(callLog, 'filter'),
+      createStereoPanner: () => fakeNode(callLog, 'pan'),
+      createWaveShaper: () => fakeNode(callLog, 'shaper'),
+      createBufferSource: () => fakeNode(callLog, 'source'),
+    } as unknown as AudioContext;
+    const synth = new DrumSynth(trackedCtx, fakeNode(callLog, 'out'));
+    const drumParams = { pitch: 52, decay: 0.25, tone: 0.3, drive: 0.35, volume: 0.9, pan: 0, midiNote: 36 };
+    if (kind === 'kick') synth.triggerKick(1, 120, drumParams, 1);
+    else if (kind === 'snare') synth.triggerSnare(1, 120, drumParams, 1, model as any);
+    else if (kind === 'hihat') synth.triggerHiHat(1, 120, drumParams, 1, model as any);
+    else synth.triggerPerc(1, 120, drumParams, 1, model as any);
+
+    // Every saturator must include a 0.25 pre-pad GainNode before the WaveShaper
+    assert.ok(callLog.some(e => e.name.endsWith('.gain.set') && e.args[0] === 0.25), `${kind}/${model}: saturator inserts 0.25 headroom prePad`);
+    // Every amplitude envelope GainNode (one that decays to 0.0001) must start at 0 at t=1 and use linear attack ramps (never step-jump)
+    const envIds = new Set(
+      callLog.filter(e => e.name.endsWith('.gain.exp') && e.args[0] === 0.0001).map(e => e.name.split('.')[0])
+    );
+    assert.ok(envIds.size >= 1, `${kind}/${model}: has at least one amplitude envelope`);
+    for (const id of envIds) {
+      const sets = callLog.filter(e => e.name === `${id}.gain.set`);
+      assert.equal(sets.length, 1, `${kind}/${model}/${id}: no mid-envelope step jumps`);
+      assert.equal(sets[0].args[0], 0, `${kind}/${model}/${id}: starts at zero`);
+      assert.ok(callLog.some(e => e.name === `${id}.gain.linear`), `${kind}/${model}/${id}: attacks via smooth linear ramp`);
+    }
   }
 });

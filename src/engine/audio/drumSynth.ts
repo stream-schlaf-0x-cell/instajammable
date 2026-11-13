@@ -2,17 +2,28 @@
 
 import type { DrumVoiceParams } from '../../types';
 import type { DrumModel } from '../../types/jam';
+import { MasterAudio } from './audioContext';
 
 export class DrumSynth {
   private ctx: AudioContext;
   private outputNode: AudioNode;
   private random: { next(): number };
   private voices = new Set<{ sources: AudioScheduledSourceNode[]; nodes: AudioNode[]; kind: 'kick' | 'snare' | 'hihat' | 'perc' }>();
+  private static satCurves = new Map<number, Float32Array>();
 
   constructor(ctx: AudioContext, outputNode: AudioNode, random: { next(): number } = { next: Math.random }) {
     this.ctx = ctx;
     this.outputNode = outputNode;
     this.random = random;
+  }
+
+  /** Ramps from 0 over ~1ms before decaying so drum transients never create sample-step clicks. */
+  private scheduleStrike(param: AudioParam, start: number, peak: number, end: number, attack = 0.001): void {
+    const clampedPeak = Math.max(0.0002, peak);
+    const attackEnd = Math.min(end - 0.001, start + attack);
+    param.setValueAtTime(0, start);
+    param.linearRampToValueAtTime(clampedPeak, attackEnd);
+    param.exponentialRampToValueAtTime(0.0001, Math.max(attackEnd + 0.002, end));
   }
 
   // Trigger synthesized kick drum
@@ -35,20 +46,19 @@ export class DrumSynth {
     osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.02, time + Math.min(decay * 0.45, 0.075));
     osc.frequency.exponentialRampToValueAtTime(Math.max(22, baseFreq * 0.88), time + decay);
 
-    // Amplitude Envelope with layerVolume scaling (+3 dB kick headroom boost)
-    const peakGain = (params.volume ?? 0.8) * layerVolume * vel * 1.35;
+    // Amplitude Envelope with balanced kick headroom (avoids flat-clipping downstream)
+    const peakGain = (params.volume ?? 0.8) * layerVolume * vel * 1.15;
     gain.gain.setValueAtTime(0, time);
     gain.gain.linearRampToValueAtTime(peakGain, time + 0.003);
     gain.gain.exponentialRampToValueAtTime(0.0001, time + decay);
 
-    // Warm Felt / Wooden Beater Transient (avoids harsh high-frequency digital beep)
+    // Warm Felt / Wooden Beater Transient (avoids harsh high-frequency digital beep or step click)
     const clickOsc = this.ctx.createOscillator();
     const clickGain = this.ctx.createGain();
     clickOsc.type = 'triangle';
     clickOsc.frequency.setValueAtTime(baseFreq * 2.35, time);
     clickOsc.frequency.exponentialRampToValueAtTime(baseFreq * 0.95, time + 0.015);
-    clickGain.gain.setValueAtTime(peakGain * (0.20 + (params.tone ?? 0.5) * 0.34), time);
-    clickGain.gain.exponentialRampToValueAtTime(0.0001, time + 0.015);
+    this.scheduleStrike(clickGain.gain, time, peakGain * (0.20 + (params.tone ?? 0.5) * 0.34), time + 0.016, 0.0012);
 
     clickOsc.connect(clickGain);
     clickGain.connect(gain);
@@ -94,8 +104,8 @@ export class DrumSynth {
       const gain = this.ctx.createGain();
       gain.gain.setValueAtTime(0, time);
       for (const offset of [0, 0.010, 0.022, 0.034]) {
-        gain.gain.setValueAtTime(peakGain * (offset === 0.034 ? 0.95 : 0.72), time + offset);
-        gain.gain.exponentialRampToValueAtTime(peakGain * 0.14, time + offset + 0.008);
+        gain.gain.linearRampToValueAtTime(peakGain * (offset === 0.034 ? 0.95 : 0.72), time + offset + 0.0008);
+        gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, peakGain * 0.14), time + offset + 0.008);
       }
       gain.gain.exponentialRampToValueAtTime(0.0001, time + clapDecay);
       noiseSource.connect(bp);
@@ -147,8 +157,7 @@ export class DrumSynth {
     bodyOsc.frequency.setValueAtTime(basePitch * 1.48, time);
     bodyOsc.frequency.exponentialRampToValueAtTime(basePitch, time + 0.036);
 
-    bodyGain.gain.setValueAtTime(peakGain * (0.88 - tone * 0.30), time);
-    bodyGain.gain.exponentialRampToValueAtTime(0.0001, time + decay * 0.72);
+    this.scheduleStrike(bodyGain.gain, time, peakGain * (0.88 - tone * 0.30), time + decay * 0.72, 0.001);
 
     const rimOsc = this.ctx.createOscillator();
     const rimGain = this.ctx.createGain();
@@ -156,8 +165,7 @@ export class DrumSynth {
     rimOsc.frequency.setValueAtTime(basePitch * 2.12, time);
     rimOsc.frequency.exponentialRampToValueAtTime(basePitch * 1.58, time + 0.024);
     const rimDecay = Math.min(decay * 0.55, 0.065);
-    rimGain.gain.setValueAtTime(peakGain * (0.28 + tone * 0.32), time);
-    rimGain.gain.exponentialRampToValueAtTime(0.0001, time + rimDecay);
+    this.scheduleStrike(rimGain.gain, time, peakGain * (0.28 + tone * 0.32), time + rimDecay, 0.001);
 
     // 2. Dusty Organic Noise Component (Highpass + Warm Analog Lowpass Roll-Off)
     const noiseBuffer = this.generateWhiteNoiseBuffer(decay + 0.05);
@@ -174,8 +182,7 @@ export class DrumSynth {
     noiseLowpass.Q.setValueAtTime(0.65, time);
 
     const noiseGain = this.ctx.createGain();
-    noiseGain.gain.setValueAtTime(peakGain * (0.42 + tone * 0.50), time);
-    noiseGain.gain.exponentialRampToValueAtTime(0.0001, time + decay);
+    this.scheduleStrike(noiseGain.gain, time, peakGain * (0.42 + tone * 0.50), time + decay, 0.001);
 
     noiseSource.connect(noiseFilter);
     noiseFilter.connect(noiseLowpass);
@@ -249,12 +256,11 @@ export class DrumSynth {
     const metalOsc1 = this.ctx.createOscillator();
     const metalOsc2 = this.ctx.createOscillator();
     const metalGain = this.ctx.createGain();
-    metalOsc1.type = 'square';
+    metalOsc1.type = 'triangle';
     metalOsc2.type = 'triangle';
     metalOsc1.frequency.setValueAtTime(2950 + pitchVal * 32, time);
     metalOsc2.frequency.setValueAtTime(4410 + pitchVal * 48, time);
-    metalGain.gain.setValueAtTime(peakGain * (0.05 + toneVal * 0.22), time);
-    metalGain.gain.exponentialRampToValueAtTime(0.0001, time + decay * 0.75);
+    this.scheduleStrike(metalGain.gain, time, peakGain * (0.05 + toneVal * 0.22), time + decay * 0.75, 0.001);
 
     const highpass = this.ctx.createBiquadFilter();
     highpass.type = 'highpass';
@@ -332,7 +338,7 @@ export class DrumSynth {
         const gain = this.ctx.createGain();
         gain.gain.setValueAtTime(0, time);
         gain.gain.linearRampToValueAtTime(peakGain * 0.8, time + 0.008);
-        gain.gain.setValueAtTime(peakGain * 0.8 * 0.35, time + 0.012);
+        gain.gain.linearRampToValueAtTime(peakGain * 0.8 * 0.35, time + 0.012);
         gain.gain.linearRampToValueAtTime(peakGain * 0.28, time + 0.02);
         gain.gain.exponentialRampToValueAtTime(0.0001, time + shDecay);
         src.connect(bp); bp.connect(gain);
@@ -347,14 +353,12 @@ export class DrumSynth {
         osc1.type = 'sine'; osc2.type = 'sine';
         osc1.frequency.setValueAtTime(1700, time);
         osc2.frequency.setValueAtTime(470, time);
-        oscGain.gain.setValueAtTime(peakGain * 0.9, time);
-        oscGain.gain.exponentialRampToValueAtTime(0.0001, time + 0.035);
+        this.scheduleStrike(oscGain.gain, time, peakGain * 0.9, time + 0.035, 0.001);
         const clickBuf = this.generateWhiteNoiseBuffer(0.015);
         const clickSrc = this.ctx.createBufferSource();
         clickSrc.buffer = clickBuf;
         const clickGain = this.ctx.createGain();
-        clickGain.gain.setValueAtTime(peakGain * 0.65, time);
-        clickGain.gain.exponentialRampToValueAtTime(0.0001, time + 0.004);
+        this.scheduleStrike(clickGain.gain, time, peakGain * 0.55, time + 0.006, 0.001);
         const sum = this.ctx.createGain();
         osc1.connect(oscGain); osc2.connect(oscGain); oscGain.connect(sum);
         clickSrc.connect(clickGain); clickGain.connect(sum);
@@ -436,31 +440,29 @@ export class DrumSynth {
         return;
       }
       case 'vinylTick': {
-        const buf = this.generateWhiteNoiseBuffer(0.015);
+        const buf = this.generateWhiteNoiseBuffer(0.02);
         const src = this.ctx.createBufferSource();
         src.buffer = buf;
-        const hp = this.ctx.createBiquadFilter();
-        hp.type = 'highpass'; hp.frequency.setValueAtTime(3000, time);
+        const bp = this.ctx.createBiquadFilter();
+        bp.type = 'bandpass'; bp.frequency.setValueAtTime(2200, time); bp.Q.setValueAtTime(1.1, time);
         const gain = this.ctx.createGain();
-        const randScale = 0.35 + this.random.next() * 0.65;
-        gain.gain.setValueAtTime(peakGain * 0.32 * randScale, time);
-        gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.003);
-        src.connect(hp); hp.connect(gain);
-        src.start(time); src.stop(time + 0.012);
-        routePerc(gain, [src], [hp, gain], src);
+        const randScale = 0.4 + this.random.next() * 0.6;
+        this.scheduleStrike(gain.gain, time, peakGain * 0.24 * randScale, time + 0.008, 0.0015);
+        src.connect(bp); bp.connect(gain);
+        src.start(time); src.stop(time + 0.015);
+        routePerc(gain, [src], [bp, gain], src);
         return;
       }
       case 'tick808': {
         const osc = this.ctx.createOscillator();
         const bp = this.ctx.createBiquadFilter();
         const gain = this.ctx.createGain();
-        osc.type = 'square';
+        osc.type = 'triangle';
         osc.frequency.setValueAtTime(1250 + toneVal * 800, time);
-        bp.type = 'bandpass'; bp.frequency.setValueAtTime(3500, time); bp.Q.setValueAtTime(2.0, time);
-        gain.gain.setValueAtTime(peakGain * 0.68, time);
-        gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.014);
+        bp.type = 'bandpass'; bp.frequency.setValueAtTime(3200, time); bp.Q.setValueAtTime(1.8, time);
+        this.scheduleStrike(gain.gain, time, peakGain * 0.62, time + 0.016, 0.001);
         osc.connect(bp); bp.connect(gain);
-        osc.start(time); osc.stop(time + 0.02);
+        osc.start(time); osc.stop(time + 0.022);
         routePerc(gain, [osc], [bp, gain], osc);
         return;
       }
@@ -520,9 +522,21 @@ export class DrumSynth {
 
   private saturate(input: AudioNode, drive: number): { output: AudioNode; nodes: AudioNode[] } {
     if (!drive || drive <= 0.001 || !this.ctx.createWaveShaper) return { output: input, nodes: [] };
-    const shape = this.ctx.createWaveShaper(); const amount = 1 + Math.max(0, Math.min(1, drive)) * 4; const curve = new Float32Array(256);
-    for (let i = 0; i < curve.length; i++) { const x = i * 2 / (curve.length - 1) - 1; curve[i] = Math.tanh(x * amount) / Math.tanh(amount); }
-    shape.curve = curve; shape.oversample = '2x'; input.connect(shape); return { output: shape, nodes: [shape] };
+    const clamped = Math.max(0, Math.min(1, drive));
+    const bucket = Math.round(clamped * 20);
+    let curve = DrumSynth.satCurves.get(bucket);
+    if (!curve) {
+      curve = MasterAudio.createWideSoftClipCurve(4097, 4.0, 0.28 + (bucket / 20) * 0.68);
+      DrumSynth.satCurves.set(bucket, curve);
+    }
+    const prePad = this.ctx.createGain();
+    prePad.gain.setValueAtTime(0.25, this.ctx.currentTime);
+    const shape = this.ctx.createWaveShaper();
+    shape.curve = curve as Float32Array<ArrayBuffer>;
+    if ('oversample' in shape) shape.oversample = '2x';
+    input.connect(prePad);
+    prePad.connect(shape);
+    return { output: shape, nodes: [prePad, shape] };
   }
   private track(sources: AudioScheduledSourceNode[], nodes: AudioNode[], last: AudioScheduledSourceNode, kind: 'kick' | 'snare' | 'hihat' | 'perc'): void {
     const voice = { sources, nodes, kind };

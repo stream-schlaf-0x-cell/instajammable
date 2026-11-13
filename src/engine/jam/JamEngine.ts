@@ -191,9 +191,9 @@ export function ambientPatch(layer: JamLayer, session: JamSession, beat = 0, cut
   else if (!bass && timbre === 'glass') Object.assign(base, { osc1Wave: 'sine', osc2Wave: 'triangle', osc3Wave: 'sine', detuneSpread: 11, subLevel: 0,
     filterCutoff: clamp(3200 * (1 - warmth * 0.5) * (1 + drift * 0.25), 650, 5200), filterResonance: 0.76, filterEnvAmount: 0.35, attack: 0.6, decay: 1.6, sustain: 0.55, release: 4.5 + session.macros.space * 2,
     lfoRate: 0.07, lfoDepth: 0.08 + movement * 0.08, driftAmount: 0.2, voiceSpread: 0.84, volume: 0.38 });
-  else if (!bass && timbre === 'organ') Object.assign(base, { osc1Wave: 'sine', osc2Wave: 'triangle', osc3Wave: 'square', detuneSpread: 5, subLevel: 0.12,
-    filterCutoff: clamp(1500 * (1 - warmth * 0.45) * (1 + drift * 0.2), 350, 4000), filterResonance: 0.8, filterEnvAmount: 0.1, attack: 0.12, decay: 0.3, sustain: 0.85, release: 1.4 + session.macros.space,
-    lfoRate: 0.12, lfoDepth: 0.08 + movement * 0.08, driftAmount: 0.15, voiceSpread: 0.5, volume: 0.28 });
+  else if (!bass && timbre === 'organ') Object.assign(base, { osc1Wave: 'sine', osc2Wave: 'triangle', osc3Wave: 'triangle', detuneSpread: 5, subLevel: 0.14,
+    filterCutoff: clamp(1600 * (1 - warmth * 0.45) * (1 + drift * 0.2), 350, 4000), filterResonance: 0.78, filterEnvAmount: 0.1, attack: 0.12, decay: 0.3, sustain: 0.85, release: 1.4 + session.macros.space,
+    lfoRate: 0.12, lfoDepth: 0.08 + movement * 0.08, driftAmount: 0.15, voiceSpread: 0.5, volume: 0.32 });
   const useCustomPatch = !timbreOverride || timbreOverride === layer.settings.timbre;
   const patch = useCustomPatch ? mergeAudioPatch(base, layer.settings.audioPatch) : base;
   patch.filterCutoff = clamp(patch.filterCutoff + cutoffOffset, 20, 18000);

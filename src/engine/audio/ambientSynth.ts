@@ -1,4 +1,5 @@
 import type { AmbientSynthParams } from '../../types';
+import { MasterAudio } from './audioContext';
 
 interface Voice {
   id: string; note: number; start: number; releaseAt: number; end: number; sources: OscillatorNode[];
@@ -10,14 +11,7 @@ export class AmbientSynth {
   private static analogCurve: Float32Array | null = null;
   private static getAnalogCurve(): Float32Array {
     if (!this.analogCurve) {
-      const curve = new Float32Array(257);
-      const drive = 1.32;
-      const norm = Math.tanh(drive);
-      for (let i = 0; i < curve.length; i++) {
-        const x = (i * 2) / (curve.length - 1) - 1;
-        curve[i] = Math.tanh(x * drive) / norm;
-      }
-      this.analogCurve = curve;
+      this.analogCurve = MasterAudio.createWideSoftClipCurve(4097, 4.0, 0.52);
     }
     return this.analogCurve;
   }
@@ -73,12 +67,12 @@ export class AmbientSynth {
     const velFilterScale = 0.74 + 0.26 * velNorm;
     const keyTrack = Math.pow(2, Math.max(-0.32, Math.min(0.32, (note - 60) / 54)));
     const baseCutoff = Math.max(20, Math.min(18000, params.filterCutoff * velFilterScale * keyTrack));
-    const requestedAttack = Math.max(0.005, params.attack); const attack = Math.min(duration, requestedAttack); const attackFraction = Math.min(1, duration / requestedAttack);
+    const requestedAttack = Math.max(0.006, params.attack); const attack = Math.min(duration, requestedAttack); const attackFraction = Math.min(1, duration / requestedAttack);
     const userRes = Math.max(0.5, Math.min(15, params.filterResonance));
     const isBass = params.filterCutoff < 980 && params.subLevel >= 0.25 && params.attack < 0.1;
     const filter2Ratio = isBass ? 1.05 : 0.78;
     filter1.type = 'lowpass'; filter1.frequency.setValueAtTime(baseCutoff, time);
-    filter1.Q.setValueAtTime(isBass ? Math.min(2.8, userRes * 0.65) : Math.min(1.35, userRes * 0.48), time);
+    filter1.Q.setValueAtTime(isBass ? Math.min(2.2, userRes * 0.58) : Math.min(1.25, userRes * 0.45), time);
     filter1.frequency.linearRampToValueAtTime(Math.min(18000, baseCutoff * (1 + params.filterEnvAmount * (isBass ? 1.25 : 0.75) * attackFraction)), time + attack);
     filter1.frequency.setTargetAtTime(baseCutoff, time + attack, Math.max(0.18, params.decay));
 
@@ -87,10 +81,14 @@ export class AmbientSynth {
     filter2.frequency.linearRampToValueAtTime(Math.min(18000, baseCutoff * filter2Ratio * (1 + params.filterEnvAmount * (isBass ? 1.15 : 0.65) * attackFraction)), time + attack);
     filter2.frequency.setTargetAtTime(baseCutoff * filter2Ratio, time + attack, Math.max(0.18, params.decay));
     if (this.ctx.createWaveShaper && isBass) {
+      const shaperPre = this.ctx.createGain();
+      shaperPre.gain.setValueAtTime(0.25, time);
       const shaper = this.ctx.createWaveShaper();
       shaper.curve = AmbientSynth.getAnalogCurve() as Float32Array<ArrayBuffer>;
-      nodes.push(shaper);
-      filter1.connect(shaper);
+      if ('oversample' in shaper) shaper.oversample = '2x';
+      nodes.push(shaperPre, shaper);
+      filter1.connect(shaperPre);
+      shaperPre.connect(shaper);
       shaper.connect(filter2);
     } else {
       filter1.connect(filter2);
@@ -98,11 +96,19 @@ export class AmbientSynth {
     const gain = this.ctx.createGain(); nodes.push(gain); filter2.connect(gain);
     const voiceNorm = Math.min(7, Math.max(1, this.maxSoundingVoices));
     const peak = Math.max(0.0001, velNorm * 0.82 / Math.sqrt(voiceNorm));
-    const sustain = Math.max(0.0001, duration < requestedAttack ? peak * attackFraction : peak * params.sustain); const release = Math.max(0.08, Math.min(12, params.release));
+    const attackPeak = Math.max(0.0001, peak * attackFraction);
+    const sustain = Math.max(0.0001, duration < requestedAttack ? attackPeak : peak * params.sustain);
+    const release = Math.max(0.08, Math.min(12, params.release));
     const end = time + duration + release;
-    gain.gain.setValueAtTime(0.0001, time); gain.gain.linearRampToValueAtTime(peak * attackFraction, time + attack);
-    gain.gain.setTargetAtTime(sustain, time + attack, Math.max(0.08, Math.min(duration * 0.45, params.decay)));
-    gain.gain.setValueAtTime(sustain, time + duration); gain.gain.exponentialRampToValueAtTime(0.0001, end);
+    const decayTau = Math.max(0.08, Math.min(duration * 0.45, params.decay));
+    const decayElapsed = Math.max(0, duration - attack);
+    // Compute the exact instantaneous envelope value at note-off so transition to release never step-clicks.
+    const releaseStart = Math.max(0.0001, sustain + (attackPeak - sustain) * Math.exp(-decayElapsed / decayTau));
+    gain.gain.setValueAtTime(0.0001, time); gain.gain.linearRampToValueAtTime(attackPeak, time + attack);
+    if (decayElapsed > 0.0005) {
+      gain.gain.setTargetAtTime(sustain, time + attack, decayTau);
+    }
+    gain.gain.setValueAtTime(releaseStart, time + duration); gain.gain.exponentialRampToValueAtTime(0.0001, end);
     const level = this.ctx.createGain(); nodes.push(level); level.gain.setValueAtTime(Math.max(0, params.volume * layerVolume), time); gain.connect(level);
     const pan = this.ctx.createStereoPanner ? this.ctx.createStereoPanner() : null;
     if (pan) { nodes.push(pan); pan.pan.setValueAtTime(Math.max(-1, Math.min(1, ((note % 12) / 6 - 1) * params.voiceSpread)), time); level.connect(pan); pan.connect(this.outputNode); } else level.connect(this.outputNode);
@@ -111,8 +117,8 @@ export class AmbientSynth {
     const isTinePluck = osc3IntervalCents === 1902;
     const isDualSawPad = !isBass && params.osc1Wave === 'sawtooth' && params.osc2Wave === 'sawtooth';
     const oscWeights = isDualSawPad
-      ? [0.46, 0.21, osc3IntervalCents === 1200 ? 0.18 : 0.22]
-      : [0.54, 0.30, isTinePluck ? 0.14 : osc3IntervalCents === 1200 ? 0.18 : osc3IntervalCents === 702 ? 0.26 : 0.20];
+      ? [0.42, 0.20, osc3IntervalCents === 1200 ? 0.16 : 0.20]
+      : [0.48, 0.27, isTinePluck ? 0.13 : osc3IntervalCents === 1200 ? 0.16 : osc3IntervalCents === 702 ? 0.24 : 0.18];
     const effectiveSpread = isBass ? Math.min(1.8, params.detuneSpread * 0.14) : Math.min(3.4, params.detuneSpread * 0.17);
     const effectiveDrift = params.driftAmount * 1.1;
     [params.osc1Wave, params.osc2Wave, params.osc3Wave].forEach((wave, index) => {
@@ -156,7 +162,7 @@ export class AmbientSynth {
       const keyTrack = Math.pow(2, Math.max(-0.32, Math.min(0.32, (v.note - 60) / 54)));
       const targetCutoff = Math.max(20, Math.min(18000, params.filterCutoff * keyTrack));
       v.filters[0]?.frequency.setTargetAtTime(targetCutoff, now, 0.7);
-      v.filters[0]?.Q.setTargetAtTime(isBass ? Math.min(2.8, userRes * 0.65) : Math.min(1.35, userRes * 0.48), now, 0.15);
+      v.filters[0]?.Q.setTargetAtTime(isBass ? Math.min(2.2, userRes * 0.58) : Math.min(1.25, userRes * 0.45), now, 0.15);
       v.filters[1]?.frequency.setTargetAtTime(Math.min(18000, targetCutoff * filter2Ratio), now, 0.7);
       v.filters[1]?.Q.setTargetAtTime(0.48, now, 0.15);
       v.pan?.pan.setTargetAtTime(Math.max(-1, Math.min(1, ((v.note % 12) / 6 - 1) * params.voiceSpread)), now, 0.2);
@@ -174,8 +180,8 @@ export class AmbientSynth {
         v.lfo = this.ctx.createOscillator(); v.lfoGain = this.ctx.createGain(); v.nodes.push(v.lfoGain); v.lfo.type = 'sine'; v.lfoGain.gain.setValueAtTime(0, now);
         v.lfo.connect(v.lfoGain); v.lfoGain.connect(v.filters[0].frequency); v.lfoGain.connect(v.filters[1].frequency); v.lfo.start(now); v.lfo.stop(v.end + 0.03); v.sources.push(v.lfo);
       }
-      v.lfo?.frequency.setTargetAtTime(Math.max(0.001, params.lfoRate), now, 1);
-      v.lfoGain?.gain.setTargetAtTime(params.lfoRate <= 0 ? 0 : targetCutoff * Math.max(0, Math.min(1, params.lfoDepth)), now, 0.7);
+      v.lfo?.frequency.setTargetAtTime(Math.max(0.001, Math.min(12, params.lfoRate)), now, 1);
+      v.lfoGain?.gain.setTargetAtTime(params.lfoRate <= 0 ? 0 : targetCutoff * Math.max(0, Math.min(0.45, params.lfoDepth * 0.65)), now, 0.7);
     }
   }
   private release(voice: Voice, time: number, duration: number): void {

@@ -1058,7 +1058,7 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
       audioPatch: {
         osc1Wave: 'sine',
         osc2Wave: 'triangle',
-        osc3Wave: 'square',
+        osc3Wave: 'triangle',
         detuneSpread: 6,
         subLevel: 0.24,
         filterCutoff: 1680,

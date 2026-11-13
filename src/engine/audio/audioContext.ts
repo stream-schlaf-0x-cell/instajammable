@@ -7,8 +7,11 @@ export class MasterAudio {
   public preDriveGain: GainNode | null = null;
   public glueComp: DynamicsCompressorNode | null = null;
   public makeupGain: GainNode | null = null;
+  public shaperPreGain: GainNode | null = null;
   public waveShaper: WaveShaperNode | null = null;
   public masterLimiter: DynamicsCompressorNode | null = null;
+  public outputGain: GainNode | null = null;
+  public safetyCeiling: DynamicsCompressorNode | null = null;
   public analyser: AnalyserNode | null = null;
   public streamDest: MediaStreamAudioDestinationNode | null = null;
   private isMuted: boolean = false;
@@ -17,6 +20,22 @@ export class MasterAudio {
   private peakBuffer: Float32Array<ArrayBuffer> | null = null;
 
   private constructor() {}
+
+  /**
+   * Builds a symmetrical, unity-slope wide-headroom soft-clip curve mapped over `[-headroom, +headroom]`.
+   * Pair with a `1 / headroom` pre-gain so hot transients never hit Web Audio's `[-1, 1]` flat wall.
+   */
+  public static createWideSoftClipCurve(samples = 4097, headroom = 4.0, saturation = 0.42): Float32Array {
+    const count = samples % 2 === 1 ? samples : samples + 1;
+    const curve = new Float32Array(count);
+    const sat = Math.max(0.05, saturation);
+    for (let i = 0; i < count; ++i) {
+      const x = (i * 2) / (count - 1) - 1;
+      const u = x * headroom;
+      curve[i] = Math.tanh(u * sat) / sat;
+    }
+    return curve;
+  }
 
   public static volumeToGain(vol: number): number {
     const v = Math.max(0, Math.min(1, Number.isFinite(vol) ? vol : 0));
@@ -53,38 +72,57 @@ export class MasterAudio {
         latencyHint: 'playback',
       });
 
-      // Master Gain (perceptual curve mapped from currentVolume)
+      // Master Bus Input (unity gain; downstream outputGain owns monitoring loudness post-limiting)
       this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.setValueAtTime(MasterAudio.volumeToGain(this.currentVolume), this.ctx.currentTime);
+      this.masterGain.gain.setValueAtTime(1.0, this.ctx.currentTime);
 
-      // Pre-Drive Gain (controlled by masterDrive parameter)
+      // Pre-Drive Gain (controlled gently by masterDrive parameter)
       this.preDriveGain = this.ctx.createGain();
       this.preDriveGain.gain.setValueAtTime(1.0, this.ctx.currentTime);
 
-      // Gentle Bus Glue Compressor
+      // Transparent Bus Glue Compressor (8ms attack catches stacked transients cleanly)
       this.glueComp = this.ctx.createDynamicsCompressor();
-      this.glueComp.threshold.setValueAtTime(-20.0, this.ctx.currentTime);
-      this.glueComp.knee.setValueAtTime(10.0, this.ctx.currentTime);
-      this.glueComp.ratio.setValueAtTime(2.2, this.ctx.currentTime);
-      this.glueComp.attack.setValueAtTime(0.025, this.ctx.currentTime);
-      this.glueComp.release.setValueAtTime(0.28, this.ctx.currentTime);
+      this.glueComp.threshold.setValueAtTime(-16.0, this.ctx.currentTime);
+      this.glueComp.knee.setValueAtTime(8.0, this.ctx.currentTime);
+      this.glueComp.ratio.setValueAtTime(2.4, this.ctx.currentTime);
+      this.glueComp.attack.setValueAtTime(0.008, this.ctx.currentTime);
+      this.glueComp.release.setValueAtTime(0.20, this.ctx.currentTime);
 
-      // Makeup Gain after bus glue
+      // Gentle Makeup Gain before wide-headroom analog saturator
       this.makeupGain = this.ctx.createGain();
-      this.makeupGain.gain.setValueAtTime(1.9, this.ctx.currentTime);
+      this.makeupGain.gain.setValueAtTime(1.42, this.ctx.currentTime);
 
-      // Subtle Analog Soft-Clipping WaveShaper (unity-normalized tanh)
+      // Pre-attenuate by 1/4 before WaveShaper so [-4.0, +4.0] maps inside [-1, +1] with zero flat-clipping
+      this.shaperPreGain = this.ctx.createGain();
+      this.shaperPreGain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+
+      // Smooth Wide-Headroom Analog Saturation WaveShaper
       this.waveShaper = this.ctx.createWaveShaper();
-      this.waveShaper.curve = this.makeSoftClipCurve(44100) as any;
+      this.waveShaper.curve = MasterAudio.createWideSoftClipCurve(44101, 4.0, 0.42) as any;
       this.waveShaper.oversample = '4x';
 
-      // Transparent Peak Safety Limiter
+      // Transparent Peak Mastering Limiter
       this.masterLimiter = this.ctx.createDynamicsCompressor();
-      this.masterLimiter.threshold.setValueAtTime(-1.2, this.ctx.currentTime);
-      this.masterLimiter.knee.setValueAtTime(1.0, this.ctx.currentTime);
-      this.masterLimiter.ratio.setValueAtTime(20.0, this.ctx.currentTime);
-      this.masterLimiter.attack.setValueAtTime(0.002, this.ctx.currentTime);
-      this.masterLimiter.release.setValueAtTime(0.16, this.ctx.currentTime);
+      this.masterLimiter.threshold.setValueAtTime(-2.2, this.ctx.currentTime);
+      this.masterLimiter.knee.setValueAtTime(1.5, this.ctx.currentTime);
+      this.masterLimiter.ratio.setValueAtTime(16.0, this.ctx.currentTime);
+      this.masterLimiter.attack.setValueAtTime(0.0015, this.ctx.currentTime);
+      this.masterLimiter.release.setValueAtTime(0.12, this.ctx.currentTime);
+
+      // Post-limiter user Volume fader so output gain never drives saturation into clipping
+      this.outputGain = this.ctx.createGain();
+      this.outputGain.gain.setValueAtTime(
+        this.isMuted ? 0 : MasterAudio.volumeToGain(this.currentVolume),
+        this.ctx.currentTime
+      );
+
+      // Final DAC Brickwall Ceiling (-0.4 dBFS) prevents hardware clipping even at 100% volume
+      this.safetyCeiling = this.ctx.createDynamicsCompressor();
+      this.safetyCeiling.threshold.setValueAtTime(-0.4, this.ctx.currentTime);
+      this.safetyCeiling.knee.setValueAtTime(0.5, this.ctx.currentTime);
+      this.safetyCeiling.ratio.setValueAtTime(20.0, this.ctx.currentTime);
+      this.safetyCeiling.attack.setValueAtTime(0.001, this.ctx.currentTime);
+      this.safetyCeiling.release.setValueAtTime(0.06, this.ctx.currentTime);
 
       // Realtime Analyser for Visualizer & Peak LED
       this.analyser = this.ctx.createAnalyser();
@@ -95,13 +133,16 @@ export class MasterAudio {
       this.streamDest = this.ctx.createMediaStreamDestination();
 
       // Routing:
-      // masterGain -> preDriveGain -> glueComp -> makeupGain -> waveShaper -> masterLimiter -> analyser -> destination & stream
+      // masterGain -> preDriveGain -> glueComp -> makeupGain -> shaperPreGain -> waveShaper -> masterLimiter -> outputGain -> safetyCeiling -> analyser -> destination & stream
       this.masterGain.connect(this.preDriveGain);
       this.preDriveGain.connect(this.glueComp);
       this.glueComp.connect(this.makeupGain);
-      this.makeupGain.connect(this.waveShaper);
+      this.makeupGain.connect(this.shaperPreGain);
+      this.shaperPreGain.connect(this.waveShaper);
       this.waveShaper.connect(this.masterLimiter);
-      this.masterLimiter.connect(this.analyser);
+      this.masterLimiter.connect(this.outputGain);
+      this.outputGain.connect(this.safetyCeiling);
+      this.safetyCeiling.connect(this.analyser);
       this.analyser.connect(this.ctx.destination);
       this.analyser.connect(this.streamDest);
 
@@ -115,38 +156,26 @@ export class MasterAudio {
     return this.initPromise;
   }
 
-  // S-curve tanh approximation for warm tape-style analog saturation (+2.3 dB small-signal gain, 1.0 ceiling)
-  private makeSoftClipCurve(samples: number): Float32Array {
-    const curve = new Float32Array(samples);
-    const norm = Math.tanh(1.0);
-    for (let i = 0; i < samples; ++i) {
-      const x = (i * 2) / samples - 1;
-      curve[i] = Math.tanh(x * 1.0) / norm;
-    }
-    return curve;
-  }
-
-  // Update analog warmth / master drive parameter
+  // Update analog warmth / master drive parameter without driving the shaper into harsh flat clipping
   public setDrive(drive: number): void {
     if (!this.preDriveGain || !this.ctx) return;
-    // Drive from 1.0 (clean) to 2.8 (warm analog saturation)
-    const clampedDrive = Math.max(0, Math.min(1, drive));
-    const preGain = 1.0 + clampedDrive * 1.8;
+    const clampedDrive = Math.max(0, Math.min(1, Number.isFinite(drive) ? drive : 0));
+    const preGain = 1.0 + clampedDrive * 0.75;
     this.preDriveGain.gain.setTargetAtTime(preGain, this.ctx.currentTime, 0.05);
   }
 
   public setVolume(vol: number): void {
     this.currentVolume = Math.max(0, Math.min(1, vol));
-    if (this.masterGain && this.ctx && !this.isMuted) {
-      this.masterGain.gain.setTargetAtTime(MasterAudio.volumeToGain(this.currentVolume), this.ctx.currentTime, 0.04);
+    if (this.outputGain && this.ctx && !this.isMuted) {
+      this.outputGain.gain.setTargetAtTime(MasterAudio.volumeToGain(this.currentVolume), this.ctx.currentTime, 0.04);
     }
   }
 
   public toggleMute(): boolean {
     this.isMuted = !this.isMuted;
-    if (this.masterGain && this.ctx) {
+    if (this.outputGain && this.ctx) {
       const target = this.isMuted ? 0 : MasterAudio.volumeToGain(this.currentVolume);
-      this.masterGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.02);
+      this.outputGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.02);
     }
     return this.isMuted;
   }

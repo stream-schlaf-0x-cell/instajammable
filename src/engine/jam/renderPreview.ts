@@ -1,4 +1,5 @@
 import { AmbientSynth } from '../audio/ambientSynth';
+import { MasterAudio } from '../audio/audioContext';
 import { DrumSynth } from '../audio/drumSynth';
 import { EffectsRack } from '../audio/effects';
 import { PRNG } from '../prng';
@@ -23,19 +24,19 @@ export async function renderScenePreview(sceneId: string, bars = 4, sampleRate =
   const length = Math.ceil((origin + clip.lengthBeats * secondsPerBeat + tailSeconds) * sampleRate);
   const offline = new OfflineContext(2, length, sampleRate);
   const ctx = offline as unknown as AudioContext;
-  const master = offline.createGain(), drive = offline.createGain();
-  const softClip = offline.createWaveShaper(), limiter = offline.createDynamicsCompressor();
-  master.gain.setValueAtTime(session.volume, 0); drive.gain.setValueAtTime(1, 0);
-  const curve = new Float32Array(44100), degrees = Math.PI / 180;
-  for (let i = 0; i < curve.length; i++) {
-    const x = i * 2 / curve.length - 1;
-    curve[i] = 4.5 * x * 20 * degrees / (Math.PI + 1.5 * Math.abs(x * 20 * degrees));
-  }
-  softClip.curve = curve; softClip.oversample = '2x';
-  limiter.threshold.setValueAtTime(-1, 0); limiter.knee.setValueAtTime(0, 0);
-  limiter.ratio.setValueAtTime(20, 0); limiter.attack.setValueAtTime(0.001, 0); limiter.release.setValueAtTime(0.05, 0);
-  master.connect(drive); drive.connect(softClip); softClip.connect(limiter); limiter.connect(offline.destination);
-  const rack = new EffectsRack(ctx, master, value => drive.gain.setTargetAtTime(1 + Math.max(0, Math.min(1, value)) * 1.8, 0, 0.05));
+  const master = offline.createGain(), drive = offline.createGain(), makeup = offline.createGain();
+  const shaperPre = offline.createGain(), softClip = offline.createWaveShaper();
+  const limiter = offline.createDynamicsCompressor(), output = offline.createGain();
+  master.gain.setValueAtTime(1.0, 0); drive.gain.setValueAtTime(1.0, 0);
+  makeup.gain.setValueAtTime(1.35, 0); shaperPre.gain.setValueAtTime(0.25, 0);
+  softClip.curve = MasterAudio.createWideSoftClipCurve(44101, 4.0, 0.42) as Float32Array<ArrayBuffer>;
+  softClip.oversample = '2x';
+  limiter.threshold.setValueAtTime(-2.2, 0); limiter.knee.setValueAtTime(1.5, 0);
+  limiter.ratio.setValueAtTime(16, 0); limiter.attack.setValueAtTime(0.0015, 0); limiter.release.setValueAtTime(0.12, 0);
+  output.gain.setValueAtTime(MasterAudio.volumeToGain(session.volume), 0);
+  master.connect(drive); drive.connect(makeup); makeup.connect(shaperPre); shaperPre.connect(softClip);
+  softClip.connect(limiter); limiter.connect(output); output.connect(offline.destination);
+  const rack = new EffectsRack(ctx, master, value => drive.gain.setTargetAtTime(1 + Math.max(0, Math.min(1, value)) * 0.75, 0, 0.05));
   rack.updateParams(effectiveEffects(session));
   const random = new Map(session.layers.map(layer => [layer.id, new PRNG(streamSeed(session.seed, `${layer.id}-audio`))]));
   const drumRandom = new PRNG(streamSeed(session.seed, 'drum-audio'));
