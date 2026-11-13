@@ -297,7 +297,7 @@ export function EssentialMasterBar({
             </div>
           )}
 
-          {onViewModeChange && (
+          {onViewModeChange && uiEdition === 'classic' && (
             <div className="console-density-pills" role="group" aria-label="Ansichts-Modus">
               <button
                 type="button"
@@ -333,10 +333,10 @@ export function EssentialMasterBar({
               type="button"
               className="button quiet settings-mgr-pill"
               onClick={onOpenSettings}
-              title="Presets, Backups & Ableton Live Export"
+              title={uiEdition === 'minimal' ? 'Presets, Backups & MIDI Export' : 'Presets, Backups & Ableton Live Export'}
             >
               <FolderDown size={14} />
-              <span>Ableton & Presets</span>
+              <span>{uiEdition === 'minimal' ? 'Presets & Export' : 'Ableton & Presets'}</span>
             </button>
           )}
 
@@ -344,12 +344,12 @@ export function EssentialMasterBar({
             type="button"
             className="button quiet midi-route-pill"
             onClick={onOpenRouting}
-            title="Audio- & MIDI-Ausgangsrouting konfigurieren"
+            title={uiEdition === 'minimal' ? 'Configure Audio & MIDI output routing' : 'Audio- & MIDI-Ausgangsrouting konfigurieren'}
           >
             <Radio size={14} />
             <span>
               {session.outputMode === 'internal'
-                ? 'Audio intern'
+                ? (uiEdition === 'minimal' ? 'Internal Audio' : 'Audio intern')
                 : session.outputMode === 'both'
                   ? 'Audio + MIDI'
                   : 'MIDI'}
@@ -362,8 +362,8 @@ export function EssentialMasterBar({
               type="button"
               className={`record-button ${recording?.isRecording ? 'recording' : ''}`}
               onClick={onRecord}
-              aria-label={recording?.isRecording ? 'Aufnahme stoppen und speichern' : 'Audio aufnehmen'}
-              title="Internes Audio als WAV mitschneiden"
+              aria-label={recording?.isRecording ? (uiEdition === 'minimal' ? 'Stop and save recording' : 'Aufnahme stoppen und speichern') : (uiEdition === 'minimal' ? 'Record audio' : 'Audio aufnehmen')}
+              title={uiEdition === 'minimal' ? 'Record internal audio as WAV' : 'Internes Audio als WAV mitschneiden'}
             >
               <Circle size={12} />
               <span>{recording?.isRecording ? `${recording.durationSec}s` : 'Rec'}</span>
@@ -373,7 +373,9 @@ export function EssentialMasterBar({
           <div className="jam-live-status-pill">
             <span className={`live-pulse-dot ${position.playing ? 'is-running' : ''}`} />
             <span className="live-status-text">
-              {position.playing ? `Takt ${String(position.bar + 1).padStart(3, '0')}` : 'Bereit'}
+              {position.playing
+                ? `${uiEdition === 'minimal' ? 'Bar' : 'Takt'} ${String(position.bar + 1).padStart(3, '0')}`
+                : (uiEdition === 'minimal' ? 'Ready' : 'Bereit')}
             </span>
           </div>
         </div>
@@ -620,33 +622,33 @@ export function EssentialMasterBar({
 
             {/* Pattern, Pace & Dual-Chord B Quick Row */}
             <div className="chord-pattern-pace-row">
-              <label className="mini-chord-pattern-select" title="Generatives Akkordmuster wählen">
-                <span className="mini-label">Muster:</span>
+              <label className="mini-chord-pattern-select" title={uiEdition === 'minimal' ? 'Choose chord pattern' : 'Generatives Akkordmuster wählen'}>
+                <span className="mini-label">{uiEdition === 'minimal' ? 'Pattern:' : 'Muster:'}</span>
                 <select
                   value={currentChordPattern}
                   onChange={e => engine.setChordPattern(e.target.value as ChordPattern)}
-                  aria-label="Akkordmuster"
+                  aria-label={uiEdition === 'minimal' ? 'Chord pattern' : 'Akkordmuster'}
                 >
                   <option value="pad">Pad</option>
                   <option value="wave">Wave</option>
                   <option value="pulse">Pulse</option>
                   <option value="broken">Arp</option>
                   <option value="cluster">Cluster</option>
-                  <option value="euclidean">Euklid</option>
+                  <option value="euclidean">{uiEdition === 'minimal' ? 'Euclid' : 'Euklid'}</option>
                   <option value="syncopated">Sync</option>
                 </select>
               </label>
 
-              <label className="mini-chord-pace-select" title="Harmoniewechsel (Pace)">
-                <span className="mini-label">Takt:</span>
+              <label className="mini-chord-pace-select" title={uiEdition === 'minimal' ? 'Chord change pace' : 'Harmoniewechsel (Pace)'}>
+                <span className="mini-label">{uiEdition === 'minimal' ? 'Pace:' : 'Takt:'}</span>
                 <select
                   value={currentChordPace}
                   onChange={e => engine.setChordPace(e.target.value as ChordPace)}
-                  aria-label="Harmoniewechsel"
+                  aria-label={uiEdition === 'minimal' ? 'Chord pace' : 'Harmoniewechsel'}
                 >
-                  <option value="1-bar">1T</option>
-                  <option value="2-bars">2T</option>
-                  <option value="4-bars">4T</option>
+                  <option value="1-bar">{uiEdition === 'minimal' ? '1B' : '1T'}</option>
+                  <option value="2-bars">{uiEdition === 'minimal' ? '2B' : '2T'}</option>
+                  <option value="4-bars">{uiEdition === 'minimal' ? '4B' : '4T'}</option>
                   <option value="dynamic">Dyn</option>
                 </select>
               </label>
@@ -655,7 +657,7 @@ export function EssentialMasterBar({
                 type="button"
                 className={`mini-reharmonize-btn ${secondaryEnabled ? 'is-active' : ''}`}
                 onClick={() => engine.setSecondaryChord({ enabled: !secondaryEnabled })}
-                title="Dual-Chord Spur B ein-/ausschalten"
+                title={uiEdition === 'minimal' ? 'Toggle Dual-Chord Layer B' : 'Dual-Chord Spur B ein-/ausschalten'}
               >
                 <span>B: {secondaryEnabled ? secondaryTimbre.toUpperCase() : 'OFF'}</span>
               </button>
@@ -663,13 +665,15 @@ export function EssentialMasterBar({
           </div>
 
           <div className="master-next-chord-col">
-            <span className="cell-eyebrow">DANACH</span>
+            <span className="cell-eyebrow">{uiEdition === 'minimal' ? 'NEXT' : 'DANACH'}</span>
             <strong className="next-chord-text">{position.nextChord || '–'}</strong>
             <div className="next-chord-progress-bar">
               <div className="next-chord-fill" style={{ width: `${Math.round(progress * 100)}%` }} />
             </div>
             <span className="next-chord-helper">
-              {position.playing ? `in ${Math.max(1, Math.ceil(position.chordBarsLeft))}T` : 'Bereit'}
+              {position.playing
+                ? `in ${Math.max(1, Math.ceil(position.chordBarsLeft))}${uiEdition === 'minimal' ? 'B' : 'T'}`
+                : (uiEdition === 'minimal' ? 'Ready' : 'Bereit')}
             </span>
           </div>
         </div>
@@ -678,25 +682,27 @@ export function EssentialMasterBar({
         <div className={`essential-cell sequence-cell ${!isSeqActive ? 'is-seq-off' : ''}`}>
           <div className="seq-cell-header">
             <span className="cell-eyebrow">
-              ARRANGEMENT · {isSeqActive ? `#${activeBlockIdx + 1} ${(seq?.currentBlockLabel || currentSection).toUpperCase()}` : 'MANUELL / AUS'}
+              ARRANGEMENT · {isSeqActive ? `#${activeBlockIdx + 1} ${(seq?.currentBlockLabel || currentSection).toUpperCase()}` : (uiEdition === 'minimal' ? 'MANUAL / OFF' : 'MANUELL / AUS')}
             </span>
 
             <div className="seq-header-right">
               {/* Bar duration stepper: always editable */}
-              <div className="seq-bars-mini-stepper" title="Block-Länge in Takten anpassen (aktiviert Sequencer sofort)">
+              <div className="seq-bars-mini-stepper" title={uiEdition === 'minimal' ? 'Adjust block length in bars' : 'Block-Länge in Takten anpassen (aktiviert Sequencer sofort)'}>
                 <button
                   type="button"
                   className="icon-button mini-bar-step-btn"
                   onClick={() => {
                     if (activeBlock) engine.stepBlockBars(activeBlock.id, -1);
                   }}
-                  title="Takte verkürzen (−)"
-                  aria-label="Takte verkürzen"
+                  title={uiEdition === 'minimal' ? 'Shorter (−)' : 'Takte verkürzen (−)'}
+                  aria-label="Shorter"
                 >
                   −
                 </button>
                 <span className="active-bar-badge">
-                  {isSeqActive ? `${blockBarProgress + 1}/${totalBlockBars}T` : `${totalBlockBars}T`}
+                  {isSeqActive
+                    ? `${blockBarProgress + 1}/${totalBlockBars}${uiEdition === 'minimal' ? 'B' : 'T'}`
+                    : `${totalBlockBars}${uiEdition === 'minimal' ? 'B' : 'T'}`}
                 </span>
                 <button
                   type="button"
@@ -794,8 +800,12 @@ export function EssentialMasterBar({
             <div className="seq-next-sub-row">
               <span className="seq-next-cue">
                 {isSeqActive
-                  ? `Nächster Teil: ${nextLabel} (in ${barsUntilNext}T)`
-                  : 'Klicke High / Up / Flow / Down / Low für Sofort-Start'}
+                  ? (uiEdition === 'minimal'
+                    ? `Next section: ${nextLabel} (in ${barsUntilNext}B)`
+                    : `Nächster Teil: ${nextLabel} (in ${barsUntilNext}T)`)
+                  : (uiEdition === 'minimal'
+                    ? 'Click High / Up / Flow / Down / Low to start'
+                    : 'Klicke High / Up / Flow / Down / Low für Sofort-Start')}
               </span>
               <button
                 type="button"
@@ -803,10 +813,10 @@ export function EssentialMasterBar({
                 onClick={() =>
                   engine.jumpToSequenceBlock((activeBlockIdx + 1) % Math.max(1, seqBlocks.length))
                 }
-                title="Sofort zum nächsten Block springen (aktiviert Sequencer)"
+                title={uiEdition === 'minimal' ? 'Jump to next block' : 'Sofort zum nächsten Block springen (aktiviert Sequencer)'}
               >
                 <SkipForward size={11} />
-                <span>Nächster Block</span>
+                <span>{uiEdition === 'minimal' ? 'Next Block' : 'Nächster Block'}</span>
               </button>
             </div>
           </div>
@@ -819,7 +829,7 @@ export function EssentialMasterBar({
               type="button"
               className="master-evolve-btn"
               onClick={handleEvolve}
-              title="Entwickelt Voicings, Grooves und Klangfarben weiter mit automatischer Lautstärke-Stabilisierung"
+              title={uiEdition === 'minimal' ? 'Evolve voicings, grooves and timbres' : 'Entwickelt Voicings, Grooves und Klangfarben weiter mit automatischer Lautstärke-Stabilisierung'}
             >
               <Shuffle size={15} />
               <div className="evolve-btn-txt">
@@ -832,12 +842,12 @@ export function EssentialMasterBar({
               type="button"
               className="master-radical-btn"
               onClick={handleRadical}
-              title="Radical Random: Komplette kreative Neukomposition (Skala, Grundton, Timbres, Rhythmen, Effekte)"
+              title={uiEdition === 'minimal' ? 'Radical Random: generate a fresh key, timbre & groove' : 'Radical Random: Komplette kreative Neukomposition (Skala, Grundton, Timbres, Rhythmen, Effekte)'}
             >
               <Dice5 size={15} />
               <div className="radical-btn-txt">
                 <strong>Radical</strong>
-                <span className="radical-tag">Neu würfeln</span>
+                <span className="radical-tag">{uiEdition === 'minimal' ? 'Re-roll all' : 'Neu würfeln'}</span>
               </div>
             </button>
 
@@ -846,7 +856,7 @@ export function EssentialMasterBar({
                 type="button"
                 className="icon-button master-tool-btn"
                 onClick={() => engine.undo()}
-                title="Rückgängig machen (Undo)"
+                title="Undo"
                 aria-label="Undo"
               >
                 <Undo2 size={14} />
@@ -855,7 +865,7 @@ export function EssentialMasterBar({
                 type="button"
                 className="icon-button master-tool-btn"
                 onClick={() => engine.redo()}
-                title="Wiederholen (Redo)"
+                title="Redo"
                 aria-label="Redo"
               >
                 <Redo2 size={14} />
@@ -868,7 +878,7 @@ export function EssentialMasterBar({
               type="button"
               className="quick-creative-btn chaos-btn"
               onClick={() => engine.applyChaosImpulse()}
-              title="Organischen Timbre-Drift anstoßen"
+              title={uiEdition === 'minimal' ? 'Trigger subtle timbre drift' : 'Organischen Timbre-Drift anstoßen'}
             >
               <Zap size={12} />
               <span>Drift</span>
@@ -877,16 +887,16 @@ export function EssentialMasterBar({
               type="button"
               className="quick-creative-btn drop-btn"
               onClick={() => engine.applyArrangement('spontaneous')}
-              title="Spontaner Arrangement-Wechsel"
+              title={uiEdition === 'minimal' ? 'Spontaneous arrangement turn' : 'Spontaner Arrangement-Wechsel'}
             >
               <Sparkles size={12} />
-              <span>Wendung</span>
+              <span>{uiEdition === 'minimal' ? 'Turn' : 'Wendung'}</span>
             </button>
             <button
               type="button"
               className="quick-creative-btn capture-btn"
               onClick={onCapture}
-              title="Letzte 8 Takte als MIDI-Take festhalten"
+              title={uiEdition === 'minimal' ? 'Capture last 8 bars as MIDI' : 'Letzte 8 Takte als MIDI-Take festhalten'}
             >
               <Circle size={10} />
               <span>Capture MIDI</span>

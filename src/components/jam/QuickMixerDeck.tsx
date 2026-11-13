@@ -7,6 +7,8 @@ import {
   type InstrumentPreset
 } from '../../engine/jam/JamEngine';
 import type { JamPosition, JamSession, LayerRole } from '../../types/jam';
+import { useUiEdition } from '../../contexts/UiEditionContext';
+import { stripArtistRefs } from '../../engine/jam/minimalCatalog';
 
 interface QuickMixerDeckProps {
   session: JamSession;
@@ -25,6 +27,8 @@ const GRID_TICKS = [
 ];
 
 export function QuickMixerDeck({ session }: QuickMixerDeckProps) {
+  const edition = useUiEdition();
+  const isMinimal = edition === 'minimal';
   const layers = session.layers;
   const [activeMenuLayerId, setActiveMenuLayerId] = useState<string | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -108,17 +112,17 @@ export function QuickMixerDeck({ session }: QuickMixerDeckProps) {
     <div className="quick-mixer-deck">
       <div className="mixer-toolbar">
         <div className="mixer-info">
-          <span className="mixer-label">8-KANAL STUDIO-MISCHPULT</span>
-          <span className="mixer-sub">Kreative Instrumenten-Presets, kalibrierte Fader mit dB-Skala, Mute, Solo & Locks</span>
+          <span className="mixer-label">{isMinimal ? '8-CHANNEL STUDIO MIXER' : '8-KANAL STUDIO-MISCHPULT'}</span>
+          <span className="mixer-sub">{isMinimal ? 'Instrument presets, calibrated dB faders, Mute, Solo & Locks' : 'Kreative Instrumenten-Presets, kalibrierte Fader mit dB-Skala, Mute, Solo & Locks'}</span>
         </div>
         <div className="mixer-actions">
-          <button type="button" className="button quiet mixer-action-btn" onClick={unmuteAll} title="Alle Stummschaltungen und Solos aufheben">
+          <button type="button" className="button quiet mixer-action-btn" onClick={unmuteAll} title={isMinimal ? 'Clear all mutes and solos' : 'Alle Stummschaltungen und Solos aufheben'}>
             <Volume2 size={13} />
-            <span>Alle Aktiv</span>
+            <span>{isMinimal ? 'Unmute All' : 'Alle Aktiv'}</span>
           </button>
-          <button type="button" className="button quiet mixer-action-btn" onClick={resetMix} title="Lautstärken auf Studio-Standard ausrichten">
+          <button type="button" className="button quiet mixer-action-btn" onClick={resetMix} title={isMinimal ? 'Reset levels to studio defaults' : 'Lautstärken auf Studio-Standard ausrichten'}>
             <RotateCcw size={13} />
-            <span>Standard-Pegel</span>
+            <span>{isMinimal ? 'Reset Levels' : 'Standard-Pegel'}</span>
           </button>
         </div>
       </div>
@@ -152,8 +156,8 @@ export function QuickMixerDeck({ session }: QuickMixerDeckProps) {
                   type="button"
                   className="strip-preset-nav-btn"
                   onClick={() => cyclePreset(layer.id, -1)}
-                  title="Vorheriges Preset"
-                  aria-label={`${layer.name} vorheriges Preset`}
+                  title={isMinimal ? 'Previous Preset' : 'Vorheriges Preset'}
+                  aria-label={`${layer.name} ${isMinimal ? 'previous preset' : 'vorheriges Preset'}`}
                 >
                   <ChevronLeft size={11} />
                 </button>
@@ -162,11 +166,11 @@ export function QuickMixerDeck({ session }: QuickMixerDeckProps) {
                   type="button"
                   className={`strip-preset-badge ${isMenuOpen ? 'menu-open' : ''}`}
                   onClick={() => setActiveMenuLayerId(isMenuOpen ? null : layer.id)}
-                  title={`Preset: ${activePreset?.name || layer.settings.timbre}. Klicken für Presetauswahl.`}
+                  title={`Preset: ${activePreset ? (isMinimal ? stripArtistRefs(activePreset.name) : activePreset.name) : layer.settings.timbre}. ${isMinimal ? 'Click to choose preset.' : 'Klicken für Presetauswahl.'}`}
                   aria-haspopup="true"
                   aria-expanded={isMenuOpen}
                 >
-                  <span className="strip-preset-title">{activePreset?.name || layer.settings.timbre}</span>
+                  <span className="strip-preset-title">{activePreset ? (isMinimal ? stripArtistRefs(activePreset.name) : activePreset.name) : layer.settings.timbre}</span>
                   <ChevronDown size={9} className="strip-preset-caret" />
                 </button>
 
@@ -174,8 +178,8 @@ export function QuickMixerDeck({ session }: QuickMixerDeckProps) {
                   type="button"
                   className="strip-preset-nav-btn"
                   onClick={() => cyclePreset(layer.id, 1)}
-                  title="Nächstes Preset"
-                  aria-label={`${layer.name} nächstes Preset`}
+                  title={isMinimal ? 'Next Preset' : 'Nächstes Preset'}
+                  aria-label={`${layer.name} ${isMinimal ? 'next preset' : 'nächstes Preset'}`}
                 >
                   <ChevronRight size={11} />
                 </button>
@@ -184,8 +188,8 @@ export function QuickMixerDeck({ session }: QuickMixerDeckProps) {
                   type="button"
                   className="strip-preset-dice-btn"
                   onClick={() => randomizePreset(layer.id)}
-                  title="Zufälliges Preset für diesen Kanal würfeln"
-                  aria-label={`${layer.name} Preset würfeln`}
+                  title={isMinimal ? 'Random preset for this track' : 'Zufälliges Preset für diesen Kanal würfeln'}
+                  aria-label={`${layer.name} ${isMinimal ? 'random preset' : 'Preset würfeln'}`}
                 >
                   <Dices size={11} />
                 </button>
@@ -199,7 +203,7 @@ export function QuickMixerDeck({ session }: QuickMixerDeckProps) {
                         type="button"
                         className="preset-popover-close"
                         onClick={() => setActiveMenuLayerId(null)}
-                        aria-label="Schließen"
+                        aria-label={isMinimal ? 'Close' : 'Schließen'}
                       >
                         <X size={11} />
                       </button>
@@ -213,10 +217,10 @@ export function QuickMixerDeck({ session }: QuickMixerDeckProps) {
                           onClick={() => selectPreset(layer.id, preset.id)}
                         >
                           <div className="preset-item-header">
-                            <span className="preset-item-name">{preset.name}</span>
+                            <span className="preset-item-name">{isMinimal ? stripArtistRefs(preset.name) : preset.name}</span>
                             <span className="preset-item-cat">{preset.category}</span>
                           </div>
-                          <span className="preset-item-desc">{preset.description}</span>
+                          <span className="preset-item-desc">{isMinimal ? stripArtistRefs(preset.description) : preset.description}</span>
                         </button>
                       ))}
                     </div>

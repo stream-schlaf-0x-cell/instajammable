@@ -3,10 +3,14 @@ import { Zap, VolumeX, Flame, Moon, Shuffle, ChevronDown, ChevronUp, ChevronLeft
 import { JamEngine, SOUNDSCAPE_PRESETS, SEQUENCE_TEMPLATES } from '../../engine/jam/JamEngine';
 import { RHYTHM_POOL, type RhythmPreset } from '../../engine/jam/rhythms';
 import type { ArrangementSection, JamPosition, JamSession, MacroName, SequenceBlock, Timbre, ChordPattern, ChordPace, ChordTexture } from '../../types/jam';
+import { useUiEdition } from '../../contexts/UiEditionContext';
+import { stripArtistRefs } from '../../engine/jam/minimalCatalog';
 
 const engine = JamEngine.getInstance();
 
 export function SoundscapeDeck({ session, onClose }: { session: JamSession; position?: JamPosition; onClose?: () => void }) {
+  const edition = useUiEdition();
+  const isMinimal = edition === 'minimal';
   const [matchAtmoWithChords, setMatchAtmoWithChords] = useState(true);
   const chordsLayer = session.layers.find(l => l.role === 'chords');
   const currentChordTimbre = chordsLayer?.settings.timbre || 'wash';
@@ -19,23 +23,23 @@ export function SoundscapeDeck({ session, onClose }: { session: JamSession; posi
   const currentSpace = session.macros.space;
 
   return (
-    <section className="soundscape-block" aria-label="Klangwelt & Streichorchester">
+    <section className="soundscape-block" aria-label={isMinimal ? 'Soundscape & Chords' : 'Klangwelt & Streichorchester'}>
       <header className="soundscape-header">
         <div>
-          <span className="eyebrow">KLANGWELT & DUAL-CHORD ARCHITEKTUR</span>
-          <h2>Akkorde A + B, Hall & Atmosphäre aufeinander abstimmen.</h2>
-          <p className="helper">Zwei harmonisch gekoppelte Akkordspuren (A + B) mit unabhängiger Klangfarbe & Gegenbewegung – inspiriert von CBL, S1gns Of L1fe, Aes Dana, Asura, Kupla & No Spirit.</p>
+          <span className="eyebrow">{isMinimal ? 'SOUNDSCAPE & DUAL-CHORD ARCHITECTURE' : 'KLANGWELT & DUAL-CHORD ARCHITEKTUR'}</span>
+          <h2>{isMinimal ? 'Align Chords A + B, Reverb & Atmosphere.' : 'Akkorde A + B, Hall & Atmosphäre aufeinander abstimmen.'}</h2>
+          <p className="helper">{isMinimal ? 'Two harmonically linked chord layers (A + B) with independent timbre and counter-motion.' : 'Zwei harmonisch gekoppelte Akkordspuren (A + B) mit unabhängiger Klangfarbe & Gegenbewegung – inspiriert von CBL, S1gns Of L1fe, Aes Dana, Asura, Kupla & No Spirit.'}</p>
         </div>
         <div className="header-right-actions">
           <div className="chord-timbre-badge">
             <Music2 size={16} />
             <span>
-              Akkord A: <strong>{currentChordTimbre === 'strings' ? 'Streichorchester' : currentChordTimbre}</strong>
+              {isMinimal ? 'Chord A' : 'Akkord A'}: <strong>{currentChordTimbre === 'strings' ? (isMinimal ? 'String Orchestra' : 'Streichorchester') : currentChordTimbre}</strong>
               {secondaryEnabled && <> + B: <strong>{secondaryTimbre} ({Math.round(secondaryVolume * 100)}%)</strong></>}
             </span>
           </div>
           {onClose && (
-            <button type="button" className="icon-button close-deck-btn" onClick={onClose} title="Deck schließen">
+            <button type="button" className="icon-button close-deck-btn" onClick={onClose} title={isMinimal ? 'Close deck' : 'Deck schließen'}>
               <X size={16} />
             </button>
           )}
@@ -54,15 +58,15 @@ export function SoundscapeDeck({ session, onClose }: { session: JamSession; posi
               onClick={() => engine.applySoundscapePreset(preset.id)}
             >
               <div className="soundscape-card-top">
-                <strong>{preset.name}</strong>
-                <span className="soundscape-hall-pill">Hall {Math.round(preset.hallAmount * 100)}%</span>
+                <strong>{isMinimal ? stripArtistRefs(preset.name) : preset.name}</strong>
+                <span className="soundscape-hall-pill">{isMinimal ? 'Reverb' : 'Hall'} {Math.round(preset.hallAmount * 100)}%</span>
               </div>
-              <span className="soundscape-sub">{preset.subtitle}</span>
-              <p className="soundscape-desc">{preset.description}</p>
+              <span className="soundscape-sub">{isMinimal ? stripArtistRefs(preset.subtitle) : preset.subtitle}</span>
+              <p className="soundscape-desc">{isMinimal ? stripArtistRefs(preset.description) : preset.description}</p>
               <div className="soundscape-tags">
-                {preset.tags.map(t => <span key={t} className="soundscape-tag">{t}</span>)}
+                {preset.tags.map(t => <span key={t} className="soundscape-tag">{isMinimal ? stripArtistRefs(t) : t}</span>)}
               </div>
-              {isActive && <span className="active-dot">Aktiv abgestimmt</span>}
+              {isActive && <span className="active-dot">{isMinimal ? 'Active' : 'Aktiv abgestimmt'}</span>}
             </button>
           );
         })}
@@ -71,53 +75,53 @@ export function SoundscapeDeck({ session, onClose }: { session: JamSession; posi
       {/* Direct Chord, Pattern & Hall Controls */}
       <div className="soundscape-controls-bar">
         <div className="ctrl-group">
-          <label htmlFor="chord-timbre-select">Akkordspur A (Fundament & Hauptklang)</label>
+          <label htmlFor="chord-timbre-select">{isMinimal ? 'Chord Track A (Main Sound)' : 'Akkordspur A (Fundament & Hauptklang)'}</label>
           <select
             id="chord-timbre-select"
             value={currentChordTimbre}
             onChange={e => engine.setChordTimbre(e.target.value as Timbre, matchAtmoWithChords)}
           >
-            <option value="strings">🎻 Großes Streichorchester (Symphonic Bow & Chorus)</option>
-            <option value="solina">🎻 70s Solina Ensemble (Cell Ultimae Ästhetik · BBD Detune)</option>
-            <option value="shimmer">✨ Shimmer Pad (Crystalline Octave Bloom & Stereo Breath)</option>
-            <option value="celeste">🔔 Celesta & Felt Piano (Sanfter Holz- & Glockenanschlag)</option>
-            <option value="wash">🌊 CBL Atmospheric Wash (Breites modulierendes Pad)</option>
-            <option value="glass">💎 Kristallines Glas (Luminöse Obertöne)</option>
-            <option value="keys">☕ Warme Lo-Fi Keys (Rhodes 7th Chords)</option>
-            <option value="air">⛪ Ätherischer Chor & Dom (Luft & Vokale Textur)</option>
-            <option value="dub">🌌 Deep Dub Stabs (Gefiltertes Tape-Echo)</option>
-            <option value="organ">🎹 Sakralorgel (Feierlicher Nachhall)</option>
-            <option value="warm">🎛️ Analoger Synth (Asura / Vangelis Brass-Pad)</option>
+            <option value="strings">{isMinimal ? '🎻 Grand String Orchestra (Symphonic Bow & Chorus)' : '🎻 Großes Streichorchester (Symphonic Bow & Chorus)'}</option>
+            <option value="solina">{isMinimal ? '🎻 70s Solina Ensemble (Warm Analog BBD Detune)' : '🎻 70s Solina Ensemble (Cell Ultimae Ästhetik · BBD Detune)'}</option>
+            <option value="shimmer">{isMinimal ? '✨ Shimmer Pad (Crystalline Octave Bloom)' : '✨ Shimmer Pad (Crystalline Octave Bloom & Stereo Breath)'}</option>
+            <option value="celeste">{isMinimal ? '🔔 Celesta & Felt Piano (Soft Hammer & Bell)' : '🔔 Celesta & Felt Piano (Sanfter Holz- & Glockenanschlag)'}</option>
+            <option value="wash">{isMinimal ? '🌊 Atmospheric Wash (Wide Modulating Pad)' : '🌊 CBL Atmospheric Wash (Breites modulierendes Pad)'}</option>
+            <option value="glass">{isMinimal ? '💎 Crystalline Glass (Luminous Overtones)' : '💎 Kristallines Glas (Luminöse Obertöne)'}</option>
+            <option value="keys">{isMinimal ? '☕ Warm Keys (Electric 7th Chords)' : '☕ Warme Lo-Fi Keys (Rhodes 7th Chords)'}</option>
+            <option value="air">{isMinimal ? '⛪ Ethereal Choir & Air (Vocal Texture)' : '⛪ Ätherischer Chor & Dom (Luft & Vokale Textur)'}</option>
+            <option value="dub">{isMinimal ? '🌌 Deep Dub Stabs (Filtered Tape Echo)' : '🌌 Deep Dub Stabs (Gefiltertes Tape-Echo)'}</option>
+            <option value="organ">{isMinimal ? '🎹 Cathedral Organ (Sustained Warmth)' : '🎹 Sakralorgel (Feierlicher Nachhall)'}</option>
+            <option value="warm">{isMinimal ? '🎛️ Analog Synth (Warm Brass Pad)' : '🎛️ Analoger Synth (Asura / Vangelis Brass-Pad)'}</option>
           </select>
         </div>
 
         <div className="ctrl-group">
-          <label htmlFor="chord-pattern-select">Muster Spur A</label>
+          <label htmlFor="chord-pattern-select">{isMinimal ? 'Pattern Track A' : 'Muster Spur A'}</label>
           <select
             id="chord-pattern-select"
             value={currentChordPattern}
             onChange={e => engine.setChordPattern(e.target.value as ChordPattern)}
           >
-            <option value="pad">🌊 Living Pad (Flächig, rollende Anschläge & feine Antworten)</option>
-            <option value="pulse">⚡ CBL / Jon Hopkins Pulse (3/16 synkopierte rhythmische Impulse)</option>
-            <option value="broken">🎹 Neo-Klassik Arpeggio (Nils Frahm zerlegte Stufenakkorde)</option>
-            <option value="syncopated">🌌 Deep Dub Stabs (Off-Beat Akkordschläge mit Ghost-Hits)</option>
-            <option value="euclidean">📐 Euklidische Rhythmik (Polyrhythmisch hypnotische Impulse)</option>
-            <option value="wave">🌊 Ozeanische Wellen (Zeitlich gestaffelte Voice-Einsätze)</option>
-            <option value="cluster">✨ Schimmerndes Cluster-Gewebe (Polyzyklisch pulsierende Obertöne)</option>
+            <option value="pad">{isMinimal ? '🌊 Living Pad (Sustained & gentle movement)' : '🌊 Living Pad (Flächig, rollende Anschläge & feine Antworten)'}</option>
+            <option value="pulse">{isMinimal ? '⚡ Syncopated Pulse (3/16 rhythmic drive)' : '⚡ CBL / Jon Hopkins Pulse (3/16 synkopierte rhythmische Impulse)'}</option>
+            <option value="broken">{isMinimal ? '🎹 Broken Arpeggio (Stepped chord notes)' : '🎹 Neo-Klassik Arpeggio (Nils Frahm zerlegte Stufenakkorde)'}</option>
+            <option value="syncopated">{isMinimal ? '🌌 Deep Dub Stabs (Off-beat chord hits)' : '🌌 Deep Dub Stabs (Off-Beat Akkordschläge mit Ghost-Hits)'}</option>
+            <option value="euclidean">{isMinimal ? '📐 Euclidean Rhythm (Hypnotic polyrhythm)' : '📐 Euklidische Rhythmik (Polyrhythmisch hypnotische Impulse)'}</option>
+            <option value="wave">{isMinimal ? '🌊 Ocean Waves (Staggered voice entries)' : '🌊 Ozeanische Wellen (Zeitlich gestaffelte Voice-Einsätze)'}</option>
+            <option value="cluster">{isMinimal ? '✨ Shimmer Cluster (Pulsing overtones)' : '✨ Schimmerndes Cluster-Gewebe (Polyzyklisch pulsierende Obertöne)'}</option>
           </select>
         </div>
 
         <div className="ctrl-group">
           <div className="slider-label-row">
-            <label htmlFor="chord-b-timbre-select">Akkordspur B (Ätherischer / Droniger Konterpart)</label>
-            <label className="checkbox-label" title="Zweite harmonisch gekoppelte Akkordspur (Spur B) aktivieren">
+            <label htmlFor="chord-b-timbre-select">{isMinimal ? 'Chord Track B (Counterpart Layer)' : 'Akkordspur B (Ätherischer / Droniger Konterpart)'}</label>
+            <label className="checkbox-label" title={isMinimal ? 'Enable second linked chord track (Track B)' : 'Zweite harmonisch gekoppelte Akkordspur (Spur B) aktivieren'}>
               <input
                 type="checkbox"
                 checked={secondaryEnabled}
                 onChange={e => engine.setSecondaryChord({ enabled: e.target.checked })}
               />
-              <span>Spur B Aktiv</span>
+              <span>{isMinimal ? 'Track B On' : 'Spur B Aktiv'}</span>
             </label>
           </div>
           <select
@@ -126,40 +130,40 @@ export function SoundscapeDeck({ session, onClose }: { session: JamSession; posi
             disabled={!secondaryEnabled}
             onChange={e => engine.setSecondaryChord({ enabled: true, timbre: e.target.value as Timbre })}
           >
-            <option value="shimmer">✨ Shimmer Pad (Ätherischer Oktav-Glanz)</option>
-            <option value="air">⛪ Ätherischer Vokal-Chor (S1gns Of L1fe / Aes Dana)</option>
-            <option value="solina">🎻 70s Solina String-Ensemble (Warmes Band-Ensemble)</option>
-            <option value="wash">🌊 CBL Atmospheric Wash (Tiefes schwebendes Pad)</option>
-            <option value="celeste">🔔 Celesta & Felt Piano (Kupla / No Spirit Glöckchen-Textur)</option>
-            <option value="glass">💎 Kristallines Glas (Feine Obertöne im hohen Register)</option>
-            <option value="strings">🎻 Symphonische Streicher (Breiter Bogen-Teppich)</option>
-            <option value="warm">🎛️ Analoger Synth-Drone (Asura Monolith Brass-Schicht)</option>
-            <option value="organ">🎹 Kathedral-Orgel (Mächtige Quint- & Oktav-Drone)</option>
-            <option value="keys">☕ Rhodes Keys (Sanfte Akkord-Antworten)</option>
-            <option value="dub">🌌 Dub Chord Echo (Synkopierte Filter-Antwort)</option>
+            <option value="shimmer">{isMinimal ? '✨ Shimmer Pad (Octave Glow)' : '✨ Shimmer Pad (Ätherischer Oktav-Glanz)'}</option>
+            <option value="air">{isMinimal ? '⛪ Ethereal Vocal Choir (Airy Pad)' : '⛪ Ätherischer Vokal-Chor (S1gns Of L1fe / Aes Dana)'}</option>
+            <option value="solina">{isMinimal ? '🎻 70s Solina Ensemble (Warm Strings)' : '🎻 70s Solina String-Ensemble (Warmes Band-Ensemble)'}</option>
+            <option value="wash">{isMinimal ? '🌊 Atmospheric Wash (Deep Floating Pad)' : '🌊 CBL Atmospheric Wash (Tiefes schwebendes Pad)'}</option>
+            <option value="celeste">{isMinimal ? '🔔 Celesta & Felt Piano (Soft Bell Texture)' : '🔔 Celesta & Felt Piano (Kupla / No Spirit Glöckchen-Textur)'}</option>
+            <option value="glass">{isMinimal ? '💎 Crystalline Glass (High Overtones)' : '💎 Kristallines Glas (Feine Obertöne im hohen Register)'}</option>
+            <option value="strings">{isMinimal ? '🎻 Symphonic Strings (Wide Bow Layer)' : '🎻 Symphonische Streicher (Breiter Bogen-Teppich)'}</option>
+            <option value="warm">{isMinimal ? '🎛️ Analog Synth Drone (Warm Brass Layer)' : '🎛️ Analoger Synth-Drone (Asura Monolith Brass-Schicht)'}</option>
+            <option value="organ">{isMinimal ? '🎹 Cathedral Organ (Fifth & Octave Drone)' : '🎹 Kathedral-Orgel (Mächtige Quint- & Oktav-Drone)'}</option>
+            <option value="keys">{isMinimal ? '☕ Electric Keys (Soft Chord Replies)' : '☕ Rhodes Keys (Sanfte Akkord-Antworten)'}</option>
+            <option value="dub">{isMinimal ? '🌌 Dub Chord Echo (Syncopated Filter)' : '🌌 Dub Chord Echo (Synkopierte Filter-Antwort)'}</option>
           </select>
         </div>
 
         <div className="ctrl-group">
-          <label htmlFor="chord-b-pattern-select">Gegenbewegung Spur B</label>
+          <label htmlFor="chord-b-pattern-select">{isMinimal ? 'Pattern Track B' : 'Gegenbewegung Spur B'}</label>
           <select
             id="chord-b-pattern-select"
             value={secondaryPattern}
             disabled={!secondaryEnabled}
             onChange={e => engine.setSecondaryChord({ enabled: true, pattern: e.target.value as ChordPattern })}
           >
-            <option value="wave">🌊 Atmende Gegenwelle (Sanft versetztes Aufblühen)</option>
-            <option value="pad">🕊️ Ätherischer Kathedral-Teppich (Langer Oberton-Bogen)</option>
-            <option value="broken">🎹 Zarte Arpeggio-Tropfen (Versetzte Einzelnoten)</option>
-            <option value="pulse">⚡ Polyrhythmischer Gegen-Puls (CBL / Aes Dana Drift)</option>
-            <option value="cluster">✨ Schimmer-Cluster (Hohe schwebende Voicings)</option>
+            <option value="wave">{isMinimal ? '🌊 Breathing Wave (Gentle swell)' : '🌊 Atmende Gegenwelle (Sanft versetztes Aufblühen)'}</option>
+            <option value="pad">{isMinimal ? '🕊️ Cathedral Pad (Long overtone arc)' : '🕊️ Ätherischer Kathedral-Teppich (Langer Oberton-Bogen)'}</option>
+            <option value="broken">{isMinimal ? '🎹 Delicate Arpeggio Drops (Offset notes)' : '🎹 Zarte Arpeggio-Tropfen (Versetzte Einzelnoten)'}</option>
+            <option value="pulse">{isMinimal ? '⚡ Polyrhythmic Counter-Pulse (Subtle drift)' : '⚡ Polyrhythmischer Gegen-Puls (CBL / Aes Dana Drift)'}</option>
+            <option value="cluster">{isMinimal ? '✨ Shimmer Cluster (Floating high voicings)' : '✨ Schimmer-Cluster (Hohe schwebende Voicings)'}</option>
           </select>
         </div>
 
         <div className="ctrl-group hall-slider-group">
           <div className="slider-label-row">
-            <label htmlFor="chord-b-volume-slider">Dual-Chord Mixer (Spur B Pegel)</label>
-            <output>{secondaryEnabled ? `${Math.round(secondaryVolume * 100)}%` : 'Aus'}</output>
+            <label htmlFor="chord-b-volume-slider">{isMinimal ? 'Dual-Chord Mix (Track B Level)' : 'Dual-Chord Mixer (Spur B Pegel)'}</label>
+            <output>{secondaryEnabled ? `${Math.round(secondaryVolume * 100)}%` : (isMinimal ? 'Off' : 'Aus')}</output>
           </div>
           <input
             id="chord-b-volume-slider"
@@ -174,16 +178,16 @@ export function SoundscapeDeck({ session, onClose }: { session: JamSession; posi
         </div>
 
         <div className="ctrl-group">
-          <label htmlFor="chord-pace-select">Harmoniewechsel (Pace)</label>
+          <label htmlFor="chord-pace-select">{isMinimal ? 'Harmony Pace' : 'Harmoniewechsel (Pace)'}</label>
           <select
             id="chord-pace-select"
             value={currentChordPace}
             onChange={e => engine.setChordPace(e.target.value as ChordPace)}
           >
-            <option value="1-bar">⚡ Jeden Takt (Schnell & lebendig)</option>
-            <option value="2-bars">🌿 Alle 2 Takte (Atmendes Wohlfühltempo)</option>
-            <option value="4-bars">🌌 Alle 4 Takte (Episch getragen)</option>
-            <option value="dynamic">🌊 Dynamisch fließend</option>
+            <option value="1-bar">{isMinimal ? '⚡ Every Bar (Fast & lively)' : '⚡ Jeden Takt (Schnell & lebendig)'}</option>
+            <option value="2-bars">{isMinimal ? '🌿 Every 2 Bars (Balanced pace)' : '🌿 Alle 2 Takte (Atmendes Wohlfühltempo)'}</option>
+            <option value="4-bars">{isMinimal ? '🌌 Every 4 Bars (Spacious & deep)' : '🌌 Alle 4 Takte (Episch getragen)'}</option>
+            <option value="dynamic">{isMinimal ? '🌊 Dynamic Flow' : '🌊 Dynamisch fließend'}</option>
           </select>
         </div>
 
