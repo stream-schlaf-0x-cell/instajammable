@@ -174,8 +174,8 @@ export class EffectsRack {
       output.connect(airSmooth);
       return airSmooth;
     };
-    const left = diffuseChannel(bank(REVERB_BANK_LEFT), 0.0051);
-    const right = diffuseChannel(bank(REVERB_BANK_RIGHT), 0.0017);
+    const left = diffuseChannel(bank(REVERB_BANK_LEFT), 0.0053);
+    const right = diffuseChannel(bank(REVERB_BANK_RIGHT), 0.0037);
     if (ctx.createStereoPanner) {
       const panLeft = this.keep(ctx.createStereoPanner()), panRight = this.keep(ctx.createStereoPanner());
       const crossLR = this.keep(ctx.createGain()), crossRL = this.keep(ctx.createGain());

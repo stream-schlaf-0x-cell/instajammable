@@ -409,3 +409,51 @@ test('DrumSynth uses click-free attack ramps on every voice model and wide-headr
     }
   }
 });
+
+test('AmbientSynth anchors instantaneous amplitude on cancelScheduledValues and protects attack filter ramps', () => {
+  const log: Recorded[] = [];
+  const ctx = fakeContext(log);
+  const synth = new AmbientSynth(ctx, fakeNode(log, 'out'), 1, 2);
+  const params = {
+    osc1Wave: 'sawtooth', osc2Wave: 'triangle', osc3Wave: 'sine',
+    detuneSpread: 4, subLevel: 0.3, filterCutoff: 600, filterResonance: 2, filterEnvAmount: 0.8,
+    attack: 1.0, decay: 1.0, sustain: 0.7, release: 2.0,
+    lfoRate: 0.2, lfoDepth: 0.3, driftAmount: 0, voiceSpread: 0.3, volume: 0.8, rootNote: 48, scale: 'dorian',
+  } as any;
+
+  // Trigger a voice at t=0 (1s linear attack)
+  ctx.currentTime = 0;
+  synth.triggerNote(0, 48, 100, 4.0, params);
+
+  // Mid-attack updateParams at t=0.25 must not clobber filter attack ramp (scheduled >= attackEnd=1.0)
+  log.length = 0;
+  ctx.currentTime = 0.25;
+  synth.updateParams({ ...params, filterCutoff: 1400 });
+  const filterTargets = log.filter(e => e.name === 'filter.frequency.target');
+  assert.ok(filterTargets.length === 2 && filterTargets.every(e => e.args[1] >= 1.0), 'updateParams schedules filter sweeps at or after attackEnd');
+
+  // Voice-stealing at t=0.5 (halfway through 1s attack) must anchor exact current gain before setTargetAtTime
+  log.length = 0;
+  ctx.currentTime = 0.5;
+  synth.triggerNote(0.5, 55, 100, 2.0, params);
+  const stolenCancelIdx = log.findIndex(e => e.name === 'gain.gain.cancel' && e.args[0] === 0.5);
+  assert.ok(stolenCancelIdx !== -1, 'stolen voice cancels scheduled gain events at theft time');
+  const nextEvent = log[stolenCancelIdx + 1];
+  assert.equal(nextEvent?.name, 'gain.gain.set', 'immediately anchors instantaneous amplitude at cancel time');
+  assert.equal(nextEvent?.args[1], 0.5);
+  assert.ok(nextEvent.args[0] > 0.2 && nextEvent.args[0] < 0.7, `anchored gain (${nextEvent.args[0]}) reflects mid-attack amplitude`);
+  const afterAnchor = log[stolenCancelIdx + 2];
+  assert.equal(afterAnchor?.name, 'gain.gain.target', 'exponential fade follows anchored setValueAtTime');
+  assert.ok(log.slice(stolenCancelIdx).some(e => e.name === 'gain.gain.linear' && e.args[0] === 0), 'reaches zero before source stop');
+
+  // Re-usable DrumSynth noise buffer avoids re-allocating AudioBuffers on every drum strike
+  const { ctx: drumCtx, buffers } = bufferContext([]);
+  drumCtx.sampleRate = 44100;
+  const drumSynth = new DrumSynth(drumCtx, fakeNode([], 'out'));
+  const dp = { pitch: 52, decay: 0.25, tone: 0.4, drive: 0.3, volume: 0.8, pan: 0, midiNote: 38 };
+  for (let i = 0; i < 6; i++) {
+    drumSynth.triggerSnare(i * 0.25, 110, dp, 1, 'clap');
+    drumSynth.triggerHiHat(i * 0.25 + 0.125, 90, dp, 1, 'closedHat');
+  }
+  assert.equal(buffers.length, 1, 'repeated drum hits share a single cached white noise buffer per sample rate');
+});

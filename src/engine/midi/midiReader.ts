@@ -32,7 +32,7 @@ export class MidiFileReader {
     let eventCount = 0;
     const warnings: string[] = [];
     let warningCount = 0;
-    const warn = (message: string) => { warningCount++; if (warnings.length < 120) warn(message); };
+    const warn = (message: string) => { warningCount++; if (warnings.length < 120) warnings.push(message); };
     const fail = (message: string): never => { throw new Error(`Invalid MIDI at byte ${offset}: ${message}`); };
     const requireBytes = (count: number) => {
       if (count < 0 || offset + count > limit) fail('truncated event or chunk.');

@@ -1,6 +1,13 @@
-import { Sparkles, Dice5, Volume2, LockKeyhole, Snowflake, SkipForward } from 'lucide-react';
+import { Sparkles, Dice5, Dices, Volume2, LockKeyhole, Snowflake, SkipForward } from 'lucide-react';
 import { JamEngine, SCENES } from '../../engine/jam/JamEngine';
-import { getSceneDisplay, MINIMAL_MACROS } from '../../engine/jam/minimalCatalog';
+import { getInstrumentPresets, detectActiveInstrumentPreset } from '../../engine/jam/instrumentPresets';
+import {
+  getSceneDisplay,
+  MINIMAL_MACROS,
+  getInstrumentPresetDisplay,
+  getTimbreDisplayName,
+  getDrumModelDisplayName,
+} from '../../engine/jam/minimalCatalog';
 import { SoundscapeDeck, SequencerDeck, RhythmPoolDeck } from '../jam/ArrangementHub';
 import { EqualizerDeck } from '../jam/EqualizerDeck';
 import { EffectChainDeck } from '../jam/EffectChainDeck';
@@ -32,6 +39,69 @@ const CLASSIC_MACROS: Record<MacroName, { name: string; text: string }> = {
   space: { name: 'Raum', text: 'Weite, Delay und Nachklang.' },
 };
 
+export function ChordBarStepMeter({
+  position,
+  edition,
+}: {
+  position: JamPosition;
+  edition: UiEdition;
+}) {
+  const min = edition === 'minimal';
+  const holdBars = Math.max(1, Math.round(position.chordHoldBars || 4));
+  const rawLeft = Number.isFinite(position.chordBarsLeft) ? position.chordBarsLeft : holdBars;
+  const elapsedBars = position.playing
+    ? Math.max(0, Math.min(holdBars - 0.0001, holdBars - rawLeft))
+    : 0;
+  const currentBarInChord = position.playing ? Math.min(holdBars, Math.floor(elapsedBars) + 1) : 1;
+  const barFillPct = position.playing ? Math.round((elapsedBars - Math.floor(elapsedBars)) * 100) : 0;
+  const stepInBar = position.playing ? ((Math.floor(position.beat * 4) % 16) + 16) % 16 : 0;
+  const beatInBar = Math.floor(stepInBar / 4);
+
+  return (
+    <div className="harmony-meter-wrap">
+      <div className="harmony-segmented-bars" aria-hidden="true">
+        {Array.from({ length: holdBars }, (_, idx) => {
+          const fillPct = !position.playing
+            ? 0
+            : idx < currentBarInChord - 1
+              ? 100
+              : idx === currentBarInChord - 1
+                ? barFillPct
+                : 0;
+          const isCurrent = position.playing && idx === currentBarInChord - 1;
+          return (
+            <div key={idx} className={`harmony-bar-seg ${isCurrent ? 'is-current' : ''}`}>
+              <div className="harmony-bar-seg-fill" style={{ width: `${fillPct}%` }} />
+            </div>
+          );
+        })}
+      </div>
+      <div className="harmony-step-strip" aria-hidden="true">
+        {Array.from({ length: 16 }, (_, idx) => {
+          const isBeatStart = idx % 4 === 0;
+          const isNow = position.playing && idx === stepInBar;
+          const isPassed = position.playing && idx < stepInBar;
+          return (
+            <span
+              key={idx}
+              className={`harmony-step-dot ${isBeatStart ? 'is-beat-start' : ''} ${isNow ? 'is-step-now' : ''} ${isPassed ? 'is-step-passed' : ''}`}
+            />
+          );
+        })}
+      </div>
+      <span className="harmony-submeta">
+        {position.playing
+          ? (min
+              ? `Bar ${currentBarInChord}/${holdBars} · Beat ${beatInBar + 1}/4 · Step ${String(stepInBar + 1).padStart(2, '0')}/16`
+              : `Takt ${currentBarInChord}/${holdBars} · Schlag ${beatInBar + 1}/4 · Step ${String(stepInBar + 1).padStart(2, '0')}/16`)
+          : (min
+              ? `${holdBars} ${holdBars === 1 ? 'bar' : 'bars'} · Ready`
+              : `${holdBars} ${holdBars === 1 ? 'Takt' : 'Takte'} · Bereit`)}
+      </span>
+    </div>
+  );
+}
+
 export function HarmonyHeroCard({
   session,
   position,
@@ -46,8 +116,6 @@ export function HarmonyHeroCard({
   const min = edition === 'minimal';
   const scene = SCENES.find(s => s.id === session.sceneId) || SCENES[0];
   const sceneMeta = getSceneDisplay(scene, edition);
-  const holdBars = position.chordHoldBars || 4;
-  const progress = holdBars ? Math.max(0, Math.min(1, 1 - position.chordBarsLeft / holdBars)) : 0;
 
   return (
     <section className={`plugin-card harmony-hero-card ${compact ? 'is-compact' : ''}`} aria-label={min ? 'Harmony & Tempo' : 'Harmonie & Tempo'}>
@@ -82,12 +150,7 @@ export function HarmonyHeroCard({
         <div className="harmony-now-block">
           <span className="harmony-tag">{min ? 'CURRENT CHORD' : 'AKTUELLER AKKORD'}</span>
           <strong className="harmony-chord-big">{position.chord || `${pitch(session.root)} ${session.scale}`}</strong>
-          <div className="harmony-progress-track" aria-hidden="true">
-            <div className="harmony-progress-fill" style={{ width: `${Math.round(progress * 100)}%` }} />
-          </div>
-          <span className="harmony-submeta">
-            {min ? `${position.chordBarsLeft} bars left` : `noch ${position.chordBarsLeft} Takte`}
-          </span>
+          <ChordBarStepMeter position={position} edition={edition} />
         </div>
 
         <div className="harmony-next-block">
@@ -110,11 +173,11 @@ export function HarmonyHeroCard({
           <span>{min ? 'Key' : 'Grundton'}</span>
           <select
             aria-label={min ? 'Root Key' : 'Grundton'}
-            value={session.root}
-            onChange={e => engine.transposeRoot(Number(e.target.value))}
+            value={((session.root % 12) + 12) % 12}
+            onChange={e => engine.setRoot(Math.floor(session.root / 12) * 12 + Number(e.target.value))}
           >
-            {Array.from({ length: 12 }, (_, i) => 43 + i).map(midi => (
-              <option key={midi} value={midi}>{pitch(midi)}</option>
+            {Array.from({ length: 12 }, (_, pc) => (
+              <option key={pc} value={pc}>{pitch(pc)}</option>
             ))}
           </select>
         </label>
@@ -212,6 +275,11 @@ export function CompactTrackMatrix({
     <div className="compact-track-matrix" role="list" aria-label={min ? 'Tracks' : 'Spuren'}>
       {session.layers.map((layer: JamLayer) => {
         const selected = selectedLayerId === layer.id;
+        const presets = getInstrumentPresets(layer.role, layer.drumVoice);
+        const activePreset = detectActiveInstrumentPreset(layer);
+        const fallbackLabel = layer.role === 'drum'
+          ? getDrumModelDisplayName(layer.settings.drumModel || layer.drumVoice, edition)
+          : getTimbreDisplayName(layer.settings.timbre, edition);
         return (
           <div
             key={layer.id}
@@ -224,6 +292,15 @@ export function CompactTrackMatrix({
               <span className="track-led" />
               <strong className="compact-track-name">{layer.name}</strong>
               <div className="compact-track-btns">
+                <button
+                  type="button"
+                  className="mini-toggle mini-dice-btn"
+                  onClick={e => { e.stopPropagation(); engine.randomizeInstrumentPreset(layer.id); }}
+                  title={min ? 'Randomize track instrument' : 'Instrument für diese Spur würfeln'}
+                  aria-label={`${layer.name} ${min ? 'random instrument' : 'Instrument würfeln'}`}
+                >
+                  <Dices size={12} />
+                </button>
                 <button
                   type="button"
                   className={`mini-toggle ${layer.muted ? 'is-active-mute' : ''}`}
@@ -243,6 +320,25 @@ export function CompactTrackMatrix({
                 {layer.locked && <LockKeyhole size={11} className="track-flag-icon" />}
                 {layer.frozen && <Snowflake size={11} className="track-flag-icon" />}
               </div>
+            </div>
+            <div className="compact-track-preset-row" onClick={e => e.stopPropagation()}>
+              <select
+                className="compact-track-preset-select"
+                aria-label={`${layer.name} ${min ? 'instrument preset' : 'Instrumenten-Preset'}`}
+                value={activePreset?.id || ''}
+                onChange={e => {
+                  if (e.target.value) engine.applyInstrumentPreset(layer.id, e.target.value);
+                }}
+              >
+                {!activePreset && (
+                  <option value="">{fallbackLabel}</option>
+                )}
+                {presets.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {getInstrumentPresetDisplay(p, edition).name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="compact-track-vol">
               <Volume2 size={12} />
@@ -276,14 +372,22 @@ export function ToolDrawerContent({
   tool: ToolId;
   session: JamSession;
   position: JamPosition;
-  onClose: () => void;
+  onClose?: () => void;
 }) {
   if (tool === 'soundscape') return <SoundscapeDeck session={session} position={position} onClose={onClose} />;
   if (tool === 'sequencer') return <SequencerDeck session={session} position={position} onClose={onClose} />;
   if (tool === 'rhythms') return <RhythmPoolDeck session={session} position={position} onClose={onClose} />;
   if (tool === 'eq') return <EqualizerDeck session={session} onClose={onClose} />;
   if (tool === 'fxchain') return <EffectChainDeck session={session} />;
-  if (tool === 'chaos') return <ChaosModulatorDeck session={session} enabled={true} onToggleEnabled={() => {}} />;
+  if (tool === 'chaos') {
+    return (
+      <ChaosModulatorDeck
+        session={session}
+        enabled={!!session.chaosEnabled}
+        onToggleEnabled={next => engine.setChaosEnabled(next)}
+      />
+    );
+  }
   if (tool === 'atmosphere') return <AtmosphereFlow session={session} />;
-  return <CustomMacroDeck session={session} />;
+  return <CustomMacroDeck session={session} enabled={session.customMacrosEnabled !== false} />;
 }

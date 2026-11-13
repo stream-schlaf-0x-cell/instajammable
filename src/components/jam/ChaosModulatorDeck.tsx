@@ -2,15 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { Sparkles, Zap, Compass, RefreshCw } from 'lucide-react';
 import { JamEngine } from '../../engine/jam/JamEngine';
 import { useUiEdition } from '../../contexts/UiEditionContext';
-import type { JamSession } from '../../types/jam';
+import type { ChaosMode, JamSession } from '../../types/jam';
 
 const engine = JamEngine.getInstance();
 
-type DriftMode = 'manual' | 'calm' | 'pulse' | 'wild';
-
 export function ChaosModulatorDeck({
   session,
-  enabled = true,
+  enabled = false,
   onToggleEnabled,
 }: {
   session: JamSession;
@@ -19,21 +17,25 @@ export function ChaosModulatorDeck({
 }) {
   const uiEdition = useUiEdition();
   const isMinimal = uiEdition === 'minimal';
-  const [driftMode, setDriftMode] = useState<DriftMode>('calm');
+  const driftMode: ChaosMode = session.chaosMode || 'calm';
   const [isDragging, setIsDragging] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animFrame = useRef<number | null>(null);
 
-  // Position state (0..1)
+  // Smooth visual puck state (0..1) following engine macros
   const posRef = useRef({
     x: session.macros.movement,
     y: session.macros.space,
   });
+  const targetRef = useRef({
+    x: session.macros.movement,
+    y: session.macros.space,
+  });
+  targetRef.current = { x: session.macros.movement, y: session.macros.space };
 
   const trailsRef = useRef<Array<{ x: number; y: number; alpha: number }>>([]);
-  const phaseRef = useRef(0);
 
-  // Animation loop for organic drift and trail rendering
+  // Smooth trail & cursor canvas loop (background stepping lives in App + JamEngine)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -43,25 +45,13 @@ export function ChaosModulatorDeck({
     let lastTime = performance.now();
 
     const loop = (now: number) => {
-      const dt = (now - lastTime) / 1000;
+      const dt = Math.min(0.05, Math.max(0, (now - lastTime) / 1000));
       lastTime = now;
 
-      // Update position if enabled, auto-drifting, and not manually dragging
-      if (enabled && !isDragging && driftMode !== 'manual') {
-        const speed = driftMode === 'calm' ? 0.35 : driftMode === 'pulse' ? 0.8 : 1.7;
-        phaseRef.current += dt * speed;
-
-        // Two harmonic non-integer oscillators for smooth, never-repeating quasi-chaotic trajectory
-        const t = phaseRef.current;
-        const targetX = 0.5 + 0.38 * Math.sin(t * 1.1) + 0.12 * Math.cos(t * 2.7);
-        const targetY = 0.5 + 0.38 * Math.cos(t * 0.9) + 0.12 * Math.sin(t * 2.3);
-
-        const current = posRef.current;
-        const lerp = Math.min(1, dt * 2.5);
-        current.x += (targetX - current.x) * lerp;
-        current.y += (targetY - current.y) * lerp;
-
-        engine.setChaosDrift(current.x, current.y);
+      if (!isDragging) {
+        const lerp = Math.min(1, dt * 10);
+        posRef.current.x += (targetRef.current.x - posRef.current.x) * lerp;
+        posRef.current.y += (targetRef.current.y - posRef.current.y) * lerp;
       }
 
       // Record trail
@@ -125,47 +115,55 @@ export function ChaosModulatorDeck({
 
     return () => {
       if (animFrame.current) cancelAnimationFrame(animFrame.current);
+      engine.setChaosDragging(false);
     };
-  }, [driftMode, isDragging, enabled]);
+  }, [isDragging]);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    engine.setChaosDragging(true);
     if (!enabled && onToggleEnabled) onToggleEnabled(true);
     setIsDragging(true);
-    updateFromPointer(e);
+    updateFromPointer(e, true);
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!isDragging) return;
-    updateFromPointer(e);
+    updateFromPointer(e, false);
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    engine.setChaosDragging(false);
     setIsDragging(false);
+    engine.setChaosDrift(posRef.current.x, posRef.current.y, true);
   };
 
-  const updateFromPointer = (e: React.PointerEvent<HTMLCanvasElement>) => {
+  const updateFromPointer = (e: React.PointerEvent<HTMLCanvasElement>, forceNotify = false) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
     const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
     posRef.current = { x, y };
-    engine.setChaosDrift(x, y);
+    engine.setChaosDrift(x, y, forceNotify);
   };
 
   const handleSpontaneousPulse = () => {
     if (!enabled && onToggleEnabled) onToggleEnabled(true);
     engine.applyChaosImpulse();
-    // Jolt visual position
+    const latest = engine.getState().macros;
     posRef.current = {
-      x: session.macros.movement,
-      y: session.macros.space,
+      x: latest.movement,
+      y: latest.space,
     };
   };
 
-  const selectMode = (mode: DriftMode) => {
-    if (!enabled && onToggleEnabled) onToggleEnabled(true);
-    setDriftMode(mode);
+  const selectMode = (mode: ChaosMode) => {
+    engine.setChaosMode(mode);
   };
 
   return (

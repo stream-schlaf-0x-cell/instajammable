@@ -689,18 +689,27 @@ export function SpontaneousArrangementDeck({ position, onClose }: { session?: Ja
   );
 }
 
-export function RhythmPoolDeck({ onClose }: { session?: JamSession; position?: JamPosition; onClose?: () => void }) {
+export function RhythmPoolDeck({ session, onClose }: { session?: JamSession; position?: JamPosition; onClose?: () => void }) {
   const edition = useUiEdition();
   const isMinimal = edition === 'minimal';
-  const [selectedRhythm, setSelectedRhythm] = useState<RhythmPreset>(RHYTHM_POOL[0]);
+  const [fallbackRhythmId, setFallbackRhythmId] = useState<string>(RHYTHM_POOL[0].id);
+
+  const activeRhythm = session
+    ? RHYTHM_POOL.find(preset => (['kick', 'snare', 'hihat', 'perc'] as const).every(voice => {
+        const spec = preset.drumLayers[voice];
+        if (!spec) return true;
+        const layer = session.layers.find(l => l.id === voice);
+        return !!layer && layer.settings.rhythmAlgorithm === spec.rhythmAlgorithm && !!layer.muted === !!spec.muted;
+      }))
+    : RHYTHM_POOL.find(p => p.id === fallbackRhythmId);
 
   const chooseRhythm = (preset: RhythmPreset) => {
-    setSelectedRhythm(preset);
+    setFallbackRhythmId(preset.id);
     engine.applyRhythmPreset(preset.id);
   };
 
   const randomRhythm = () => {
-    const others = RHYTHM_POOL.filter(p => p.id !== selectedRhythm.id);
+    const others = RHYTHM_POOL.filter(p => p.id !== activeRhythm?.id);
     const pick = others[Math.floor(Math.random() * others.length)] || RHYTHM_POOL[0];
     chooseRhythm(pick);
   };
@@ -727,7 +736,7 @@ export function RhythmPoolDeck({ onClose }: { session?: JamSession; position?: J
 
       <div className="rhythm-grid">
         {RHYTHM_POOL.map(preset => {
-          const isSelected = selectedRhythm.id === preset.id;
+          const isSelected = activeRhythm?.id === preset.id;
           const disp = getRhythmDisplay(preset, edition);
           return (
             <button

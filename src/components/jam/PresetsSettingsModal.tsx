@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
   X,
   Download,
@@ -58,6 +58,24 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
   } | null>(null);
   const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const prevFocus = document.activeElement as HTMLElement | null;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      prevFocus?.focus?.();
+    };
+  }, [isOpen, onClose]);
 
   // Filter scenes
   const filteredScenes = useMemo(() => {
@@ -191,15 +209,20 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
   };
 
   // Copy JSON to Clipboard
-  const handleCopyJson = () => {
+  const handleCopyJson = async () => {
     try {
       const current = engine.saveSession();
       const jsonStr = JSON.stringify(current, null, 2);
-      navigator.clipboard.writeText(jsonStr);
+      if (!navigator.clipboard?.writeText) {
+        throw new Error('Clipboard API unavailable');
+      }
+      await navigator.clipboard.writeText(jsonStr);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2400);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCopied(false), 2400);
       onToast(isMinimal ? 'Settings copied to clipboard.' : 'Gesamte Einstellungen in die Zwischenablage kopiert!');
     } catch {
+      setCopied(false);
       onToast(isMinimal ? 'Could not copy to clipboard.' : 'Konnte nicht in die Zwischenablage kopieren.');
     }
   };
@@ -446,7 +469,7 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
                 <CheckCircle2 size={14} />
                 <span>
                   <strong>Sicherheits-Garantie:</strong> Beim Importieren wird die Lautstärke automatisch
-                  normalisiert, der Vinyl-Geräuschpegel bleibt strikt auf max. 5% und die Atmosphäre auf max. 20%
+                  normalisiert, der Vinyl-Geräuschpegel bleibt strikt auf max. 5% und die Atmosphäre auf max. 10%
                   gedeckelt, um Pegelsprünge zu verhindern.
                 </span>
               </div>

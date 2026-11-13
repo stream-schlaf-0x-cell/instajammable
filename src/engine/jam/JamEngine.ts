@@ -1,5 +1,5 @@
 import type { AmbientSynthParams, DrumVoiceParams, EffectsParams, StepContext, MusicalScale } from '../../types';
-import { TIMBRES, CHORD_PATTERNS, CHORD_PACES, CHORD_TEXTURES, DRUM_MODELS, DRONE_STYLES, MELODY_STYLES, BASS_STYLES, VOICING_FAMILIES, type DrumModel, type DroneStyle, type MelodyStyle, type BassStyle, type VoicingFamily, type ChordPattern, type ChordPace, type ChordTexture, type JamEvent, type JamLayer, type JamPosition, type JamSession, type LayerSettings, type MacroName, type MidiClip, type ClipTempo, type ClipRawEvent, type ArrangementSection, type DrumVoice, type SequenceBlock, type SequencerPosition, type Timbre, type CustomMacro, type CustomMacroTarget, type EffectChainMode, type EffectChainSettings, type EffectModuleId, type EffectModuleConfig, type AtmosphereKind, type JamStyle } from '../../types/jam';
+import { TIMBRES, CHORD_PATTERNS, CHORD_PACES, CHORD_TEXTURES, DRUM_MODELS, DRONE_STYLES, MELODY_STYLES, BASS_STYLES, VOICING_FAMILIES, type ChaosMode, type DrumModel, type DroneStyle, type MelodyStyle, type BassStyle, type VoicingFamily, type ChordPattern, type ChordPace, type ChordTexture, type JamEvent, type JamLayer, type JamPosition, type JamSession, type LayerSettings, type MacroName, type MidiClip, type ClipTempo, type ClipRawEvent, type ArrangementSection, type DrumVoice, type SequenceBlock, type SequencerPosition, type Timbre, type CustomMacro, type CustomMacroTarget, type EffectChainMode, type EffectChainSettings, type EffectModuleId, type EffectModuleConfig, type AtmosphereKind, type JamStyle } from '../../types/jam';
 import { MasterAudio } from '../audio/audioContext';
 import { AmbientSynth } from '../audio/ambientSynth';
 import { DrumSynth } from '../audio/drumSynth';
@@ -16,7 +16,7 @@ import { createSession, getSceneEffects } from './scenes';
 import { validateClip } from './storage';
 import { JamComposer, captureNotes, clamp, clipEventsAtStep, holdBarsFor, SCALE_INTERVALS, streamSeed, type Harmony, type PlannedNote } from './music';
 import { findRhythmPreset } from './rhythms';
-import { createDefaultSequence, findSequenceTemplate, SEQUENCE_TEMPLATES } from './sequencer';
+import { createDefaultSequence, createSceneSequence, findSequenceTemplate, SEQUENCE_TEMPLATES } from './sequencer';
 import { findSoundscapePreset, SOUNDSCAPE_PRESETS } from './soundscapes';
 import { DEFAULT_EFFECT_MODULES, DEFAULT_WORKSPACE_MODULES, INITIAL_CUSTOM_MACROS, TARGET_PARAM_OPTIONS, WORKSPACE_PRESETS, findParamOption, EQ_PRESETS } from './customMacros';
 import {
@@ -31,7 +31,7 @@ import {
 } from './instrumentPresets';
 export { SCENES } from './scenes';
 export { SOUNDSCAPE_PRESETS, findSoundscapePreset };
-export { SEQUENCE_TEMPLATES, findSequenceTemplate, createDefaultSequence };
+export { SEQUENCE_TEMPLATES, findSequenceTemplate, createDefaultSequence, createSceneSequence };
 export { DEFAULT_EFFECT_MODULES, DEFAULT_WORKSPACE_MODULES, INITIAL_CUSTOM_MACROS, TARGET_PARAM_OPTIONS, WORKSPACE_PRESETS, findParamOption, EQ_PRESETS };
 export { INSTRUMENT_PRESETS, getInstrumentPresets, getInstrumentPresetById, detectActiveInstrumentPreset, type InstrumentPreset };
 
@@ -109,12 +109,12 @@ export function ambientPatch(layer: JamLayer, session: JamSession, beat = 0, cut
       driftAmount: 0.18 + movement * 0.10, voiceSpread: 0.86, volume: 0.44
     });
   } else if (timbre === 'keys') {
-    // Kupla / No Spirit / Chillhop Fender Rhodes Mark I & warm felt electric piano
+    // Fender Rhodes Mark I & warm felt electric piano
     Object.assign(base, {
       osc1Wave: 'triangle', osc2Wave: 'sine', osc3Wave: 'sine',
-      detuneSpread: 5.5 + movement * 2.5, subLevel: 0.10,
-      filterCutoff: clamp(2350 * (1 - warmth * 0.42) * (1 + drift * 0.18), 420, 4600),
-      filterResonance: 0.74, filterEnvAmount: 0.34,
+      detuneSpread: 4.5 + movement * 2.0, subLevel: 0.10,
+      filterCutoff: clamp(1750 * (1 - warmth * 0.42) * (1 + drift * 0.18), 420, 3800),
+      filterResonance: 0.70, filterEnvAmount: 0.26,
       attack: 0.012, decay: 1.85, sustain: 0.38, release: 2.2 + session.macros.space * 1.6,
       lfoRate: 0.16 + movement * 0.10, lfoDepth: 0.09 + movement * 0.07,
       driftAmount: 0.14, voiceSpread: 0.74, volume: 0.46
@@ -183,7 +183,7 @@ export function ambientPatch(layer: JamLayer, session: JamSession, beat = 0, cut
     lfoRate: 0.07, lfoDepth: 0.12 + movement * 0.08, driftAmount: 0.18, voiceSpread: 0.90, volume: 0.40
   });
   else if (!bass && timbre === 'dub') Object.assign(base, { osc1Wave: 'sawtooth', osc2Wave: 'sawtooth', osc3Wave: 'triangle', detuneSpread: 8, subLevel: 0.12,
-    filterCutoff: clamp(820 * (1 - warmth * 0.4) * (1 + drift * 0.25), 250, 2200), filterResonance: 1.45, filterEnvAmount: 0.72, attack: 0.008, decay: 0.42, sustain: 0.14, release: 2.8 + session.macros.space * 1.5,
+    filterCutoff: clamp(860 * (1 - warmth * 0.38) * (1 + drift * 0.28), 240, 2200), filterResonance: 1.48, filterEnvAmount: 0.76, attack: 0.007, decay: 0.34, sustain: 0.10, release: 2.8 + session.macros.space * 1.5,
     lfoRate: 0, lfoDepth: 0, driftAmount: 0.1, voiceSpread: 0.75, volume: 0.46 });
   else if (!bass && timbre === 'root') Object.assign(base, { osc1Wave: 'sawtooth', osc2Wave: 'triangle', osc3Wave: 'sine', detuneSpread: 6 + movement * 3, subLevel: 0.36,
     filterCutoff: clamp(1050 * (1 - warmth * 0.35) * (1 + drift * 0.18), 240, 2400), filterResonance: 0.78, filterEnvAmount: 0.14, attack: 2.6, decay: 3.0, sustain: 0.92, release: 5.5 + session.macros.space * 2.5,
@@ -196,7 +196,12 @@ export function ambientPatch(layer: JamLayer, session: JamSession, beat = 0, cut
     lfoRate: 0.12, lfoDepth: 0.08 + movement * 0.08, driftAmount: 0.15, voiceSpread: 0.5, volume: 0.32 });
   const useCustomPatch = !timbreOverride || timbreOverride === layer.settings.timbre;
   const patch = useCustomPatch ? mergeAudioPatch(base, layer.settings.audioPatch) : base;
-  patch.filterCutoff = clamp(patch.filterCutoff + cutoffOffset, 20, 18000);
+  if (useCustomPatch && layer.settings.audioPatch?.filterCutoff !== undefined) {
+    const breathFactor = (1 - (warmth - 0.5) * 0.32) * (1 + drift * 0.20);
+    patch.filterCutoff = clamp(layer.settings.audioPatch.filterCutoff * breathFactor + cutoffOffset, 20, 18000);
+  } else {
+    patch.filterCutoff = clamp(patch.filterCutoff + cutoffOffset, 20, 18000);
+  }
   return patch;
 }
 /** Which timbres Evolve may rotate a layer through. Layers whose current timbre is not listed here are left as the user set them. */
@@ -325,10 +330,15 @@ export class JamEngine {
   private override: { clip: MidiClip; originBeat: number } | null = null;
   private pendingOverride: MidiClip | null = null;
   private previewTimer: ReturnType<typeof setInterval> | null = null;
+  private previewEndTimer: ReturnType<typeof setTimeout> | null = null;
+  private previewActive = false;
+  private previewListeners = new Set<(previewing: boolean) => void>();
   private previewDrums: DrumSynth | null = null;
   private previewPads = new Map<string, AmbientSynth>();
   private previewSecondaryPads = new Map<string, AmbientSynth>();
   private auditionSynth: AmbientSynth | null = null;
+  private chaosPhase = 0; private lastChaosNotifyAt = 0; private chaosDragging = false;
+  private fxBypassSnapshot = new Set<EffectModuleId>();
   private changeCounter = 0; private transportToken = 0; private primeAtNextStep = false; private resumeNotes: PlannedNote[] = [];
 
   constructor(initial: JamSession = createSession()) {
@@ -337,7 +347,7 @@ export class JamEngine {
     if (this.state.sequence && this.state.sequence.length > 0) {
       this.arrangement.sequencerBlocks = clone(this.state.sequence);
     } else {
-      this.arrangement.sequencerBlocks = createDefaultSequence();
+      this.arrangement.sequencerBlocks = createSceneSequence(this.state.sceneId, this.state.style);
       this.state.sequence = clone(this.arrangement.sequencerBlocks);
     }
     this.arrangement.sequencerEnabled = this.state.sequencerEnabled !== undefined ? !!this.state.sequencerEnabled : true;
@@ -346,6 +356,12 @@ export class JamEngine {
   }
   getState(): JamSession { return clone(this.state); }
   subscribe(listener: (state: JamSession) => void): () => void { this.listeners.add(listener); listener(this.getState()); return () => this.listeners.delete(listener); }
+  onPreviewChange(listener: (previewing: boolean) => void): () => void { this.previewListeners.add(listener); listener(this.previewActive); return () => this.previewListeners.delete(listener); }
+  private notifyPreview(previewing: boolean): void {
+    if (this.previewActive === previewing) return;
+    this.previewActive = previewing;
+    for (const listener of this.previewListeners) listener(previewing);
+  }
   onEvent(listener: (event: JamEvent) => void): () => void { this.eventListeners.add(listener); return () => this.eventListeners.delete(listener); }
   private notify(): void { const s = this.getState(); for (const listener of this.listeners) listener(s); }
   private addChange(label: string, beat = this.getPosition().beat): void {
@@ -581,9 +597,30 @@ export class JamEngine {
   private resetFlow(): void {
     this.flow = { offset: { movement: 0, density: 0, warmth: 0, space: 0 }, target: { movement: 0, density: 0, warmth: 0, space: 0 }, drums: 1, drumsTarget: 1, section: -1 };
   }
+  private resetArrangementRuntime(currentSection: ArrangementSection = 'groove'): void {
+    this.arrangement.current = currentSection;
+    this.arrangement.buildupBarsLeft = 0;
+    this.arrangement.targetDropBar = 0;
+    this.arrangement.lastAutoBar = -1;
+    this.arrangement.sequencerIndex = 0;
+    this.arrangement.sequencerBarInBlock = 0;
+    this.arrangement.lastSequencerBar = -1;
+  }
+  private syncVoiceBudgets(): void {
+    for (const layer of this.state.layers) {
+      const [sounding, releasing] = voiceBudget(layer, this.state.lowResource);
+      const pad = this.pads.get(layer.id);
+      if (typeof pad?.setVoiceBudget === 'function') pad.setVoiceBudget(sounding, releasing);
+      const secondaryPad = this.secondaryPads.get(layer.id);
+      if (typeof secondaryPad?.setVoiceBudget === 'function') {
+        secondaryPad.setVoiceBudget(Math.max(4, Math.round(sounding * 0.75)), Math.max(4, Math.round(releasing * 0.75)));
+      }
+    }
+  }
   /** Kick-triggered ducking of pads and atmosphere. Scheduled on the audio clock; smooth in and out, never a hard gate. */
   private duck(time: number): void {
-    const depth = this.state.pump ?? 0; const gain = this.padBus?.gain; if (!gain || depth <= 0) return;
+    const pumpBypassed = this.state.effectChain?.modules.find(m => m.id === 'pump')?.bypassed;
+    const depth = this.state.pump ?? 0; const gain = this.padBus?.gain; if (!gain || depth <= 0 || pumpBypassed) return;
     gain.cancelScheduledValues?.(time); gain.setTargetAtTime(1 - depth * 0.55, time, 0.014); gain.setTargetAtTime(1, time + 0.07, 0.17);
   }
   /**
@@ -646,38 +683,43 @@ export class JamEngine {
     if (this.arrangement.sequencerEnabled && step % 16 === 0) {
       const currentBar = Math.floor(baseBeat / 4);
       if (currentBar !== this.arrangement.lastSequencerBar) {
+        const isFirstBar = this.arrangement.lastSequencerBar === -1;
         this.arrangement.lastSequencerBar = currentBar;
         const blocks = this.arrangement.sequencerBlocks.length > 0 ? this.arrangement.sequencerBlocks : (this.state.sequence && this.state.sequence.length > 0 ? this.state.sequence : []);
         if (blocks.length > 0) {
-          const currentBlock = blocks[this.arrangement.sequencerIndex];
+          if (this.arrangement.sequencerIndex >= blocks.length) this.arrangement.sequencerIndex = 0;
+          let currentBlock = blocks[this.arrangement.sequencerIndex];
           if (currentBlock) {
-            if (this.arrangement.sequencerBarInBlock >= currentBlock.bars) {
-              const nextIndex = (this.arrangement.sequencerIndex + 1) % blocks.length;
-              this.arrangement.sequencerIndex = nextIndex;
-              this.arrangement.sequencerBarInBlock = 0;
-              const nextBlock = blocks[nextIndex];
-              if (nextBlock) {
-                this.applyArrangement(nextBlock.section, false);
-                this.addChange(`Sequencer: [${nextBlock.label || nextBlock.section}] (${nextBlock.bars} Takte)`, baseBeat);
+            let transitioned = false;
+            if (!isFirstBar) {
+              this.arrangement.sequencerBarInBlock++;
+              if (this.arrangement.sequencerBarInBlock >= currentBlock.bars) {
+                const nextIndex = (this.arrangement.sequencerIndex + 1) % blocks.length;
+                this.arrangement.sequencerIndex = nextIndex;
+                this.arrangement.sequencerBarInBlock = 0;
+                currentBlock = blocks[nextIndex];
+                if (currentBlock) {
+                  this.applyArrangement(currentBlock.section, false);
+                  this.addChange(`Sequencer: [${currentBlock.label || currentBlock.section}] (${currentBlock.bars} Takte)`, baseBeat);
+                }
+                transitioned = true;
               }
-            } else {
-              // Arrangable macros slow glide ("make it more evolving slowly")
-              if (currentBar > 0 && currentBlock.macroTargets) {
-                let changedMacros = false;
-                for (const [name, targetVal] of Object.entries(currentBlock.macroTargets) as [MacroName, number][]) {
-                  if (targetVal !== undefined) {
-                    const cur = this.state.macros[name];
-                    const diff = targetVal - cur;
-                    if (Math.abs(diff) > 0.005) {
-                      this.state.macros[name] = clamp(cur + diff * 0.28, 0, 1);
-                      changedMacros = true;
-                    }
+            }
+            let changedMacros = false;
+            if (currentBlock && (currentBar > 0 || transitioned) && currentBlock.macroTargets) {
+              for (const [name, targetVal] of Object.entries(currentBlock.macroTargets) as [MacroName, number][]) {
+                if (targetVal !== undefined) {
+                  const cur = this.state.macros[name];
+                  const diff = targetVal - cur;
+                  if (Math.abs(diff) > 0.005) {
+                    this.state.macros[name] = clamp(cur + diff * 0.28, 0, 1);
+                    changedMacros = true;
                   }
                 }
-                if (changedMacros) this.applySound();
               }
-              this.arrangement.sequencerBarInBlock++;
+              if (changedMacros) this.applySound();
             }
+            if (!transitioned || changedMacros) this.notify();
           }
         }
       }
@@ -764,7 +806,15 @@ export class JamEngine {
     const layers = patch.layers || (rootDelta ? old.layers.map(l => l.role === 'drum' || l.locked || l.frozen ? l : { ...l, settings: { ...l.settings, minNote: l.settings.minNote + rootDelta, maxNote: l.settings.maxNote + rootDelta } }) : old.layers);
     this.state = validateSession({ ...old, ...patch, layers, macros: { ...old.macros, ...patch.macros } });
     if (patch.seed !== undefined && patch.seed !== old.seed) this.composer.reset();
-    if (patch.root !== undefined || patch.scale !== undefined || patch.seed !== undefined) this.resumeNotes = [];
+    if (patch.root !== undefined || patch.scale !== undefined || patch.seed !== undefined) {
+      this.resumeNotes = [];
+      const currentStep = Math.floor(this.getPosition().beat * 4);
+      const updatedHarmony = this.composer.harmonyAt(currentStep, this.state);
+      if (this.anchors.length) {
+        this.anchors[this.anchors.length - 1].harmony = updatedHarmony;
+      }
+      this.nextChordCache = null;
+    }
     if (Object.hasOwn(patch, 'globalOutputId') && patch.globalOutputId !== old.globalOutputId) {
       const defaults = new Set(this.state.layers.filter(l => l.outputId === null).map(l => l.id));
       for (const layerId of defaults) this.midi.releaseNotesForLayer(layerId);
@@ -776,11 +826,7 @@ export class JamEngine {
     let historyGroup = keys.every(k => continuous.includes(k)) ? `session:${keys.join(',')}` : '';
     if (keys.length === 1 && patch.effectsPatch) { const changed = [...new Set([...Object.keys(old.effectsPatch || {}), ...Object.keys(patch.effectsPatch)])].filter(key => (old.effectsPatch as Record<string, number> | undefined)?.[key] !== (patch.effectsPatch as Record<string, number>)[key]); if (changed.length === 1 && Object.hasOwn(patch.effectsPatch, changed[0])) historyGroup = `fx:${changed[0]}`; }
     if (keys.length === 1 && patch.modRoutes && old.modRoutes?.length === patch.modRoutes.length) { const changed = patch.modRoutes.filter(route => JSON.stringify(route) !== JSON.stringify(old.modRoutes!.find(r => r.id === route.id))); if (changed.length === 1) { const route = changed[0]; const prior = old.modRoutes.find(r => r.id === route.id); if (prior && prior.depth !== route.depth && prior.source === route.source && prior.destination === route.destination && prior.enabled === route.enabled) historyGroup = `mod:${route.id}:depth`; } }
-    if (patch.lowResource !== undefined) for (const layer of this.state.layers) {
-      const [sounding, releasing] = voiceBudget(layer, this.state.lowResource);
-      this.pads.get(layer.id)?.setVoiceBudget(sounding, releasing);
-      this.secondaryPads.get(layer.id)?.setVoiceBudget(Math.max(4, Math.round(sounding * 0.75)), Math.max(4, Math.round(releasing * 0.75)));
-    }
+    if (patch.lowResource !== undefined) this.syncVoiceBudgets();
     this.applySound(); this.remember(historyGroup); this.notify();
   }
   updateLayer(layerId: string, patch: Partial<JamLayer>): void {
@@ -799,12 +845,14 @@ export class JamEngine {
     if (patch.muted === true) { this.pads.get(layerId)?.stopAllVoices(true); this.secondaryPads.get(layerId)?.stopAllVoices(true); }
     if (patch.settings?.secondaryEnabled === false) this.secondaryPads.get(layerId)?.stopAllVoices(true);
     if (patch.settings?.minNote !== undefined || patch.settings?.maxNote !== undefined) this.resumeNotes = [];
+    const anySoloBefore = this.state.layers.some(l => l.solo);
+    const prevHidden = new Set(this.state.layers.filter(l => l.muted || (anySoloBefore && !l.solo)).map(l => l.id));
     this.state.layers = this.state.layers.map(l => l.id === layerId ? normalizeLayer({ ...l, ...patch, settings: { ...l.settings, ...patch.settings } }, l) : l);
     const edited = this.state.layers.find(l => l.id === layerId)!;
     if (edited.role !== 'drum') { let allowed = false; for (let n = edited.settings.minNote; n <= edited.settings.maxNote; n++) if (SCALE_INTERVALS[this.state.scale].includes(((n - this.state.root) % 12 + 12) % 12)) allowed = true; if (!allowed) this.addChange(`${edited.name} · Register enthält keinen Skalenton; Layer bleibt stumm`); }
     const anySolo = this.state.layers.some(l => l.solo); const hidden = new Set(this.state.layers.filter(l => l.muted || (anySolo && !l.solo)).map(l => l.id));
     this.truncatePerformed(hidden);
-    for (const l of this.state.layers) if (hidden.has(l.id)) { this.midi.releaseNotesForLayer(l.id); this.pads.get(l.id)?.stopAllVoices(true); this.secondaryPads.get(l.id)?.stopAllVoices(true); if (l.drumVoice) this.drums?.stopVoiceKind(l.drumVoice); }
+    for (const l of this.state.layers) if (!prevHidden.has(l.id) && hidden.has(l.id)) { this.midi.releaseNotesForLayer(l.id); this.pads.get(l.id)?.stopAllVoices(true); this.secondaryPads.get(l.id)?.stopAllVoices(true); if (l.drumVoice) this.drums?.stopVoiceKind(l.drumVoice); }
     this.applySound(); this.remember(patch.volume !== undefined ? `layer:${layerId}:volume` : patch.settings ? layerSettingsGroup(layerId, layer.settings, patch.settings) : ''); this.notify();
   }
   setLayerSettings(layerId: string, settings: Partial<LayerSettings>): void {
@@ -856,9 +904,11 @@ export class JamEngine {
     this.state.outputMode = previous.outputMode; this.state.globalOutputId = previous.globalOutputId; this.state.lowResource = previous.lowResource; this.state.pinned = previous.pinned; if (previous.pinnedParams) this.state.pinnedParams = sanitizePinnedParams(previous.pinnedParams, this.state);
     this.state.sequencerEnabled = previous.sequencerEnabled ?? true;
     this.arrangement.sequencerEnabled = this.state.sequencerEnabled;
+    this.arrangement.sequencerBlocks = createSceneSequence(this.state.sceneId, this.state.style);
     this.state.sequence = clone(this.arrangement.sequencerBlocks);
     for (const layer of this.state.layers) { const route = previous.layers.find(l => l.id === layer.id); if (route) { layer.outputId = route.outputId; layer.channel = route.channel; } }
     this.composer.reset(); this.composer.harmonyAt(0, this.state); this.events = []; this.controllers = []; this.eventEnds.clear(); this.timeline = []; this.tempos = []; this.anchors = []; this.stoppedBeat = 0; this.nextStep = 0; this.resumeNotes = []; this.override = null; this.pendingOverride = null;
+    this.resetArrangementRuntime('groove'); this.lastNotifySection = -1;
     this.resetFlow(); this.lastAtmosphereKey = ''; this.remember(); this.applySound(); this.notify(); if (wasRunning) await this.start();
   }
   /**
@@ -1131,8 +1181,10 @@ export class JamEngine {
     for (const synth of this.secondaryPads.values()) synth.stopAllVoices();
     this.drums?.stopAllVoices();
     this.state = validateSession(clone({ ...session, runtime: undefined })); this.composer.restore(session.runtime?.composer);
-    this.arrangement.current = this.state.arrangement || 'groove';
-    this.restoreClipRuntime(session.runtime); this.applyRouting();
+    this.resetArrangementRuntime(this.state.arrangement || 'groove');
+    this.arrangement.sequencerBlocks = this.state.sequence && this.state.sequence.length > 0 ? clone(this.state.sequence) : createDefaultSequence();
+    this.arrangement.sequencerEnabled = this.state.sequencerEnabled !== undefined ? !!this.state.sequencerEnabled : true;
+    this.restoreClipRuntime(session.runtime); this.syncVoiceBudgets(); this.lastAtmosphereKey = ''; this.applyRouting();
     this.clock?.setBpm(this.state.bpm); this.clock?.setSwing(this.state.swing); this.resetFlow(); this.applySound(); this.notify();
   }
   createClip(bars = 8): MidiClip {
@@ -1207,6 +1259,9 @@ export class JamEngine {
           const isHatOrPerc = l.id === 'hihat' || l.id === 'perc';
           return { ...l, muted: false, volume: Math.max(l.volume, 0.4), settings: { ...l.settings, density: clamp(l.settings.density + (isHatOrPerc ? 0.25 : 0.1), 0, 1) } };
         }
+        if (l.role === 'melody' && !l.locked && !l.frozen) {
+          return { ...l, muted: true };
+        }
         return l;
       });
       this.state.macros.movement = clamp(this.state.macros.movement + 0.15, 0, 1);
@@ -1217,6 +1272,8 @@ export class JamEngine {
       this.arrangement.buildupBarsLeft = 0;
       this.state.layers = this.state.layers.map(l => {
         if (l.role === 'drum') return { ...l, muted: true };
+        if (l.role === 'melody' && !l.locked && !l.frozen) return { ...l, muted: true };
+        if (l.role === 'bass' && !l.locked && !l.frozen) return { ...l, volume: clamp(l.volume * 0.75, 0.25, 0.55) };
         if (l.role === 'chords' || l.role === 'drone') return { ...l, muted: false, volume: Math.max(l.volume, 0.55) };
         return l;
       });
@@ -1239,8 +1296,8 @@ export class JamEngine {
       this.arrangement.buildupBarsLeft = 0;
       this.state.layers = this.state.layers.map(l => {
         if (l.role === 'drum') return { ...l, muted: true };
-        if (l.role === 'melody') return { ...l, settings: { ...l.settings, density: clamp(l.settings.density * 0.4, 0.1, 0.25) } };
-        if (l.role === 'bass') return { ...l, volume: clamp(l.volume * 0.6, 0.2, 0.5) };
+        if (l.role === 'melody' && !l.locked && !l.frozen) return { ...l, muted: true, settings: { ...l.settings, density: clamp(l.settings.density * 0.4, 0.1, 0.25) } };
+        if (l.role === 'bass' && !l.locked && !l.frozen) return { ...l, volume: clamp(l.volume * 0.55, 0.18, 0.45) };
         return l;
       });
       this.state.macros.density = clamp(this.state.macros.density - 0.2, 0.1, 0.4);
@@ -1251,6 +1308,7 @@ export class JamEngine {
       this.arrangement.buildupBarsLeft = 0;
       this.state.layers = this.state.layers.map(l => {
         if (l.role === 'drum') return { ...l, muted: false, volume: l.id === 'kick' ? Math.max(l.volume, 0.8) : Math.max(l.volume, 0.35) };
+        if (l.role === 'melody' && !l.locked && !l.frozen) return { ...l, muted: false, volume: clamp(l.volume, 0.26, 0.38), settings: { ...l.settings, density: clamp(l.settings.density, 0.22, 0.38) } };
         return { ...l, muted: false };
       });
       if (logChange) this.addChange('Arrangement: 🌊 Voller Beat (Drop In)', beat);
@@ -1304,9 +1362,13 @@ export class JamEngine {
     this.state.sequencerEnabled = next;
     if (next) {
       this.arrangement.auto = false;
+      this.arrangement.lastSequencerBar = this.running ? Math.floor(this.getPosition().beat / 4) : -1;
       this.state.sequence = clone(this.arrangement.sequencerBlocks);
       const currentBlock = this.arrangement.sequencerBlocks[this.arrangement.sequencerIndex] || this.arrangement.sequencerBlocks[0];
       if (currentBlock) {
+        if (this.arrangement.sequencerBarInBlock >= currentBlock.bars) {
+          this.arrangement.sequencerBarInBlock = 0;
+        }
         this.applyArrangement(currentBlock.section, false);
       }
     }
@@ -1339,6 +1401,10 @@ export class JamEngine {
   updateSequenceBlock(blockId: string, patch: Partial<SequenceBlock>): void {
     this.arrangement.sequencerBlocks = this.arrangement.sequencerBlocks.map(b => b.id === blockId ? { ...b, ...patch } : b);
     this.state.sequence = clone(this.arrangement.sequencerBlocks);
+    const active = this.arrangement.sequencerBlocks[this.arrangement.sequencerIndex];
+    if (active && this.arrangement.sequencerBarInBlock >= active.bars) {
+      this.arrangement.sequencerBarInBlock = Math.max(0, active.bars - 1);
+    }
     this.remember('sequencer:blockEdit');
     this.notify();
   }
@@ -1382,6 +1448,7 @@ export class JamEngine {
     this.arrangement.auto = false;
     this.arrangement.sequencerIndex = index;
     this.arrangement.sequencerBarInBlock = 0;
+    this.arrangement.lastSequencerBar = this.running ? Math.floor(this.getPosition().beat / 4) : -1;
     const block = blocks[index];
     this.applyArrangement(block.section, false);
     if (block.macroTargets) {
@@ -1404,6 +1471,7 @@ export class JamEngine {
     this.arrangement.sequencerEnabled = true;
     this.state.sequencerEnabled = true;
     this.arrangement.auto = false;
+    this.arrangement.lastSequencerBar = this.running ? Math.floor(this.getPosition().beat / 4) : -1;
     this.setSequence(blocks);
     if (blocks[0]) {
       this.arrangement.sequencerIndex = 0;
@@ -1556,6 +1624,7 @@ export class JamEngine {
     if (blockIdx >= 0) {
       this.arrangement.sequencerIndex = blockIdx;
       this.arrangement.sequencerBarInBlock = 0;
+      this.arrangement.lastSequencerBar = this.running ? Math.floor(this.getPosition().beat / 4) : -1;
     }
     this.applyArrangement(target.section, false);
     this.addChange(`Sequenz: Block auf [${target.label}] (${energy.toUpperCase()}) gesetzt & aktiviert`, this.getPosition().beat);
@@ -1634,6 +1703,7 @@ export class JamEngine {
       reverbMix: clamp(space * 0.55, 0, 1),
     };
     this.applySound();
+    this.remember('chordHall');
     this.notify();
   }
 
@@ -1641,39 +1711,74 @@ export class JamEngine {
     return this.state.customMacros || [];
   }
 
+  private sanitizeMacroTarget(target: CustomMacroTarget): CustomMacroTarget {
+    const fxRange = target.param.startsWith('fx:')
+      ? EFFECT_PATCH_RANGES[target.param.slice(3) as keyof EffectsParams]
+      : undefined;
+    const [lo, hi] = fxRange ?? [-100, 100];
+    const defaultMin = fxRange ? fxRange[0] : 0;
+    const defaultMax = fxRange ? fxRange[1] : 1;
+    const min = clamp(Number.isFinite(target.min) ? target.min : defaultMin, lo, hi);
+    const max = clamp(Number.isFinite(target.max) ? target.max : defaultMax, lo, hi);
+    return {
+      ...target,
+      min,
+      max,
+    };
+  }
+
+  setCustomMacrosEnabled(enabled: boolean): void {
+    this.state.customMacrosEnabled = enabled;
+    this.addChange(enabled ? 'Eigene Makros: Aktiviert' : 'Eigene Makros: Bypassed');
+    this.remember('customMacros:toggle');
+    this.notify();
+  }
+
   setCustomMacro(macroId: string, value: number): void {
+    if (this.state.customMacrosEnabled === false) return;
     const macros = this.state.customMacros || [];
     const macro = macros.find(m => m.id === macroId);
     if (!macro) return;
     const v = clamp(value, 0, 1);
     macro.value = v;
 
-    for (const target of macro.targets) {
-      const targetVal = target.inverted
+    for (const rawTarget of macro.targets) {
+      const target = this.sanitizeMacroTarget(rawTarget);
+      const rawVal = target.inverted
         ? target.max - v * (target.max - target.min)
         : target.min + v * (target.max - target.min);
+      if (!Number.isFinite(rawVal)) continue;
 
       if (target.param.startsWith('macro:')) {
         const name = target.param.slice(6) as MacroName;
         if (['space', 'warmth', 'density', 'movement'].includes(name)) {
-          this.state.macros[name] = clamp(targetVal, 0, 1);
+          this.state.macros[name] = clamp(rawVal, 0, 1);
         }
       } else if (target.param.startsWith('fx:')) {
         const key = target.param.slice(3) as keyof EffectsParams;
-        this.state.effectsPatch = { ...(this.state.effectsPatch || {}), [key]: targetVal };
+        const range = EFFECT_PATCH_RANGES[key];
+        this.state.effectsPatch = {
+          ...(this.state.effectsPatch || {}),
+          [key]: range ? clamp(rawVal, range[0], range[1]) : rawVal,
+        };
       } else if (target.param === 'atmo:level') {
-        const level = Math.min(0.10, Math.max(0, targetVal));
-        this.state.atmosphere = { ...(this.state.atmosphere || { kind: 'off', level: 0.06, tone: 0.5, movement: 0.4 }), level };
+        const level = Math.min(0.10, Math.max(0, rawVal));
+        const cur = this.state.atmosphere || { kind: 'off' as const, level: 0.06, tone: 0.5, movement: 0.4 };
+        this.state.atmosphere = {
+          ...cur,
+          kind: cur.kind === 'off' && level > 0.005 ? 'air' : cur.kind,
+          level,
+        };
       } else if (target.param === 'pump') {
-        this.state.pump = clamp(targetVal, 0, 1);
+        this.state.pump = clamp(rawVal, 0, 1);
       } else if (target.param.startsWith('layer:')) {
         const parts = target.param.split(':');
         const layerId = parts[1];
         const prop = parts[2];
         const layer = this.state.layers.find(l => l.id === layerId);
         if (layer) {
-          if (prop === 'volume') layer.volume = clamp(targetVal, 0, 1);
-          else if (prop === 'density') layer.settings.density = clamp(targetVal, 0, 1);
+          if (prop === 'volume') layer.volume = clamp(rawVal, 0, 1);
+          else if (prop === 'density') layer.settings.density = clamp(rawVal, 0, 1);
         }
       }
     }
@@ -1684,19 +1789,38 @@ export class JamEngine {
   }
 
   addCustomMacro(macro: CustomMacro): void {
+    const cleanMacro: CustomMacro = {
+      ...macro,
+      value: clamp(macro.value, 0, 1),
+      targets: macro.targets.map(t => this.sanitizeMacroTarget(t)),
+    };
     const current = this.state.customMacros || [];
-    this.state.customMacros = [...current, macro];
-    this.setCustomMacro(macro.id, macro.value);
-    this.addChange(`Neues Makro erstellt: ${macro.name}`);
-    this.remember('customMacro:add');
+    this.state.customMacros = [...current, cleanMacro];
+    if (this.state.customMacrosEnabled !== false) {
+      this.setCustomMacro(cleanMacro.id, cleanMacro.value);
+    } else {
+      this.remember('customMacro:add');
+      this.notify();
+    }
+    this.addChange(`Neues Makro erstellt: ${cleanMacro.name}`);
     this.notify();
   }
 
   updateCustomMacro(macroId: string, patch: Partial<CustomMacro>): void {
     const current = this.state.customMacros || [];
-    this.state.customMacros = current.map(m => m.id === macroId ? { ...m, ...patch } : m);
-    if (patch.value !== undefined) {
-      this.setCustomMacro(macroId, patch.value);
+    this.state.customMacros = current.map(m => {
+      if (m.id !== macroId) return m;
+      const nextTargets = patch.targets ? patch.targets.map(t => this.sanitizeMacroTarget(t)) : m.targets;
+      return {
+        ...m,
+        ...patch,
+        ...(patch.value !== undefined ? { value: clamp(patch.value, 0, 1) } : {}),
+        targets: nextTargets,
+      };
+    });
+    const updated = this.state.customMacros.find(m => m.id === macroId);
+    if (updated && this.state.customMacrosEnabled !== false && (patch.value !== undefined || patch.targets !== undefined)) {
+      this.setCustomMacro(macroId, updated.value);
     } else {
       this.remember('customMacro:edit');
       this.notify();
@@ -1729,6 +1853,30 @@ export class JamEngine {
     this.state.effectChain = { ...current, modules };
     this.applySound();
     this.remember(`effectChain:bypass:${effectId}`);
+    this.notify();
+  }
+
+  isFxChainActive(): boolean {
+    return this.getEffectChain().modules.some(m => m.id !== 'eq' && !m.bypassed);
+  }
+
+  toggleFxChainActive(): void {
+    const current = this.getEffectChain();
+    const active = this.isFxChainActive();
+    let modules: EffectModuleConfig[];
+    if (active) {
+      this.fxBypassSnapshot = new Set(current.modules.filter(m => m.id !== 'eq' && m.bypassed).map(m => m.id));
+      modules = current.modules.map(mod => mod.id === 'eq' ? mod : { ...mod, bypassed: true });
+    } else {
+      modules = current.modules.map(mod => {
+        if (mod.id === 'eq') return mod;
+        const keepBypassed = this.fxBypassSnapshot.size > 0 && this.fxBypassSnapshot.has(mod.id);
+        return { ...mod, bypassed: keepBypassed };
+      });
+    }
+    this.state.effectChain = { ...current, modules };
+    this.applySound();
+    this.remember('effectChain:masterBypass');
     this.notify();
   }
 
@@ -1784,6 +1932,41 @@ export class JamEngine {
     this.notify();
   }
 
+  setChaosEnabled(enabled: boolean): void {
+    this.state.chaosEnabled = enabled;
+    if (enabled && !this.state.chaosMode) this.state.chaosMode = 'calm';
+    this.addChange(enabled ? 'Organischer Attraktor: Aktiviert' : 'Organischer Attraktor: Aus');
+    this.remember('chaos:toggle');
+    this.notify();
+  }
+
+  setChaosMode(mode: ChaosMode): void {
+    this.state.chaosMode = mode;
+    this.state.chaosEnabled = true;
+    this.remember('chaos:mode');
+    this.notify();
+  }
+
+  setChaosDragging(dragging: boolean): void {
+    this.chaosDragging = dragging;
+  }
+
+  stepChaosDrift(dtSec: number): void {
+    if (!this.state.chaosEnabled || this.chaosDragging) return;
+    const mode = this.state.chaosMode || 'calm';
+    if (mode === 'manual') return;
+    const dt = clamp(dtSec, 0, 0.25);
+    const speed = mode === 'calm' ? 0.35 : mode === 'pulse' ? 0.8 : 1.7;
+    this.chaosPhase += dt * speed;
+    const t = this.chaosPhase;
+    const targetX = 0.5 + 0.38 * Math.sin(t * 1.1) + 0.12 * Math.cos(t * 2.7);
+    const targetY = 0.5 + 0.38 * Math.cos(t * 0.9) + 0.12 * Math.sin(t * 2.3);
+    const lerp = Math.min(1, dt * 2.5);
+    const x = this.state.macros.movement + (targetX - this.state.macros.movement) * lerp;
+    const y = this.state.macros.space + (targetY - this.state.macros.space) * lerp;
+    this.setChaosDrift(x, y, false);
+  }
+
   applyChaosImpulse(): void {
     const deltaX = (Math.random() - 0.5) * 0.25;
     const deltaY = (Math.random() - 0.5) * 0.25;
@@ -1791,16 +1974,23 @@ export class JamEngine {
     this.state.macros.space = clamp(this.state.macros.space + deltaY, 0.2, 0.95);
     this.addChange('⚡ Chaotischer Impuls (Organischer Timbre-Drift)', this.getPosition().beat);
     this.applySound();
+    this.remember('chaos');
     this.notify();
   }
 
-  setChaosDrift(x: number, y: number): void {
-    this.state.macros.movement = clamp(x, 0, 1);
-    this.state.macros.space = clamp(y, 0, 1);
+  setChaosDrift(x: number, y: number, forceNotify = true): void {
+    this.state.macros.movement = clamp(Number.isFinite(x) ? x : this.state.macros.movement, 0, 1);
+    this.state.macros.space = clamp(Number.isFinite(y) ? y : this.state.macros.space, 0, 1);
     this.applySound();
+    const now = nowPerf();
+    if (forceNotify || now - this.lastChaosNotifyAt >= 150) {
+      this.lastChaosNotifyAt = now;
+      this.notify();
+    }
   }
   async previewClip(clip: MidiClip): Promise<void> {
     this.stopPreview(); await this.init(); await this.audio.ctx?.resume();
+    this.notifyPreview(true);
     const session = clone(this.state); session.bpm = clip.bpm; session.root = clip.root; session.scale = clip.scale;
     const origin = this.audio.getTime() + 0.04;
     const secondsAt = (beat: number) => {
@@ -1810,7 +2000,13 @@ export class JamEngine {
     };
     // Only a 100ms window is scheduled: a large imported clip does not create one timer per note.
     const scheduled = clip.notes.map(note => ({ note, at: origin + secondsAt(note.startBeat), durationSec: secondsAt(note.startBeat + note.durationBeats) - secondsAt(note.startBeat) })).sort((a, b) => a.at - b.at);
+    const maxEndAt = scheduled.reduce((max, item) => Math.max(max, item.at + item.durationSec), origin);
     let cursor = 0;
+    const scheduleDoneTimer = () => {
+      if (this.previewEndTimer) clearTimeout(this.previewEndTimer);
+      const remainingMs = Math.max(50, Math.ceil((maxEndAt - this.audio.getTime()) * 1000) + 120);
+      this.previewEndTimer = setTimeout(() => { this.previewEndTimer = null; this.notifyPreview(false); }, remainingMs);
+    };
     const tick = () => {
       const now = this.audio.getTime();
       while (cursor < scheduled.length && scheduled[cursor].at < now + 0.1) {
@@ -1819,15 +2015,20 @@ export class JamEngine {
         const layerId = session.layers.some(l => l.id === note.layerId) ? note.layerId : note.channel === 10 ? drumLayer(note.note) : 'melody';
         this.playNote({ ...note, layerId, microMs: 0, durationBeats: durationSec * session.bpm / 60 }, Math.max(at, now + 0.001), nowPerf(), session, true);
       }
-      if (cursor >= scheduled.length && this.previewTimer) { clearInterval(this.previewTimer); this.previewTimer = null; }
+      if (cursor >= scheduled.length) {
+        if (this.previewTimer) { clearInterval(this.previewTimer); this.previewTimer = null; }
+        scheduleDoneTimer();
+      }
     };
     tick(); if (cursor < scheduled.length) this.previewTimer = setInterval(tick, 25);
   }
   stopPreview(): void {
     if (this.previewTimer) clearInterval(this.previewTimer); this.previewTimer = null;
+    if (this.previewEndTimer) clearTimeout(this.previewEndTimer); this.previewEndTimer = null;
     for (const synth of this.previewPads.values()) synth.stopAllVoices(); this.previewPads.clear();
     for (const synth of this.previewSecondaryPads.values()) synth.stopAllVoices(); this.previewSecondaryPads.clear();
     this.previewDrums?.stopAllVoices(); this.previewDrums = null;
+    this.notifyPreview(false);
   }
   async auditionNote(note: number, velocity = 90): Promise<void> {
     if (typeof window === 'undefined') return;
@@ -1851,9 +2052,11 @@ export class JamEngine {
     const session = migrateSession(raw); this.panic(); this.state = session; this.composer.reset(); this.composer.restore(session.runtime?.composer);
     this.stoppedBeat = typeof session.runtime?.positionBeat === 'number' ? Math.max(0, session.runtime.positionBeat) : 0;
     this.nextStep = typeof session.runtime?.step === 'number' ? Math.floor(session.runtime.step) : Math.ceil(this.stoppedBeat * 4);
-    if (session.sequence && session.sequence.length > 0) this.arrangement.sequencerBlocks = clone(session.sequence);
-    this.arrangement.sequencerEnabled = !!session.sequencerEnabled;
-    this.events = []; this.controllers = []; this.eventEnds.clear(); this.timeline = []; this.tempos = []; this.anchors = []; this.restoreClipRuntime(session.runtime); this.applyRouting();
+    this.resetArrangementRuntime(session.arrangement || 'groove');
+    this.arrangement.sequencerBlocks = session.sequence && session.sequence.length > 0 ? clone(session.sequence) : createDefaultSequence();
+    this.arrangement.sequencerEnabled = session.sequencerEnabled !== undefined ? !!session.sequencerEnabled : true;
+    this.lastAtmosphereKey = ''; this.lastNotifySection = -1;
+    this.events = []; this.controllers = []; this.eventEnds.clear(); this.timeline = []; this.tempos = []; this.anchors = []; this.restoreClipRuntime(session.runtime); this.syncVoiceBudgets(); this.applyRouting();
     this.clock?.setBpm(this.state.bpm); this.clock?.setSwing(this.state.swing);
     this.resetFlow(); this.applySound(); this.remember(); this.notify();
   }
@@ -1969,6 +2172,9 @@ export function validateSession(raw: JamSession): JamSession {
     ...(raw.arrangement !== undefined && ['groove', 'chorus', 'breakdown', 'buildup', 'silent'].includes(raw.arrangement) ? { arrangement: raw.arrangement } : {}),
     ...(Array.isArray(raw.sequence) ? { sequence: raw.sequence.map((b, i) => ({ id: typeof b.id === 'string' ? b.id : `seq-${i}`, section: ['groove', 'chorus', 'breakdown', 'buildup', 'silent'].includes(b.section) ? b.section : 'groove', bars: Math.round(clamp(b.bars ?? 4, 1, 64)), label: typeof b.label === 'string' ? b.label.slice(0, 80) : undefined, ...(b.macroTargets && typeof b.macroTargets === 'object' ? { macroTargets: b.macroTargets } : {}) })) } : {}),
     ...(raw.sequencerEnabled !== undefined ? { sequencerEnabled: !!raw.sequencerEnabled } : {}),
+    ...(raw.customMacrosEnabled !== undefined ? { customMacrosEnabled: !!raw.customMacrosEnabled } : {}),
+    ...(raw.chaosEnabled !== undefined ? { chaosEnabled: !!raw.chaosEnabled } : {}),
+    ...(raw.chaosMode !== undefined && (['manual', 'calm', 'pulse', 'wild'] as const).includes(raw.chaosMode) ? { chaosMode: raw.chaosMode } : {}),
     ...(Array.isArray(raw.customMacros) ? {
       customMacros: raw.customMacros.map(m => ({
         id: typeof m.id === 'string' ? m.id : `macro-${Date.now()}`,

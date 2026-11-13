@@ -22,14 +22,27 @@ import { SplitLayout } from './components/layouts/SplitLayout';
 import { FocusStageLayout } from './components/layouts/FocusStageLayout';
 import { CommandGridLayout } from './components/layouts/CommandGridLayout';
 import { GrooveboxLayout } from './components/layouts/GrooveboxLayout';
+import { OrbitLayout } from './components/layouts/OrbitLayout';
+import { PatchbayLayout } from './components/layouts/PatchbayLayout';
+import { SynesthesiaLayout } from './components/layouts/SynesthesiaLayout';
 import {
   MINIMAL_MACROS,
   getSceneDisplay,
   getCustomMacroDisplayName,
   getParamOptionDisplay,
+  getClipTitleDisplay,
+  getChangeDisplay,
 } from './engine/jam/minimalCatalog';
 import { UiEditionContext, useUiEdition } from './contexts/UiEditionContext';
-import type { LayoutVariant, UiEdition } from './types/ui';
+import {
+  DEFAULT_CUSTOM_THEME,
+  STUDIO_THEMES,
+  applyThemeToDocument,
+  type CustomThemeColors,
+  type LayoutVariant,
+  type ThemePresetId,
+  type UiEdition,
+} from './types/ui';
 import { findParamOption } from './engine/jam/customMacros';
 import { TIMBRES, type JamLayer, type JamSession, type MacroName, type MidiClip } from './types/jam';
 import type { MusicalScale } from './types';
@@ -72,15 +85,47 @@ export default function App() {
   const [layoutVariant, setLayoutVariant] = useState<LayoutVariant>(() => {
     try {
       const v = localStorage.getItem('instajammable.layoutVariant');
-      return v === 'split' || v === 'stage' || v === 'grid' || v === 'groovebox' ? v : 'console';
+      return v === 'split' ||
+        v === 'stage' ||
+        v === 'grid' ||
+        v === 'groovebox' ||
+        v === 'orbit' ||
+        v === 'patchbay' ||
+        v === 'synesthesia'
+        ? v
+        : 'console';
     } catch { return 'console'; }
+  });
+  const [themeId, setThemeId] = useState<ThemePresetId>(() => {
+    try {
+      const v = localStorage.getItem('instajammable.themeId');
+      if (v === 'custom' || STUDIO_THEMES.some((t) => t.id === v)) return v as ThemePresetId;
+      return 'forest';
+    } catch { return 'forest'; }
+  });
+  const [customColors, setCustomColors] = useState<CustomThemeColors>(() => {
+    try {
+      const raw = localStorage.getItem('instajammable.customColors');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.bg === 'string' && typeof parsed.accent === 'string' && typeof parsed.accent2 === 'string') {
+          return parsed as CustomThemeColors;
+        }
+      }
+      return DEFAULT_CUSTOM_THEME;
+    } catch { return DEFAULT_CUSTOM_THEME; }
   });
   useEffect(() => { try { localStorage.setItem('instajammable.uiEdition', uiEdition); } catch { /* ignore */ } }, [uiEdition]);
   useEffect(() => { try { localStorage.setItem('instajammable.layoutVariant', layoutVariant); } catch { /* ignore */ } }, [layoutVariant]);
+  useEffect(() => {
+    applyThemeToDocument(themeId, customColors);
+    try { localStorage.setItem('instajammable.themeId', themeId); } catch { /* ignore */ }
+  }, [themeId, customColors]);
+  useEffect(() => {
+    try { localStorage.setItem('instajammable.customColors', JSON.stringify(customColors)); } catch { /* ignore */ }
+  }, [customColors]);
   const [activeDrawer, setActiveDrawer] = useState<string | null>('soundscape');
   const [mixerExpanded, setMixerExpanded] = useState<boolean>(true);
-  const [chaosEnabled, setChaosEnabled] = useState<boolean>(true);
-  const [customMacrosEnabled, setCustomMacrosEnabled] = useState<boolean>(true);
 
 
   const midiInput = useRef<HTMLInputElement>(null), sessionInput = useRef<HTMLInputElement>(null);
@@ -106,18 +151,33 @@ export default function App() {
     if (!restored.current) { restored.current = true; const saved = loadSavedSession(); if (saved) void act(() => engine.loadSession(saved)); }
     return () => { unsub(); recUnsub(); };
   }, [act, message]);
-  useEffect(() => { const timer = setInterval(() => { setPosition(engine.getPosition()); setEvents(engine.getRecentEvents(64)); }, session.lowResource ? 120 : 80); return () => clearInterval(timer); }, [session.lowResource]);
+  useEffect(() => {
+    let wasPlaying = engine.getPosition().playing;
+    const timer = setInterval(() => {
+      const pos = engine.getPosition();
+      if (!pos.playing && !wasPlaying) return;
+      wasPlaying = pos.playing;
+      setPosition(pos);
+      setEvents(engine.getRecentEvents(64));
+    }, session.lowResource ? 120 : 80);
+    return () => clearInterval(timer);
+  }, [session.lowResource]);
   useEffect(() => { if(session.globalOutputId!==undefined)setOutputId(session.globalOutputId||''); }, [session.globalOutputId]);
   useEffect(() => { const timer = setTimeout(() => { const error = persistSession(engine.saveSession()); if (error) message(error); }, 700); return () => clearTimeout(timer); }, [session, message]);
   const toggle = useCallback(async () => { await act(() => engine.getPosition().playing ? engine.stop() : engine.start()); setPosition(engine.getPosition()); }, [act]);
   useEffect(() => {
-    const key = (e: KeyboardEvent) => { if (editor || routing || e.repeat || (e.target as HTMLElement)?.matches('input,textarea,select,button,[contenteditable]')) return; if (e.code === 'Space') { e.preventDefault(); void toggle(); } };
+    if (!session.chaosEnabled || (session.chaosMode || 'calm') === 'manual') return;
+    const timer = setInterval(() => engine.stepChaosDrift(0.08), 80);
+    return () => clearInterval(timer);
+  }, [session.chaosEnabled, session.chaosMode]);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if (editor || routing || settingsOpen || e.repeat || (e.target as HTMLElement)?.matches('input,textarea,select,button,[contenteditable]')) return; if (e.code === 'Space') { e.preventDefault(); void toggle(); } };
     window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
-  }, [toggle, editor, routing]);
+  }, [toggle, editor, routing, settingsOpen]);
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 6500); return () => clearTimeout(timer); }, [toast]);
   const keepClip = (clip: MidiClip) => { try { const valid = validateClip(clip); const next = [valid, ...library.filter(c => c.id !== valid.id)].slice(0, 128); const error = saveLibrary(next); if (error) { message(error); return; } setLibrary(next); message(uiEdition === 'minimal' ? 'Clip saved to library.' : 'Clip in deiner Sammlung gespeichert.'); } catch(e) { message(String(e)); } };
   const exportClip = (clip: MidiClip, layerId?: string) => { void act(() => { downloadBytes(clipToMidi(clip, layerId), fileName(clip.name + (layerId ? '-' + layerId : '')) + '.mid', 'audio/midi'); message(uiEdition === 'minimal' ? 'MIDI exported.' : 'MIDI exportiert · gemeinsame Zeitachse für alle Spuren.'); }); };
-  const capture = () => { void act(() => { const clip = engine.createClip(captureBars); if (!clip.notes.length) { message(uiEdition === 'minimal' ? 'No played notes yet. Start the jam first.' : 'Noch keine gespielten Noten. Starte den Jam und halte einen Moment fest.'); return; } keepClip(clip); setEditor(clip); }); };
+  const capture = () => { void act(() => { const rawClip = engine.createClip(captureBars); if (!rawClip.notes.length) { message(uiEdition === 'minimal' ? 'No played notes yet. Start the jam first.' : 'Noch keine gespielten Noten. Starte den Jam und halte einen Moment fest.'); return; } const clip = uiEdition === 'minimal' ? { ...rawClip, name: getClipTitleDisplay(rawClip.name, 'minimal') } : rawClip; keepClip(clip); setEditor(clip); }); };
   const importMidi = async (file?: File) => { if (!file) return; await act(async () => { if (file.size > 10_000_000) throw new Error(uiEdition === 'minimal' ? 'MIDI file too large (max 10 MB).' : 'MIDI-Datei ist zu groß (max. 10 MB).'); const clip = validateClip(midiToClip(new Uint8Array(await file.arrayBuffer()), file.name.replace(/\.mid[i]?$/i, ''))); setEditor(clip); message(uiEdition === 'minimal' ? 'MIDI opened. Save to add to library.' : 'MIDI geöffnet. Speichern übernimmt den Clip in die Sammlung.'); }); };
   const record = async () => { if (!recording.isRecording && session.outputMode === 'midi') { message(uiEdition === 'minimal' ? 'WAV records internal audio. Switch to Internal Audio or Audio + MIDI.' : 'WAV nimmt die internen Klänge auf. Wähle Audio intern oder Audio + MIDI; externe Instrumente nimmst du in Ableton auf. Für Noten nutze Capture.'); return; } if (recording.isRecording) { await act(async () => { const result = await engine.recorder.stop(); if (result.wavBytes) { downloadBytes(result.wavBytes, 'instajammable-take.wav', 'audio/wav'); message(uiEdition === 'minimal' ? 'WAV recording saved.' : 'WAV-Aufnahme gespeichert.'); } else if (result.webmBlob) { const blob = result.webmBlob; const ext = blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'm4a' : 'webm'; downloadBytes(new Uint8Array(await blob.arrayBuffer()), 'instajammable-take.' + ext, blob.type); message(uiEdition === 'minimal' ? 'Recording saved.' : 'Komprimierte Aufnahme gespeichert; PCM war nicht verfügbar.'); } else message(engine.recorder.getState().lastError || (uiEdition === 'minimal' ? 'No audio recorded.' : 'Keine Audiodaten aufgezeichnet.')); }); } else { await act(async () => { if (!engine.getPosition().playing) await engine.start(); if (!engine.recorder.start()) throw new Error(engine.recorder.getState().lastError || (uiEdition === 'minimal' ? 'Could not start recording.' : 'Aufnahme konnte nicht starten.')); }); } };
   const connectMidi = async () => { await act(async () => { const ok = await engine.midi.init(); if (ok) { setOutputs(engine.midi.getAvailableOutputs()); const saved = engine.getState().globalOutputId; const preserve = new Set(engine.getState().layers.filter(l=>l.outputId!==null).map(l=>l.id)); if(saved === null) engine.midi.selectOff(preserve); else if(typeof saved === 'string') engine.midi.selectOutput(saved,preserve); else engine.updateSession({globalOutputId:engine.midi.getSelectedOutputId()}); setOutputId(engine.midi.getSelectedOutputId() || ''); } }); };
@@ -146,6 +206,10 @@ export default function App() {
         onUiEditionChange={setUiEdition}
         layoutVariant={layoutVariant}
         onLayoutVariantChange={setLayoutVariant}
+        themeId={themeId}
+        onThemeIdChange={setThemeId}
+        customColors={customColors}
+        onCustomColorsChange={setCustomColors}
       />
 
       {position.clipOverride && (
@@ -201,6 +265,36 @@ export default function App() {
         />
       )}
 
+      {tab === 'jam' && layoutVariant === 'orbit' && (
+        <OrbitLayout
+          session={session}
+          position={position}
+          edition={uiEdition}
+          rollNotes={rollNotes}
+          live={live}
+          onAudition={n => { void act(() => engine.auditionNote(n)); }}
+        />
+      )}
+
+      {tab === 'jam' && layoutVariant === 'patchbay' && (
+        <PatchbayLayout
+          session={session}
+          position={position}
+          edition={uiEdition}
+          rollNotes={rollNotes}
+        />
+      )}
+
+      {tab === 'jam' && layoutVariant === 'synesthesia' && (
+        <SynesthesiaLayout
+          session={session}
+          position={position}
+          edition={uiEdition}
+          rollNotes={rollNotes}
+          onAudition={n => { void act(() => engine.auditionNote(n)); }}
+        />
+      )}
+
       {tab === 'jam' && layoutVariant === 'console' && (
         <>
           {viewMode === 'distance' && (
@@ -237,6 +331,7 @@ export default function App() {
                   min={0}
                   max={1}
                   step={0.01}
+                  disabled={session.customMacrosEnabled === false}
                   value={cm.value}
                   onChange={e => engine.setCustomMacro(cm.id, Number(e.target.value))}
                 />
@@ -337,16 +432,16 @@ export default function App() {
                   title: isMinimal ? 'Effects Chain' : 'Effektkette',
                   icon: Waves,
                   color: '#14b8a6',
-                  isOn: !engine.getEffectChain().modules.find(m => m.id === 'reverb')?.bypassed,
-                  onToggle: () => engine.toggleEffectBypass('reverb'),
+                  isOn: engine.isFxChainActive(),
+                  onToggle: () => engine.toggleFxChainActive(),
                 },
                 {
                   id: 'chaos',
                   title: isMinimal ? 'Organic Modulator' : 'Organischer Attraktor',
                   icon: Sparkles,
                   color: '#ec4899',
-                  isOn: chaosEnabled,
-                  onToggle: () => setChaosEnabled(prev => !prev),
+                  isOn: !!session.chaosEnabled,
+                  onToggle: () => engine.setChaosEnabled(!session.chaosEnabled),
                 },
                 {
                   id: 'atmosphere',
@@ -371,8 +466,8 @@ export default function App() {
                   title: isMinimal ? 'Custom Macros' : 'Eigene Makros',
                   icon: Cpu,
                   color: '#e11d48',
-                  isOn: customMacrosEnabled,
-                  onToggle: () => setCustomMacrosEnabled(prev => !prev),
+                  isOn: session.customMacrosEnabled !== false,
+                  onToggle: () => engine.setCustomMacrosEnabled(session.customMacrosEnabled === false),
                 },
               ].map(d => {
                 const IconComponent = d.icon;
@@ -499,13 +594,13 @@ export default function App() {
                   <EffectChainDeck session={session} />
                 )}
                 {activeDrawer === 'chaos' && (
-                  <ChaosModulatorDeck session={session} enabled={chaosEnabled} onToggleEnabled={setChaosEnabled} />
+                  <ChaosModulatorDeck session={session} enabled={!!session.chaosEnabled} onToggleEnabled={next => engine.setChaosEnabled(next)} />
                 )}
                 {activeDrawer === 'atmosphere' && (
                   <AtmosphereFlow session={session} />
                 )}
                 {activeDrawer === 'custommacros' && (
-                  <CustomMacroDeck session={session} />
+                  <CustomMacroDeck session={session} enabled={session.customMacrosEnabled !== false} />
                 )}
               </div>
             )}
@@ -517,7 +612,7 @@ export default function App() {
           <section className="scene-section">
             <div className="section-intro">
               <span className="eyebrow">{isMinimal ? 'SCENES' : 'WO SOLL ES HINGEHEN?'}</span>
-              <h2>{isMinimal ? '24 Sound Presets' : <>Sechzehn Ausgangspunkte.<br/>Unzählige Abzweigungen.</>}</h2>
+              <h2>{isMinimal ? '24 Sound Presets' : <>Vierundzwanzig Ausgangspunkte.<br/>Unzählige Abzweigungen.</>}</h2>
               {!isMinimal && <p>Eine Szene gibt dem Jam einen Charakter. Evolve erkundet ihn weiter.</p>}
             </div>
             <div className="scene-list">
@@ -545,8 +640,8 @@ export default function App() {
           </section>
         </>
       )}
-      {tab === 'library' && <section className="library-section"><header className="panel-heading"><div><span className="eyebrow">{isMinimal ? 'YOUR MOMENTS' : 'DEINE MOMENTE'}</span><h2>{isMinimal ? 'What should stay.' : 'Was bleiben soll.'}</h2><p className="helper">{isMinimal ? 'Capture records played notes, including tempo and shared track timing.' : 'Capture hält gespielte Noten fest, inklusive Tempo und gemeinsamer Spurposition.'}</p></div><button className="button" onClick={() => midiInput.current?.click()}><Upload /> {isMinimal ? 'Open MIDI' : 'MIDI öffnen'}</button></header>{library.length ? <div className="clip-list">{library.map(clip => <article className="clip-row" key={clip.id}><span className="clip-symbol"><Music2 /></span><div><h3>{clip.name}</h3><p>{Number((clip.lengthBeats/4).toFixed(1))} {isMinimal ? 'bars' : 'Takte'} · {clip.notes.length} {isMinimal ? 'notes' : 'Noten'} · {clip.bpm} BPM · {new Date(clip.createdAt).toLocaleDateString(isMinimal ? 'en-US' : 'de-DE')}</p></div><button className="button" onClick={() => setEditor(clip)}>{isMinimal ? 'Open' : 'Öffnen'} <ArrowUpRight /></button><button className="icon-button" aria-label={(isMinimal ? 'Export MIDI: ' : 'MIDI exportieren: ')+clip.name} onClick={() => exportClip(clip)}><Download /></button><button className="icon-button" aria-label={(isMinimal ? 'Delete clip: ' : 'Clip löschen: ')+clip.name} onClick={() => { const next = library.filter(c => c.id !== clip.id); const error = saveLibrary(next); if(error) message(error); else setLibrary(next); }}><Trash2 /></button></article>)}</div> : <div className="empty-library"><Music2 /><h3>{isMinimal ? 'A good moment deserves a home.' : 'Ein guter Moment verdient ein Zuhause.'}</h3><p>{isMinimal ? 'Start a jam and press Capture, or open a MIDI file.' : 'Starte einen Jam und drücke Capture. Oder öffne eine MIDI-Datei.'}</p><button className="button" onClick={() => { setTab('jam'); void toggle(); }}><Play /> {isMinimal ? 'Back to Jam' : 'Zurück zum Jam'}</button></div>}<p className="helper">{isMinimal ? 'Stored locally in this browser · max 128 clips. Export important takes as MIDI before clearing browser data.' : 'Lokal in diesem Browser gespeichert · maximal 128 Clips. Exportiere wichtige Takes als MIDI, bevor du Browserdaten löschst.'}</p></section>}
-      {tab === 'details' && <section className="details-section"><div className="details-intro"><span className="eyebrow">{isMinimal ? 'YOUR INSTRUMENT, YOUR RULES' : 'DEIN INSTRUMENT, DEINE REGELN'}</span><h2>{isMinimal ? <>More control.<br/>When you need it.</> : <>Mehr Kontrolle.<br/>Wenn du sie brauchst.</>}</h2><p>{isMinimal ? 'Key and tempo stay locked during Evolve. Lock protects parameters; Freeze holds a four-bar phrase.' : 'Tonart und Tempo bleiben bei Evolve stabil. Lock schützt Parameter; Freeze hält eine Vier-Takt-Phrase fest.'}</p></div><div className="global-settings"><h3>{isMinimal ? 'Musical Framework' : 'Musikalischer Rahmen'}</h3><div className="settings-grid"><label>{isMinimal ? 'Root' : 'Grundton'}<select value={((session.root % 12)+12)%12} onChange={e => engine.updateSession({root:Math.floor(session.root/12)*12+Number(e.target.value)})}>{Array.from({length:12},(_,i)=>48+i).map(n=><option key={n} value={n%12}>{pitch(n)}</option>)}</select></label><label>{isMinimal ? 'Scale' : 'Skala'}<select value={session.scale} onChange={e => engine.updateSession({scale:e.target.value as MusicalScale})}>{SCALES.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label><label>Swing<Range value={session.swing} max={.6} onChange={n=>engine.updateSession({swing:n})}/></label><label>{isMinimal ? 'Master (Audio)' : 'Master (Audio)'}<Range value={session.volume} onChange={n=>engine.updateSession({volume:n})}/></label></div><div className="toggle-row"><label><input type="checkbox" checked={session.evolving} onChange={e=>engine.updateSession({evolving:e.target.checked})}/> {isMinimal ? 'Slow Evolve' : 'Langsame Entwicklung'}</label><label><input type="checkbox" checked={session.lowResource} onChange={e=>engine.updateSession({lowResource:e.target.checked})}/> {isMinimal ? 'Low Resource Mode' : 'Ressourcen sparen'}</label></div><h3>{isMinimal ? 'Macros on Main Page' : 'Makros auf der Hauptseite'}</h3><div className="pin-list">{MACROS.map(m=><button className={'button '+(session.pinned.includes(m.id)?'active':'')} key={m.id} onClick={()=>engine.updateSession({pinned:session.pinned.includes(m.id)?session.pinned.filter(id=>id!==m.id):[...session.pinned,m.id]})}><Pin />{isMinimal ? MINIMAL_MACROS[m.id].name : m.name}</button>)}</div><div className="details-actions"><button className="button" onClick={()=>{const error=persistSession(engine.saveSession()); message(error||(isMinimal ? 'Session saved.' : 'Session gespeichert.'));}}><Save/>{isMinimal ? 'Save Session' : 'Session sichern'}</button><button className="button" onClick={()=>exportJson(engine.saveSession(),'instajammable-session.json')}><Download/>{isMinimal ? 'Export Session' : 'Session exportieren'}</button><button className="button" onClick={()=>sessionInput.current?.click()}><Upload/>{isMinimal ? 'Open Session' : 'Session öffnen'}</button><button className="button" onClick={()=>{engine.panic();message(isMinimal ? 'All notes stopped.' : 'Alle von der App gesendeten Noten beendet.');}}><Square/>Panic</button></div><div className="change-history"><h3>{isMinimal ? 'Recent Changes' : 'Zuletzt im Jam'}</h3>{session.changes.length?session.changes.slice(-5).reverse().map(c=><p key={c.id}><span className="mono">{isMinimal ? 'Bar' : 'Takt'} {Math.floor(c.beat/4)+1}</span>{c.label}</p>):<p>{isMinimal ? 'Changes to motifs, harmony, and freeze appear here.' : 'Änderungen an Motiven, Harmonie und Freeze erscheinen hier.'}</p>}</div></div><div className="layer-details">{session.layers.map(layer=><LayerDetails key={layer.id} layer={layer} outputs={outputs}/>)}<SoundLab session={session}/></div></section>}
+      {tab === 'library' && <section className="library-section"><header className="panel-heading"><div><span className="eyebrow">{isMinimal ? 'YOUR MOMENTS' : 'DEINE MOMENTE'}</span><h2>{isMinimal ? 'What should stay.' : 'Was bleiben soll.'}</h2><p className="helper">{isMinimal ? 'Capture records played notes, including tempo and shared track timing.' : 'Capture hält gespielte Noten fest, inklusive Tempo und gemeinsamer Spurposition.'}</p></div><button className="button" onClick={() => midiInput.current?.click()}><Upload /> {isMinimal ? 'Open MIDI' : 'MIDI öffnen'}</button></header>{library.length ? <div className="clip-list">{library.map(clip => { const clipTitle = getClipTitleDisplay(clip.name, uiEdition); return <article className="clip-row" key={clip.id}><span className="clip-symbol"><Music2 /></span><div><h3>{clipTitle}</h3><p>{Number((clip.lengthBeats/4).toFixed(1))} {isMinimal ? 'bars' : 'Takte'} · {clip.notes.length} {isMinimal ? 'notes' : 'Noten'} · {clip.bpm} BPM · {new Date(clip.createdAt).toLocaleDateString(isMinimal ? 'en-US' : 'de-DE')}</p></div><button className="button" onClick={() => setEditor(clip)}>{isMinimal ? 'Open' : 'Öffnen'} <ArrowUpRight /></button><button className="icon-button" aria-label={(isMinimal ? 'Export MIDI: ' : 'MIDI exportieren: ')+clipTitle} onClick={() => exportClip(clip)}><Download /></button><button className="icon-button" aria-label={(isMinimal ? 'Delete clip: ' : 'Clip löschen: ')+clipTitle} onClick={() => { const next = library.filter(c => c.id !== clip.id); const error = saveLibrary(next); if(error) message(error); else setLibrary(next); }}><Trash2 /></button></article>; })}</div> : <div className="empty-library"><Music2 /><h3>{isMinimal ? 'A good moment deserves a home.' : 'Ein guter Moment verdient ein Zuhause.'}</h3><p>{isMinimal ? 'Start a jam and press Capture, or open a MIDI file.' : 'Starte einen Jam und drücke Capture. Oder öffne eine MIDI-Datei.'}</p><button className="button" onClick={() => { setTab('jam'); void toggle(); }}><Play /> {isMinimal ? 'Back to Jam' : 'Zurück zum Jam'}</button></div>}<p className="helper">{isMinimal ? 'Stored locally in this browser · max 128 clips. Export important takes as MIDI before clearing browser data.' : 'Lokal in diesem Browser gespeichert · maximal 128 Clips. Exportiere wichtige Takes als MIDI, bevor du Browserdaten löschst.'}</p></section>}
+      {tab === 'details' && <section className="details-section"><div className="details-intro"><span className="eyebrow">{isMinimal ? 'YOUR INSTRUMENT, YOUR RULES' : 'DEIN INSTRUMENT, DEINE REGELN'}</span><h2>{isMinimal ? <>More control.<br/>When you need it.</> : <>Mehr Kontrolle.<br/>Wenn du sie brauchst.</>}</h2><p>{isMinimal ? 'Key and tempo stay locked during Evolve. Lock protects parameters; Freeze holds a four-bar phrase.' : 'Tonart und Tempo bleiben bei Evolve stabil. Lock schützt Parameter; Freeze hält eine Vier-Takt-Phrase fest.'}</p></div><div className="global-settings"><h3>{isMinimal ? 'Musical Framework' : 'Musikalischer Rahmen'}</h3><div className="settings-grid"><label>{isMinimal ? 'Root' : 'Grundton'}<select value={((session.root % 12)+12)%12} onChange={e => engine.updateSession({root:Math.floor(session.root/12)*12+Number(e.target.value)})}>{Array.from({length:12},(_,i)=>48+i).map(n=><option key={n} value={n%12}>{pitch(n)}</option>)}</select></label><label>{isMinimal ? 'Scale' : 'Skala'}<select value={session.scale} onChange={e => engine.updateSession({scale:e.target.value as MusicalScale})}>{SCALES.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label><label>Swing<Range value={session.swing} max={.6} onChange={n=>engine.updateSession({swing:n})}/></label><label>{isMinimal ? 'Master (Audio)' : 'Master (Audio)'}<Range value={session.volume} onChange={n=>engine.updateSession({volume:n})}/></label></div><div className="toggle-row"><label><input type="checkbox" checked={session.evolving} onChange={e=>engine.updateSession({evolving:e.target.checked})}/> {isMinimal ? 'Slow Evolve' : 'Langsame Entwicklung'}</label><label><input type="checkbox" checked={session.lowResource} onChange={e=>engine.updateSession({lowResource:e.target.checked})}/> {isMinimal ? 'Low Resource Mode' : 'Ressourcen sparen'}</label></div><h3>{isMinimal ? 'Macros on Main Page' : 'Makros auf der Hauptseite'}</h3><div className="pin-list">{MACROS.map(m=><button className={'button '+(session.pinned.includes(m.id)?'active':'')} key={m.id} onClick={()=>engine.updateSession({pinned:session.pinned.includes(m.id)?session.pinned.filter(id=>id!==m.id):[...session.pinned,m.id]})}><Pin />{isMinimal ? MINIMAL_MACROS[m.id].name : m.name}</button>)}</div><div className="details-actions"><button className="button" onClick={()=>{const error=persistSession(engine.saveSession()); message(error||(isMinimal ? 'Session saved.' : 'Session gespeichert.'));}}><Save/>{isMinimal ? 'Save Session' : 'Session sichern'}</button><button className="button" onClick={()=>exportJson(engine.saveSession(),'instajammable-session.json')}><Download/>{isMinimal ? 'Export Session' : 'Session exportieren'}</button><button className="button" onClick={()=>sessionInput.current?.click()}><Upload/>{isMinimal ? 'Open Session' : 'Session öffnen'}</button><button className="button" onClick={()=>{engine.panic();message(isMinimal ? 'All notes stopped.' : 'Alle von der App gesendeten Noten beendet.');}}><Square/>Panic</button></div><div className="change-history"><h3>{isMinimal ? 'Recent Changes' : 'Zuletzt im Jam'}</h3>{session.changes.length?session.changes.slice(-5).reverse().map(c=><p key={c.id}><span className="mono">{isMinimal ? 'Bar' : 'Takt'} {Math.floor(c.beat/4)+1}</span>{getChangeDisplay(c.label, uiEdition)}</p>):<p>{isMinimal ? 'Changes to motifs, harmony, and freeze appear here.' : 'Änderungen an Motiven, Harmonie und Freeze erscheinen hier.'}</p>}</div></div><div className="layer-details">{session.layers.map(layer=><LayerDetails key={layer.id} layer={layer} outputs={outputs}/>)}<SoundLab session={session}/></div></section>}
       <footer className="app-footer"><span>Made for the moment.</span><span className="mono">Seed {session.seed} · {position.capturedBars.toFixed(1)} {isMinimal ? 'bars captured' : 'Takte im Capture'}</span><button onClick={()=>setRouting(true)}>{isMinimal ? 'MIDI & Routing' : 'Ableton & MIDI'} <ArrowUpRight size={14}/></button></footer>
     </main>
     <input ref={midiInput} className="file-input" type="file" accept=".mid,.midi,audio/midi" onChange={e=>{void importMidi(e.target.files?.[0]);e.target.value='';}}/>
@@ -566,12 +661,12 @@ export default function App() {
 
 function Range({value,onChange,max=1}:{value:number;onChange:(n:number)=>void;max?:number}) {return <div className="range-value"><input type="range" min={0} max={max} step={.01} value={value} onChange={e=>onChange(Number(e.target.value))}/><output>{Math.round(value*100)}%</output></div>;}
 function LayerRow({layer}:{layer:JamLayer}) {const isMinimal=useUiEdition()==='minimal';return <div className={'layer-row '+(layer.muted?'muted':'')} style={{'--layer-color':layer.color} as React.CSSProperties}><span className="layer-color"/><div className="layer-main"><strong>{layer.name}</strong><input aria-label={layer.name+(isMinimal?' internal volume':' Lautstärke intern')} type="range" min={0} max={1} step={.01} value={Math.min(1,layer.volume)} onChange={e=>engine.updateLayer(layer.id,{volume:Number(e.target.value)})}/></div><div className="layer-controls"><button className={layer.muted?'active':''} aria-label={layer.name+(isMinimal?' mute':' stummschalten')} aria-pressed={layer.muted} onClick={()=>engine.updateLayer(layer.id,{muted:!layer.muted})}>M</button><button className={layer.solo?'active':''} aria-label={layer.name+' solo'} aria-pressed={layer.solo} onClick={()=>engine.updateLayer(layer.id,{solo:!layer.solo})}>S</button><button className={layer.locked?'active':''} aria-label={layer.name+(isMinimal?' lock parameters':' Parameter schützen')} aria-pressed={layer.locked} onClick={()=>engine.updateLayer(layer.id,{locked:!layer.locked})}><LockKeyhole size={13}/></button><button className={layer.frozen?'active':''} aria-label={layer.name+(isMinimal?' freeze phrase':' Phrase einfrieren')} aria-pressed={layer.frozen} onClick={()=>engine.updateLayer(layer.id,{frozen:!layer.frozen})}><Snowflake size={13}/></button></div></div>;}
-function LayerDetails({layer,outputs}:{layer:JamLayer;outputs:{id:string;name:string}[]}) {const isMinimal=useUiEdition()==='minimal';const s=layer.settings;const timbreNames=isMinimal?TIMBRE_NAMES_EN:TIMBRE_NAMES;return <details className="layer-detail"><summary><span style={{background:layer.color}} className="layer-color"/><strong>{layer.name}</strong><span className="helper">{layer.role} · {isMinimal?'Ch':'Kanal'} {layer.channel}</span><SlidersHorizontal size={16}/></summary><div className="settings-grid"><label>{isMinimal?'Density':'Dichte'}<Range value={s.density} onChange={n=>engine.setLayerSettings(layer.id,{density:n})}/></label>{layer.role==='drum'&&<label>{isMinimal?'Rhythm Generator':'Rhythmusgenerator'}<select value={s.rhythmAlgorithm||'composed'} onChange={e=>engine.setLayerSettings(layer.id,{rhythmAlgorithm:e.target.value as typeof s.rhythmAlgorithm})}>{[['composed',isMinimal?'Composed Groove':'Komponierter Groove'],['euclidean','Euclidean'],['probabilistic','Probabilistic'],['polymetric','Polymetric'],['markov','Markov'],['densityBurst','Density Burst']].map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label>}<label>{isMinimal?'Evolve Density Min':'Evolve-Dichte von'}<Range value={s.mutationDensityMin??0} onChange={n=>engine.setLayerSettings(layer.id,{mutationDensityMin:Math.min(n,s.mutationDensityMax??1)})}/></label><label>{isMinimal?'Evolve Density Max':'Evolve-Dichte bis'}<Range value={s.mutationDensityMax??1} onChange={n=>engine.setLayerSettings(layer.id,{mutationDensityMax:Math.max(n,s.mutationDensityMin??0)})}/></label><label>{isMinimal?'Register Min':'Register von'}<input type="number" min={0} max={s.maxNote} value={s.minNote} onChange={e=>engine.setLayerSettings(layer.id,{minNote:Math.min(s.maxNote,Math.max(0,Number(e.target.value)))})}/></label><label>{isMinimal?'Register Max':'Register bis'}<input type="number" min={s.minNote} max={127} value={s.maxNote} onChange={e=>engine.setLayerSettings(layer.id,{maxNote:Math.max(s.minNote,Math.min(127,Number(e.target.value)))})}/></label><label>Phrase<select value={s.phraseBars} onChange={e=>engine.setLayerSettings(layer.id,{phraseBars:Number(e.target.value)})}>{[2,4,8,16].map(n=><option key={n} value={n}>{n} {isMinimal?'Bars':'Takte'}</option>)}</select></label><label>{isMinimal?'Velocity Min':'Velocity von'}<input type="number" min={1} max={s.velocityMax} value={s.velocityMin} onChange={e=>engine.setLayerSettings(layer.id,{velocityMin:Math.min(s.velocityMax,Math.max(1,Number(e.target.value)))})}/></label><label>{isMinimal?'Velocity Max':'Velocity bis'}<input type="number" min={s.velocityMin} max={127} value={s.velocityMax} onChange={e=>engine.setLayerSettings(layer.id,{velocityMax:Math.max(s.velocityMin,Math.min(127,Number(e.target.value)))})}/></label><label>Humanize (ms)<input type="number" min={0} max={30} value={s.humanizeMs} onChange={e=>engine.setLayerSettings(layer.id,{humanizeMs:Math.min(30,Math.max(0,Number(e.target.value)))})}/></label><label>{isMinimal?'Timbre':'Klangfarbe'}<select value={s.timbre} onChange={e=>engine.setLayerSettings(layer.id,{timbre:e.target.value as typeof s.timbre})}>{TIMBRES.map(t=><option key={t} value={t}>{timbreNames[t]}</option>)}</select></label><label>{isMinimal?'MIDI Channel':'MIDI-Kanal'}<input type="number" min={1} max={16} value={layer.channel} onChange={e=>engine.updateLayer(layer.id,{channel:Math.max(1,Math.min(16,Number(e.target.value)))})}/></label><label>{isMinimal?'MIDI Output':'MIDI-Ausgang'}<select value={layer.outputId||''} onChange={e=>engine.updateLayer(layer.id,{outputId:e.target.value||null})}><option value="">{isMinimal?'Global Output':'Globaler Ausgang'}</option>{layer.outputId&&!outputs.some(o=>o.id===layer.outputId)&&<option value={layer.outputId}>{isMinimal?'Saved port · disconnected':'Gespeicherter Port · nicht verbunden'}</option>}{outputs.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></label></div></details>;}
+function LayerDetails({layer,outputs}:{layer:JamLayer;outputs:{id:string;name:string}[]}) {const isMinimal=useUiEdition()==='minimal';const s=layer.settings;const timbreNames=isMinimal?TIMBRE_NAMES_EN:TIMBRE_NAMES;const numVal=(raw:string)=>{const n=Number(raw);return raw!==''&&Number.isFinite(n)?n:null;};return <details className="layer-detail"><summary><span style={{background:layer.color}} className="layer-color"/><strong>{layer.name}</strong><span className="helper">{layer.role} · {isMinimal?'Ch':'Kanal'} {layer.channel}</span><SlidersHorizontal size={16}/></summary><div className="settings-grid"><label>{isMinimal?'Density':'Dichte'}<Range value={s.density} onChange={n=>engine.setLayerSettings(layer.id,{density:n})}/></label>{layer.role==='drum'&&<label>{isMinimal?'Rhythm Generator':'Rhythmusgenerator'}<select value={s.rhythmAlgorithm||'composed'} onChange={e=>engine.setLayerSettings(layer.id,{rhythmAlgorithm:e.target.value as typeof s.rhythmAlgorithm})}>{[['composed',isMinimal?'Composed Groove':'Komponierter Groove'],['euclidean','Euclidean'],['probabilistic','Probabilistic'],['polymetric','Polymetric'],['markov','Markov'],['densityBurst','Density Burst']].map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label>}<label>{isMinimal?'Evolve Density Min':'Evolve-Dichte von'}<Range value={s.mutationDensityMin??0} onChange={n=>engine.setLayerSettings(layer.id,{mutationDensityMin:Math.min(n,s.mutationDensityMax??1)})}/></label><label>{isMinimal?'Evolve Density Max':'Evolve-Dichte bis'}<Range value={s.mutationDensityMax??1} onChange={n=>engine.setLayerSettings(layer.id,{mutationDensityMax:Math.max(n,s.mutationDensityMin??0)})}/></label><label>{isMinimal?'Register Min':'Register von'}<input type="number" min={0} max={s.maxNote} value={s.minNote} onChange={e=>{const n=numVal(e.target.value);if(n!==null)engine.setLayerSettings(layer.id,{minNote:Math.min(s.maxNote,Math.max(0,n))});}}/></label><label>{isMinimal?'Register Max':'Register bis'}<input type="number" min={s.minNote} max={127} value={s.maxNote} onChange={e=>{const n=numVal(e.target.value);if(n!==null)engine.setLayerSettings(layer.id,{maxNote:Math.max(s.minNote,Math.min(127,n))});}}/></label><label>Phrase<select value={s.phraseBars} onChange={e=>engine.setLayerSettings(layer.id,{phraseBars:Number(e.target.value)})}>{[2,4,8,16].map(n=><option key={n} value={n}>{n} {isMinimal?'Bars':'Takte'}</option>)}</select></label><label>{isMinimal?'Velocity Min':'Velocity von'}<input type="number" min={1} max={s.velocityMax} value={s.velocityMin} onChange={e=>{const n=numVal(e.target.value);if(n!==null)engine.setLayerSettings(layer.id,{velocityMin:Math.min(s.velocityMax,Math.max(1,n))});}}/></label><label>{isMinimal?'Velocity Max':'Velocity bis'}<input type="number" min={s.velocityMin} max={127} value={s.velocityMax} onChange={e=>{const n=numVal(e.target.value);if(n!==null)engine.setLayerSettings(layer.id,{velocityMax:Math.max(s.velocityMin,Math.min(127,n))});}}/></label><label>Humanize (ms)<input type="number" min={0} max={30} value={s.humanizeMs} onChange={e=>{const n=numVal(e.target.value);if(n!==null)engine.setLayerSettings(layer.id,{humanizeMs:Math.min(30,Math.max(0,n))});}}/></label><label>{isMinimal?'Timbre':'Klangfarbe'}<select value={s.timbre} onChange={e=>engine.setLayerSettings(layer.id,{timbre:e.target.value as typeof s.timbre})}>{TIMBRES.map(t=><option key={t} value={t}>{timbreNames[t]}</option>)}</select></label><label>{isMinimal?'MIDI Channel':'MIDI-Kanal'}<input type="number" min={1} max={16} value={layer.channel} onChange={e=>{const n=numVal(e.target.value);if(n!==null)engine.updateLayer(layer.id,{channel:Math.max(1,Math.min(16,n))});}}/></label><label>{isMinimal?'MIDI Output':'MIDI-Ausgang'}<select value={layer.outputId||''} onChange={e=>engine.updateLayer(layer.id,{outputId:e.target.value||null})}><option value="">{isMinimal?'Global Output':'Globaler Ausgang'}</option>{layer.outputId&&!outputs.some(o=>o.id===layer.outputId)&&<option value={layer.outputId}>{isMinimal?'Saved port · disconnected':'Gespeicherter Port · nicht verbunden'}</option>}{outputs.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></label></div></details>;}
 function Routing({session,outputs,outputId,midiStatus,onClose,onMode,onConnect,onOutput,onTest}:{session:JamSession;outputs:{id:string;name:string}[];outputId:string;midiStatus:string;onClose:()=>void;onMode:(mode:JamSession['outputMode'])=>void;onConnect:()=>void;onOutput:(id:string)=>void;onTest:()=>void}) {
   const isMinimal=useUiEdition()==='minimal';
   const ref=useRef<HTMLElement>(null);
   useEffect(()=>{const previous=document.activeElement as HTMLElement;ref.current?.focus();const key=(e:KeyboardEvent)=>{if(e.key==='Escape')onClose();if(e.key==='Tab'){const nodes=[...ref.current!.querySelectorAll<HTMLElement>('button,input,select')];const first=nodes[0],last=nodes[nodes.length-1];if(e.shiftKey&&(document.activeElement===first||document.activeElement===ref.current)){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}};ref.current?.addEventListener('keydown',key);const current=ref.current;return()=>{current?.removeEventListener('keydown',key);previous?.focus();};},[onClose]);
-  return <div className="modal-scrim"><section ref={ref} className="routing-dialog" role="dialog" aria-modal="true" aria-labelledby="routing-title" tabIndex={-1}><header className="editor-header"><div><span className="eyebrow">{isMinimal?'SIGNAL PATH':'DEIN SIGNALWEG'}</span><h2 id="routing-title">{isMinimal?'From Browser to Studio.':'Vom Browser ins Studio.'}</h2></div><button className="icon-button" aria-label={isMinimal?'Close routing':'Routing schließen'} onClick={onClose}><X/></button></header><div className="routing-content"><label>{isMinimal?'Playback':'Wiedergabe'}<select value={session.outputMode} onChange={e=>onMode(e.target.value as JamSession['outputMode'])}><option value="internal">{isMinimal?'Internal Audio':'Internes Audio'}</option><option value="midi">MIDI</option><option value="both">Audio + MIDI</option></select></label><div className="midi-connect"><button className="button" onClick={onConnect}><Radio/>{midiStatus==='ready'?(isMinimal?'Refresh MIDI':'MIDI aktualisieren'):(isMinimal?'Connect MIDI':'MIDI verbinden')}</button><span className="helper">Status: {midiStatus}</span></div><label>{isMinimal?'Global MIDI Output':'Globaler MIDI-Ausgang'}<select value={outputId} onChange={e=>onOutput(e.target.value)}><option value="">{isMinimal?'Off':'Aus'}</option>{outputId&&!outputs.some(o=>o.id===outputId)&&<option value={outputId}>{isMinimal?'Saved port · disconnected':'Gespeicherter Port · nicht verbunden'}</option>}{outputs.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></label><button className="button" disabled={!outputId} onClick={onTest}><Volume2/>{isMinimal?'Test Note (Ch 1 + 10)':'Testnote (Kanal 1 + 10)'}</button><div className="toggle-row"><label><input type="checkbox" checked={session.deepMindEnabled} onChange={e=>engine.updateSession({deepMindEnabled:e.target.checked})}/> {isMinimal?'Enable DeepMind CC Modulation':'DeepMind-CC-Modulation aktivieren'}</label><label>{isMinimal?'Channel':'Kanal'}<input type="number" min={1} max={16} value={session.deepMindChannel} onChange={e=>engine.updateSession({deepMindChannel:Math.max(1,Math.min(16,Number(e.target.value)))})}/></label></div><p className="helper">{isMinimal?'Levels, synthesis, and effects shape internal audio. External MIDI sound and volume are controlled in your DAW/synth; velocity limits in Details affect sent notes.':'Pegel, Synthese und Effekte formen das interne Audio. MIDI-Klang und Lautstärke steuerst du in deinem Instrument; die Velocity-Grenzen unter Details verändern gesendete Noten.'}</p><p className="helper">{isMinimal?'Only enable CC modulation if the receiving device matches its CC mapping. Per-track outputs are in Details.':'CC-Modulation nur aktivieren, wenn das empfangende Gerät und seine CC-Zuordnung stimmen. Einzelne Spur-Ausgänge findest du unter Details.'}</p><div className="connection-guide"><h3><Headphones/>{isMinimal?'DAW / Ableton Live Setup':'Ableton Live Standard'}</h3><ol><li>{isMinimal?'macOS Audio MIDI Setup → MIDI Studio → IAC Driver → "Device is online".':'Audio-MIDI-Setup → MIDI-Studio → IAC-Treiber → „Gerät ist online“.'}</li><li>{isMinimal?'In Live: enable Track for the IAC input. Enable Remote only for custom MIDI mappings.':'In Live: IAC-Eingang Track einschalten. Remote nur für deine eigenen MIDI-Zuweisungen einschalten.'}</li><li>{isMinimal?'Instrument tracks: MIDI From IAC, Ch 1 for Texture/Chords, 2 Melody, 3 Bass, 10 Drums.':'Instrumentenspuren: MIDI From IAC, Kanal 1 für Texture/Chords, 2 für Melody, 3 für Bass, 10 für Drums. Monitor In oder Auto + Aufnahmebereitschaft.'}</li><li>{isMinimal?'Connect MIDI here and choose IAC, then record or import exported MIDI clips.':'In der App MIDI verbinden und IAC wählen. Danach Live aufnehmen oder MIDI aus der Sammlung importieren.'}</li></ol></div></div></section></div>;
+  return <div className="modal-scrim"><section ref={ref} className="routing-dialog" role="dialog" aria-modal="true" aria-labelledby="routing-title" tabIndex={-1}><header className="editor-header"><div><span className="eyebrow">{isMinimal?'SIGNAL PATH':'DEIN SIGNALWEG'}</span><h2 id="routing-title">{isMinimal?'From Browser to Studio.':'Vom Browser ins Studio.'}</h2></div><button className="icon-button" aria-label={isMinimal?'Close routing':'Routing schließen'} onClick={onClose}><X/></button></header><div className="routing-content"><label>{isMinimal?'Playback':'Wiedergabe'}<select value={session.outputMode} onChange={e=>onMode(e.target.value as JamSession['outputMode'])}><option value="internal">{isMinimal?'Internal Audio':'Internes Audio'}</option><option value="midi">MIDI</option><option value="both">Audio + MIDI</option></select></label><div className="midi-connect"><button className="button" onClick={onConnect}><Radio/>{midiStatus==='ready'?(isMinimal?'Refresh MIDI':'MIDI aktualisieren'):(isMinimal?'Connect MIDI':'MIDI verbinden')}</button><span className="helper">Status: {midiStatus}</span></div><label>{isMinimal?'Global MIDI Output':'Globaler MIDI-Ausgang'}<select value={outputId} onChange={e=>onOutput(e.target.value)}><option value="">{isMinimal?'Off':'Aus'}</option>{outputId&&!outputs.some(o=>o.id===outputId)&&<option value={outputId}>{isMinimal?'Saved port · disconnected':'Gespeicherter Port · nicht verbunden'}</option>}{outputs.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></label><button className="button" disabled={!outputId} onClick={onTest}><Volume2/>{isMinimal?'Test Note (Ch 1 + 10)':'Testnote (Kanal 1 + 10)'}</button><div className="toggle-row"><label><input type="checkbox" checked={session.deepMindEnabled} onChange={e=>engine.updateSession({deepMindEnabled:e.target.checked})}/> {isMinimal?'Enable DeepMind CC Modulation':'DeepMind-CC-Modulation aktivieren'}</label><label>{isMinimal?'Channel':'Kanal'}<input type="number" min={1} max={16} value={session.deepMindChannel} onChange={e=>{const n=Number(e.target.value);if(e.target.value!==''&&Number.isFinite(n))engine.updateSession({deepMindChannel:Math.max(1,Math.min(16,n))});}}/></label></div><p className="helper">{isMinimal?'Levels, synthesis, and effects shape internal audio. External MIDI sound and volume are controlled in your DAW/synth; velocity limits in Details affect sent notes.':'Pegel, Synthese und Effekte formen das interne Audio. MIDI-Klang und Lautstärke steuerst du in deinem Instrument; die Velocity-Grenzen unter Details verändern gesendete Noten.'}</p><p className="helper">{isMinimal?'Only enable CC modulation if the receiving device matches its CC mapping. Per-track outputs are in Details.':'CC-Modulation nur aktivieren, wenn das empfangende Gerät und seine CC-Zuordnung stimmen. Einzelne Spur-Ausgänge findest du unter Details.'}</p><div className="connection-guide"><h3><Headphones/>{isMinimal?'DAW / Ableton Live Setup':'Ableton Live Standard'}</h3><ol><li>{isMinimal?'macOS Audio MIDI Setup → MIDI Studio → IAC Driver → "Device is online".':'Audio-MIDI-Setup → MIDI-Studio → IAC-Treiber → „Gerät ist online“.'}</li><li>{isMinimal?'In Live: enable Track for the IAC input. Enable Remote only for custom MIDI mappings.':'In Live: IAC-Eingang Track einschalten. Remote nur für deine eigenen MIDI-Zuweisungen einschalten.'}</li><li>{isMinimal?'Instrument tracks: MIDI From IAC, Ch 1 for Texture/Chords, 2 Melody, 3 Bass, 10 Drums.':'Instrumentenspuren: MIDI From IAC, Kanal 1 für Texture/Chords, 2 für Melody, 3 für Bass, 10 für Drums. Monitor In oder Auto + Aufnahmebereitschaft.'}</li><li>{isMinimal?'Connect MIDI here and choose IAC, then record or import exported MIDI clips.':'In der App MIDI verbinden und IAC wählen. Danach Live aufnehmen oder MIDI aus der Sammlung importieren.'}</li></ol></div></div></section></div>;
 }
 
 const TIMBRE_NAMES: Record<(typeof TIMBRES)[number], string> = { warm: 'Warm', air: 'Luftig', keys: 'Keys', bell: 'Glocke', strings: 'Streicher', wash: 'Wash · breite Fläche', dub: 'Dub · Akkord-Stab', root: 'Root · tiefer Anker', glass: 'Glass · glasig, schimmernd', organ: 'Orgel · weich, tragend', solina: 'Solina · analoges Ensemble', shimmer: 'Shimmer · kristalline Obertöne', celeste: 'Celeste · gefilztes Piano/Glocke' };

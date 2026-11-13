@@ -10,6 +10,7 @@ export class DrumSynth {
   private random: { next(): number };
   private voices = new Set<{ sources: AudioScheduledSourceNode[]; nodes: AudioNode[]; kind: 'kick' | 'snare' | 'hihat' | 'perc' }>();
   private static satCurves = new Map<number, Float32Array>();
+  private sharedNoiseBuffer: { sampleRate: number; buffer: AudioBuffer } | null = null;
 
   constructor(ctx: AudioContext, outputNode: AudioNode, random: { next(): number } = { next: Math.random }) {
     this.ctx = ctx;
@@ -127,26 +128,42 @@ export class DrumSynth {
 
     if (model === 'brush') {
       const brushDecay = Math.max(0.14, decay);
+      const bodyOsc = this.ctx.createOscillator();
+      const bodyGain = this.ctx.createGain();
+      bodyOsc.type = 'triangle';
+      bodyOsc.frequency.setValueAtTime(Math.min(175, basePitch * 1.15), time);
+      bodyOsc.frequency.exponentialRampToValueAtTime(Math.max(95, basePitch * 0.72), time + 0.032);
+      const shellEnd = time + Math.min(0.085, brushDecay * 0.55);
+      this.scheduleStrike(bodyGain.gain, time, peakGain * 0.58, shellEnd, 0.0012);
+
       const noiseBuffer = this.generateWhiteNoiseBuffer(brushDecay + 0.05);
       const noiseSource = this.ctx.createBufferSource();
       noiseSource.buffer = noiseBuffer;
       const bp = this.ctx.createBiquadFilter();
       bp.type = 'bandpass';
-      bp.frequency.setValueAtTime(2200 + tone * 2400, time);
-      bp.Q.setValueAtTime(0.7, time);
+      bp.frequency.setValueAtTime(1350 + tone * 1500, time);
+      bp.Q.setValueAtTime(0.65, time);
       const gain = this.ctx.createGain();
       gain.gain.setValueAtTime(0, time);
-      gain.gain.linearRampToValueAtTime(peakGain * 0.75, time + 0.012);
+      gain.gain.linearRampToValueAtTime(peakGain * 0.52, time + 0.004);
       gain.gain.exponentialRampToValueAtTime(0.0001, time + brushDecay);
+
+      const masterBrushGain = this.ctx.createGain();
       noiseSource.connect(bp);
       bp.connect(gain);
-      const drive = this.saturate(gain, params.drive);
+      gain.connect(masterBrushGain);
+      bodyOsc.connect(bodyGain);
+      bodyGain.connect(masterBrushGain);
+
+      const drive = this.saturate(masterBrushGain, params.drive);
       const panner = this.ctx.createStereoPanner ? this.ctx.createStereoPanner() : null;
       if (panner) { panner.pan.setValueAtTime(Math.max(-1, Math.min(1, params.pan ?? 0)), time); drive.output.connect(panner); panner.connect(this.outputNode); }
       else drive.output.connect(this.outputNode);
+      bodyOsc.start(time);
+      bodyOsc.stop(shellEnd + 0.02);
       noiseSource.start(time);
       noiseSource.stop(time + brushDecay + 0.05);
-      this.track([noiseSource], [bp, gain, ...drive.nodes, ...(panner ? [panner] : [])], noiseSource, 'snare');
+      this.track([noiseSource, bodyOsc], [bp, gain, bodyGain, masterBrushGain, ...drive.nodes, ...(panner ? [panner] : [])], noiseSource, 'snare');
       return;
     }
 
@@ -533,7 +550,7 @@ export class DrumSynth {
     prePad.gain.setValueAtTime(0.25, this.ctx.currentTime);
     const shape = this.ctx.createWaveShaper();
     shape.curve = curve as Float32Array<ArrayBuffer>;
-    if ('oversample' in shape) shape.oversample = '2x';
+    if ('oversample' in shape) shape.oversample = 'none';
     input.connect(prePad);
     prePad.connect(shape);
     return { output: shape, nodes: [prePad, shape] };
@@ -542,7 +559,7 @@ export class DrumSynth {
     const voice = { sources, nodes, kind };
     this.voices.add(voice);
     last.onended = () => this.cleanup(voice);
-    if (this.voices.size > 32) this.cleanup(this.voices.values().next().value!);
+    if (this.voices.size > 64) this.cleanup(this.voices.values().next().value!);
   }
   private cleanup(voice: { sources: AudioScheduledSourceNode[]; nodes: AudioNode[]; kind: 'kick' | 'snare' | 'hihat' | 'perc' }): void {
     this.voices.delete(voice);
@@ -554,8 +571,21 @@ export class DrumSynth {
   public getActiveVoiceCount(): number { return this.voices.size; }
 
   private generateWhiteNoiseBuffer(duration: number): AudioBuffer {
-    const length = Math.ceil(this.ctx.sampleRate * duration);
-    const buffer = this.ctx.createBuffer(1, length, this.ctx.sampleRate);
+    const sr = this.ctx.sampleRate || 44100;
+    if (duration <= 2.0) {
+      if (!this.sharedNoiseBuffer || this.sharedNoiseBuffer.sampleRate !== sr) {
+        const length = Math.ceil(sr * 2.0);
+        const buffer = this.ctx.createBuffer(1, length, sr);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+          data[i] = this.random.next() * 2 - 1;
+        }
+        this.sharedNoiseBuffer = { sampleRate: sr, buffer };
+      }
+      return this.sharedNoiseBuffer.buffer;
+    }
+    const length = Math.ceil(sr * duration);
+    const buffer = this.ctx.createBuffer(1, length, sr);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < length; i++) {
       data[i] = this.random.next() * 2 - 1;

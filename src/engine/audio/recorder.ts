@@ -29,7 +29,7 @@ export class AudioRecorder {
   private sampleCount = 0;
   private session = 0;
   private maxFrames = 0;
-  private modulePromise: Promise<void> | null = null;
+  private modulePromises = new WeakMap<AudioContext, Promise<void>>();
   private flushing: (() => void) | null = null;
   private stopping: Promise<{ webmBlob: Blob | null; wavBytes: Uint8Array | null }> | null = null;
   constructor(private getStreamNode: () => MediaStreamAudioDestinationNode | null,
@@ -73,11 +73,13 @@ export class AudioRecorder {
   }
   private async setupWorklet(ctx: AudioContext, token: number): Promise<void> {
     try {
-      if (!this.modulePromise) {
+      let pending = this.modulePromises.get(ctx);
+      if (!pending) {
         const url = URL.createObjectURL(new Blob([PCM_WORKLET], { type: 'text/javascript' }));
-        this.modulePromise = ctx.audioWorklet.addModule(url).finally(() => URL.revokeObjectURL(url));
+        pending = ctx.audioWorklet.addModule(url).finally(() => URL.revokeObjectURL(url));
+        this.modulePromises.set(ctx, pending);
       }
-      await this.modulePromise;
+      await pending;
       if (!this.recording || token !== this.session) return;
       const node = new AudioWorkletNode(ctx, 'instajammable-pcm-recorder', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2] });
       node.port.onmessage = event => {
@@ -87,7 +89,7 @@ export class AudioRecorder {
       };
       this.connectProcessor(ctx, node); this.notify();
     } catch (error) {
-      this.modulePromise = null;
+      this.modulePromises.delete(ctx);
       try { this.setupFallback(ctx, token); }
       catch (fallbackError) {
         this.error = `PCM recording unavailable: ${fallbackError instanceof Error ? fallbackError.message : String(error)}`;

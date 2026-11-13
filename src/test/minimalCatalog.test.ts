@@ -6,6 +6,7 @@ import { RHYTHM_POOL } from '../engine/jam/rhythms';
 import { SEQUENCE_TEMPLATES } from '../engine/jam/sequencer';
 import { INSTRUMENT_PRESETS } from '../engine/jam/instrumentPresets';
 import { TARGET_PARAM_OPTIONS, EQ_PRESETS, INITIAL_CUSTOM_MACROS } from '../engine/jam/customMacros';
+import { TIMBRES, DRUM_MODELS } from '../types/jam';
 import {
   getSceneDisplay,
   getSoundscapeDisplay,
@@ -16,6 +17,11 @@ import {
   getEqPresetDisplay,
   getCustomMacroDisplayName,
   getSequenceBlockLabel,
+  getPresetCategoryDisplay,
+  getTimbreDisplayName,
+  getDrumModelDisplayName,
+  getClipTitleDisplay,
+  getChangeDisplay,
 } from '../engine/jam/minimalCatalog';
 
 const FORBIDDEN_MINIMAL =
@@ -75,5 +81,56 @@ test('Minimal EN catalog translates 100% of scenes, presets, and params without 
 
   for (const m of INITIAL_CUSTOM_MACROS) {
     assertCleanEnglish(`macro:${m.id}`, [getCustomMacroDisplayName(m.name, 'minimal')]);
+  }
+});
+
+test('minimalCatalog dynamic labels, categories, timbres, drum models, clips and change log stay clean in Minimal EN', () => {
+  const dynamicBlocks = [
+    '4T Chorus (Peak)',
+    '4T Buildup (Spannung)',
+    '8T Voller Groove',
+    '4T Breakdown (Drums aus)',
+    '16T Stille (Minimal)',
+  ];
+  for (const label of dynamicBlocks) {
+    assertCleanEnglish(`dynamicBlock:${label}`, [getSequenceBlockLabel(label, 'minimal')]);
+    assert.equal(getSequenceBlockLabel(label, 'classic'), label);
+  }
+
+  for (const inst of INSTRUMENT_PRESETS) {
+    assertCleanEnglish(`presetCategory:${inst.category}`, [getPresetCategoryDisplay(inst.category, 'minimal')]);
+  }
+  assertCleanEnglish('presetCategory:ultimae', [getPresetCategoryDisplay('Cell-Grade Ultimae', 'minimal')]);
+
+  for (const timbre of TIMBRES) {
+    assertCleanEnglish(`timbre:${timbre}`, [getTimbreDisplayName(timbre, 'minimal')]);
+  }
+
+  for (const model of [...DRUM_MODELS, 'kick', 'snare', 'hihat', 'perc'] as const) {
+    assertCleanEnglish(`drumModel:${model}`, [getDrumModelDisplayName(model, 'minimal')]);
+  }
+
+  const clipTitles = [
+    'Berlin 4AM Dub · 8.0 Takte',
+    'Dorian Dawn · Vorschau',
+    'Aufnahme 4.0 Takte',
+  ];
+  for (const title of clipTitles) {
+    const min = getClipTitleDisplay(title, 'minimal');
+    assertCleanEnglish(`clip:${title}`, [min]);
+    assert.ok(!/Takte|Vorschau|Aufnahme/.test(min), `Expected German clip words removed from "${min}"`);
+  }
+
+  const changeLabels = [
+    'Tempo 118 BPM',
+    'Panic · Stimmen und MIDI gestoppt',
+    'Bearbeitete Phrase übernommen',
+    'Arrangement: ⚡ Buildup gestartet (Drop in 4 Takten)',
+    'Effekt-Kette: Modus Parallel',
+    'Chords Zufalls-Sound · Solar Fields Space',
+    '🎲 Radical Random · Deep Space',
+  ];
+  for (const label of changeLabels) {
+    assertCleanEnglish(`change:${label}`, [getChangeDisplay(label, 'minimal')]);
   }
 });

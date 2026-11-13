@@ -2,7 +2,11 @@ import { useState } from 'react';
 import { Shuffle, ChevronRight, LockKeyhole, Snowflake } from 'lucide-react';
 import { JamEngine } from '../../engine/jam/JamEngine';
 import { getInstrumentPresets, detectActiveInstrumentPreset } from '../../engine/jam/instrumentPresets';
-import { getInstrumentPresetDisplay } from '../../engine/jam/minimalCatalog';
+import {
+  getInstrumentPresetDisplay,
+  getTimbreDisplayName,
+  getDrumModelDisplayName,
+} from '../../engine/jam/minimalCatalog';
 import { DRUM_MODELS, TIMBRES, type DrumModel, type JamPosition, type JamSession, type Timbre } from '../../types/jam';
 import type { UiEdition } from '../../types/ui';
 import { HarmonyHeroCard, MacroDeckCard } from './LayoutShared';
@@ -61,7 +65,9 @@ export function GrooveboxLayout({ session, position, edition }: GrooveboxLayoutP
                 </div>
                 <strong className="pad-title">{l.name}</strong>
                 <span className="pad-sub">
-                  {l.role === 'drum' ? (l.settings.drumModel || l.drumVoice) : l.settings.timbre}
+                  {l.role === 'drum'
+                    ? getDrumModelDisplayName(l.settings.drumModel || l.drumVoice, edition)
+                    : getTimbreDisplayName(l.settings.timbre, edition)}
                 </span>
                 <div className="pad-meter-bar">
                   <div className="pad-meter-fill" style={{ width: `${Math.round(l.volume * 100)}%` }} />
@@ -159,7 +165,7 @@ export function GrooveboxLayout({ session, position, edition }: GrooveboxLayoutP
                 onChange={e => engine.setLayerSettings(layer.id, { timbre: e.target.value as Timbre })}
               >
                 {TIMBRES.map(t => (
-                  <option key={t} value={t}>{t}</option>
+                  <option key={t} value={t}>{getTimbreDisplayName(t, edition)}</option>
                 ))}
               </select>
             </label>
@@ -173,7 +179,7 @@ export function GrooveboxLayout({ session, position, edition }: GrooveboxLayoutP
                 onChange={e => engine.setLayerSettings(layer.id, { drumModel: e.target.value as DrumModel })}
               >
                 {DRUM_MODELS.map(m => (
-                  <option key={m} value={m}>{m}</option>
+                  <option key={m} value={m}>{getDrumModelDisplayName(m, edition)}</option>
                 ))}
               </select>
             </label>

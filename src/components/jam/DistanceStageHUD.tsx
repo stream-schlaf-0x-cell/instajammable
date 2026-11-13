@@ -36,8 +36,14 @@ export function DistanceStageHUD({ session, position, onClose }: DistanceStageHU
     }
   };
 
-  const root = position.chordRoot;
-  const holdProgress = position.chordHoldBars ? 1 - position.chordBarsLeft / position.chordHoldBars : 0;
+  const chordRoot = position.chordRoot;
+  const holdBars = Math.max(1, Math.round(position.chordHoldBars || 4));
+  const rawLeft = Number.isFinite(position.chordBarsLeft) ? position.chordBarsLeft : holdBars;
+  const elapsedBars = position.playing
+    ? Math.max(0, Math.min(holdBars - 0.0001, holdBars - rawLeft))
+    : 0;
+  const currentBarInChord = position.playing ? Math.min(holdBars, Math.floor(elapsedBars) + 1) : 1;
+  const holdProgress = holdBars ? elapsedBars / holdBars : 0;
   const currentBeatInBar = Math.floor(position.beat) % 4;
 
   const seq = position.sequencer;
@@ -114,10 +120,10 @@ export function DistanceStageHUD({ session, position, onClose }: DistanceStageHU
                 type="button"
                 className="stage-root-orb"
                 onClick={() => void engine.auditionNote(session.root + 12)}
-                title={isMinimal ? 'Audition root note' : 'Grundton anspielen'}
+                title={isMinimal ? 'Session Key (click to audition)' : 'Tonart-Grundton anspielen'}
               >
-                <small>ROOT</small>
-                <strong>{pitch(root)}</strong>
+                <small>{isMinimal ? 'KEY' : 'TONART'}</small>
+                <strong>{pitch(session.root)}</strong>
               </button>
               <button
                 type="button"
@@ -157,7 +163,7 @@ export function DistanceStageHUD({ session, position, onClose }: DistanceStageHU
 
               <div className="stage-tones-row">
                 {position.chordNotes.map((n, idx) => {
-                  const isRootNote = ((n % 12) + 12) % 12 === ((root % 12) + 12) % 12;
+                  const isRootNote = ((n % 12) + 12) % 12 === ((chordRoot % 12) + 12) % 12;
                   return (
                     <div key={idx} className="stage-tone-node">
                       <button
@@ -198,8 +204,8 @@ export function DistanceStageHUD({ session, position, onClose }: DistanceStageHU
               <span className="next-countdown">
                 {position.playing
                   ? (isMinimal
-                    ? `in ${Math.max(1, Math.ceil(position.chordBarsLeft))} bar${Math.ceil(position.chordBarsLeft) === 1 ? '' : 's'}`
-                    : `in ${Math.max(1, Math.ceil(position.chordBarsLeft))} Takt${Math.ceil(position.chordBarsLeft) === 1 ? '' : 'en'}`)
+                    ? `Bar ${currentBarInChord}/${holdBars} · Beat ${currentBeatInBar + 1}/4`
+                    : `Takt ${currentBarInChord}/${holdBars} · Schlag ${currentBeatInBar + 1}/4`)
                   : (isMinimal ? 'Starts with jam' : 'Startet mit Jam')}
               </span>
             </div>

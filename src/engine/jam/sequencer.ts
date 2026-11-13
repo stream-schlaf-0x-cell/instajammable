@@ -1,4 +1,4 @@
-import type { SequenceBlock } from '../../types/jam';
+import type { JamStyle, SequenceBlock } from '../../types/jam';
 
 export interface SequenceTemplate {
   id: string;
@@ -54,14 +54,42 @@ export const SEQUENCE_TEMPLATES: SequenceTemplate[] = [
       { section: 'groove', bars: 8, label: '8T Beat Drop & Bassline', macroTargets: { movement: 0.40, density: 0.64, warmth: 0.66, space: 0.66 } },
       { section: 'silent', bars: 4, label: '4T Tiefer Raum & Nachhall', macroTargets: { movement: 0.20, density: 0.20, warmth: 0.60, space: 0.82 } },
     ]
+  },
+  {
+    id: 'lofi-pocket',
+    name: 'Lo-Fi Chillhop Pocket',
+    description: '8 Takte entspannter Beat, 4 Takte Rhodes-Breakdown, 8 Takte voller Soul-Chorus, 4 Takte Vinyl-Ausklang.',
+    blocks: [
+      { section: 'groove', bars: 8, label: '8T Voller Groove', macroTargets: { movement: 0.38, density: 0.56, warmth: 0.76, space: 0.52 } },
+      { section: 'breakdown', bars: 4, label: '4T Breakdown (Drums aus)', macroTargets: { movement: 0.28, density: 0.30, warmth: 0.80, space: 0.74 } },
+      { section: 'chorus', bars: 8, label: '8T Chorus (Peak)', macroTargets: { movement: 0.46, density: 0.72, warmth: 0.82, space: 0.62 } },
+      { section: 'silent', bars: 4, label: '4T Stille (Minimal)', macroTargets: { movement: 0.22, density: 0.22, warmth: 0.78, space: 0.78 } },
+    ]
   }
 ];
 
-export function createDefaultSequence(): SequenceBlock[] {
-  return SEQUENCE_TEMPLATES[0].blocks.map((b, i) => ({
+export function createSequenceForTemplate(templateId: string): SequenceBlock[] {
+  const tmpl = findSequenceTemplate(templateId) || SEQUENCE_TEMPLATES[0];
+  return tmpl.blocks.map((b, i) => ({
     id: `seq-block-${i + 1}`,
     ...b,
   }));
+}
+
+export function createSceneSequence(sceneId: string, style: JamStyle): SequenceBlock[] {
+  if (style === 'lofi') return createSequenceForTemplate('lofi-pocket');
+  if (style === 'techno') return createSequenceForTemplate('minimal-dub');
+  if (['symphonic-dawn', 'cathedral-adagio', 'nils-felt-hall', 'eno-apollo-zero', 'still-water', 'night-orbit', 'rain-window'].includes(sceneId)) {
+    return createSequenceForTemplate('slow-symphonic');
+  }
+  if (['cbl-hydroponic', 'cbl-interloper', 'cbl-carbon-oasis', 'solar-fields-orbit', 'moss-pulse', 'ultimae-drift'].includes(sceneId)) {
+    return createSequenceForTemplate('cbl-journey');
+  }
+  return createSequenceForTemplate('four-bars-flow');
+}
+
+export function createDefaultSequence(): SequenceBlock[] {
+  return createSequenceForTemplate('four-bars-flow');
 }
 
 export function findSequenceTemplate(id: string): SequenceTemplate | undefined {

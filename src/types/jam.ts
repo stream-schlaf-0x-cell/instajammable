@@ -122,6 +122,8 @@ export interface JamEvent extends ClipNote {
   performanceTime: number;
   bpm: number;
 }
+export type ChaosMode = 'manual' | 'calm' | 'pulse' | 'wild';
+
 export interface JamSession {
   version: 2;
   id: string;
@@ -161,6 +163,9 @@ export interface JamSession {
   sequence?: SequenceBlock[];
   sequencerEnabled?: boolean;
   customMacros?: CustomMacro[];
+  customMacrosEnabled?: boolean;
+  chaosEnabled?: boolean;
+  chaosMode?: ChaosMode;
   effectChain?: EffectChainSettings;
   workspaceModules?: string[];
   runtime?: Record<string, unknown>;

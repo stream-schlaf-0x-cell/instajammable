@@ -358,7 +358,7 @@ export class JamComposer {
       }
     } else if (layer.role === 'chords') {
       const pattern: ChordPattern | undefined = s.chordPattern;
-      const roll = lofi ? rng.range(6, 28) : rng.range(35, 95);
+      const roll = lofi ? rng.range(12, 34) : rng.range(35, 95);
       const chordHoldBars = holdBarsFor(session.style, s.chordPace);
       const chordStride = Math.max(16, chordHoldBars * 16);
 
@@ -413,12 +413,12 @@ export class JamComposer {
         // Dub-techno / funk off-beat stabs with space for tape echoes
         const compPatterns = [
           [6, 14],
-          [3, 10],
-          [4, 10],
-          [2, 11],
-          [6, 12],
+          [3, 12],
+          [6, 11],
+          [2, 10],
+          [4, 14],
         ];
-        harmony.notes.forEach((pitch, i) => add(0, fit(pitch), 2.8, 0.48 - i * 0.04, false, i * roll));
+        harmony.notes.forEach((pitch, i) => add(0, fit(pitch), techno ? 0.65 : 1.8, 0.48 - i * 0.04, false, i * roll));
         for (let bar = 0; bar < s.phraseBars; bar++) {
           if (density <= 0 || (phraseIndex !== 0 && !rng.chance(Math.max(0.5, density)))) continue;
           const positions = compPatterns[(bar + Math.floor(phraseIndex)) % compPatterns.length];
@@ -426,7 +426,7 @@ export class JamComposer {
           for (const pos of positions) {
             if (bar === 0 && pos === 0) continue;
             if (!rng.chance(Math.min(1, 0.45 + density * 0.6))) continue;
-            const duration = 0.9 + rng.range(0, 0.6);
+            const duration = techno ? 0.45 + rng.range(0, 0.35) : 0.9 + rng.range(0, 0.6);
             const vel = (pos === 6 || pos === 14 ? 0.50 : 0.38) + rng.range(0, 0.08);
             voicing.forEach((pitch, i) => add(bar * 16 + pos, fit(pitch), duration, Math.max(0.15, vel - i * 0.04), false, rng.chance(0.4) ? i * rng.range(6, 16) : 0));
           }
@@ -483,10 +483,16 @@ export class JamComposer {
         const stride = lofi ? 16 : chordStride;
         for (let step = 0; step < length; step += stride) {
           if (density <= 0 || (phraseIndex !== 0 && !rng.chance(Math.max(0.5, density)))) continue;
-          const restab = lofi && density > 0.75 && rng.chance(movement * 0.5);
-          harmony.notes.forEach((pitch, i) => add(step, fit(pitch), lofi ? (restab ? 2.8 : 3.4 + rng.range(0, 0.45)) : Math.max(3.8, chordHoldBars * 4 - 0.15), 0.48 - i * 0.04, false, i * roll));
-          if (restab) harmony.notes.forEach(p => add(step + 12, fit(p), 0.9, 0.24));
-          if (!lofi) {
+          if (lofi) {
+            const barIdx = Math.floor(step / 16);
+            const lateComp = density >= 0.5 && barIdx % 2 === 0 && rng.chance(0.45 + movement * 0.35);
+            const compStep = step + rng.pick([10, 12]);
+            harmony.notes.forEach((pitch, i) => add(step, fit(pitch), lateComp ? 2.4 : 3.4 + rng.range(0, 0.45), 0.48 - i * 0.04, false, i * roll));
+            if (lateComp && compStep < length) {
+              harmony.notes.slice(-3).forEach((p, i) => add(compStep, fit(p), 0.85, 0.22 + rng.range(0, 0.08), false, i * 10));
+            }
+          } else {
+            harmony.notes.forEach((pitch, i) => add(step, fit(pitch), Math.max(3.8, chordHoldBars * 4 - 0.15), 0.48 - i * 0.04, false, i * roll));
             // Mid-phrase response: delicate upper dyad blooms smoothly halfway through the hold
             if (s.phraseBars >= 2 && rng.chance(0.32 + movement * 0.38)) {
               const upper = harmony.notes.slice(-2);
@@ -624,23 +630,20 @@ export class JamComposer {
           });
         }
       }
-    } else if (layer.role === 'bass' && techno) {
-      // Rolling off-beat sub between the kicks, the way a slow deep-techno bassline sits.
-      for (let step = 0; step < length; step++) {
-        const pos = step % 16; if (![2, 6, 10, 14].includes(pos) || density <= 0 || !rng.chance(Math.min(1, 0.35 + density * 0.65))) continue;
-        const pitch = rng.chance(0.78) ? harmony.root : rng.chance(0.5) ? scaleNote(session.root, session.scale, harmony.degree + 4) : harmony.root + 12;
-        add(step, fit(pitch), 0.42 + rng.range(0, 0.18), pos === 2 ? 0.7 : 0.5, false);
-      }
     } else if (layer.role === 'bass') {
       const bassStyle: BassStyle = s.bassStyle ?? (lofi ? 'jazzWalk' : techno ? 'dubOffbeat' : 'pedal');
       if (bassStyle === 'dubOffbeat') {
-        // Off-beat dub techno bass: steps 2, 6, 10, 14 (test invariant)
+        // Off-beat dub techno bass: steps 2, 6, 10, 14 anchored deeply on root (test invariant)
         for (let step = 0; step < length; step++) {
           const pos = step % 16;
           if (![2, 6, 10, 14].includes(pos) || density <= 0) continue;
-          if (pos !== 2 && pos !== 10 && !rng.chance(density)) continue;
-          const pitch = rng.chance(0.78) ? harmony.root : rng.chance(0.5) ? scaleNote(session.root, session.scale, harmony.degree + 4) : harmony.root + 12;
-          add(step, fit(pitch), 0.42 + rng.range(0, 0.18), pos === 2 ? 0.7 : 0.5, false);
+          const barIdx = Math.floor(step / 16);
+          if (techno) {
+            if (pos !== 2 && pos !== 10 && !rng.chance(Math.min(1, 0.45 + density * 0.6))) continue;
+          } else if (pos !== 2 && pos !== 10 && !rng.chance(density)) continue;
+          const isTurnaroundFifth = pos === 14 && barIdx % 2 === 1 && rng.chance(0.35 + movement * 0.3);
+          const pitch = isTurnaroundFifth ? scaleNote(session.root, session.scale, harmony.degree + 4) : harmony.root;
+          add(step, fit(pitch), 0.42 + rng.range(0, 0.16), pos === 2 ? 0.72 : 0.52, false);
         }
       } else if (bassStyle === 'jazzWalk') {
         for (let bar = 0; bar < s.phraseBars; bar++) {
@@ -702,6 +705,7 @@ export class JamComposer {
     } else if (layer.role === 'melody') {
       const mStyle: MelodyStyle = s.melodyStyle ?? (lofi ? 'lofiHook' : 'motif');
       if (mStyle === 'off' || density <= 0) return notes;
+      if (session.evolving && !layer.locked && !layer.frozen && s.density <= 0.40 && phraseIndex % 3 === 2) return notes;
 
       if (mStyle === 'ostinato') {
         const cycle16 = Math.floor(phraseIndex / 4);
@@ -731,7 +735,7 @@ export class JamComposer {
       const cellPool = mStyle === 'bellDrops'
         ? [[0, 8], [0, 6, 12], [2, 10], [0, 10], [4, 12], [1, 9], [3, 11], [0, 7, 14]]
         : mStyle === 'lofiHook'
-          ? [[0, 3, 6, 10], [2, 6, 10, 14], [0, 6, 10, 12], [0, 3, 8, 14]]
+          ? [[0, 6, 10], [0, 8, 12], [0, 3, 8], [0, 6, 10, 14], [0, 4, 9, 12], [2, 8, 11], [0, 7, 10, 14], [0, 5, 8, 11]]
           : mStyle === 'neoclassical'
             ? [[0, 4, 8, 12], [0, 4, 6, 8, 12], [0, 2, 4, 8, 12]]
             : techno
@@ -770,8 +774,8 @@ export class JamComposer {
       const octaveLift = epoch === 0 && cycle16 % 2 === 1 ? 7 : 0;
       const phraseForm: Array<'A' | 'Ap' | 'B' | 'App' | 'rest'> = mStyle === 'bellDrops'
         ? ['A', 'rest', 'Ap', 'rest']
-        : mStyle === 'lofiHook'
-          ? ['A', 'A', 'Ap', 'B']
+        : s.density < 0.72
+          ? ['A', 'Ap', 'B', 'rest']
           : ['A', 'Ap', 'B', 'App'];
 
       const maxBaseOff = Math.max(...baseMotif.map(e => e.degreeOffset));
@@ -823,7 +827,7 @@ export class JamComposer {
           const phraseProgress = (bar * 16 + ev.pos) / Math.max(16, length);
           const contour = 0.42 + Math.sin(phraseProgress * Math.PI) * 0.34;
           const accent = isPhraseEnd ? contour * 0.9 : contour;
-          add(bar * 16 + ev.pos, finalNote, dur, accent);
+          add(bar * 16 + ev.pos, finalNote, dur, accent, true, lofi ? rng.range(8, 20) : undefined);
         });
       }
     } else {
@@ -876,12 +880,12 @@ export class JamComposer {
             accent = [4, 12].includes(pos) ? 0.85 : 0.24; // Subtle ghost hit velocity
           }
           if (drum === 'hihat') {
-            probability = pos % 2 === 0 ? 0.95 : density * (0.3 + movement * 0.45);
+            probability = pos % 2 === 0 ? 0.92 : density * (0.14 + movement * 0.28);
             accent = pos === 2 || pos === 10 ? 0.72 : pos % 4 === 2 ? 0.65 : 0.28;
           }
           if (drum === 'perc') {
-            // Organic polyrhythmic micro-percussion
-            probability = [2, 5, 7, 10, 13, 15].includes(pos) ? density * 0.75 : 0;
+            // Tasteful syncopated micro-percussion pocket without clutter
+            probability = [2, 7, 11, 15].includes(pos) ? density * 0.52 : 0;
             accent = pos === 7 || pos === 15 ? 0.45 : 0.32;
           }
         } else {

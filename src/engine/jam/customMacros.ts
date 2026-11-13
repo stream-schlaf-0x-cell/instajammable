@@ -32,7 +32,7 @@ export const TARGET_PARAM_OPTIONS: ParamOption[] = [
   { param: 'macro:movement', label: 'Makro: Bewegung (Movement)', category: 'Makros', defaultMin: 0, defaultMax: 1, step: 0.01, percent: true },
 
   // Atmosphäre & Pump
-  { param: 'atmo:level', label: 'Atmosphäre-Pegel (max 20%)', category: 'Atmosphäre', defaultMin: 0, defaultMax: 0.20, step: 0.005, percent: true },
+  { param: 'atmo:level', label: 'Atmosphäre-Pegel (max 10%)', category: 'Atmosphäre', defaultMin: 0, defaultMax: 0.10, step: 0.005, percent: true },
   { param: 'pump', label: 'Kick-Atmung (Pump Ducking)', category: 'Atmosphäre', defaultMin: 0, defaultMax: 0.8, step: 0.01, percent: true },
 
   // Spuren

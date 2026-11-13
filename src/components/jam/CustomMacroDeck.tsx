@@ -18,7 +18,7 @@ const COLOR_PALETTE = [
   '#6366f1', // Indigo
 ];
 
-export function CustomMacroDeck({ session }: { session: JamSession }) {
+export function CustomMacroDeck({ session, enabled = true }: { session: JamSession; enabled?: boolean }) {
   const uiEdition = useUiEdition();
   const isMinimal = uiEdition === 'minimal';
   const customMacros = session.customMacros || [];
@@ -78,6 +78,10 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
       ...tmpl,
       id: `custom-macro-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       name: `${baseName} ${isMinimal ? '(Copy)' : '(Kopie)'}`,
+      targets: tmpl.targets.map(t => ({
+        ...t,
+        id: `target-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      })),
     };
     engine.addCustomMacro(newMacro);
   };
@@ -117,10 +121,13 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
     isMinimal ? ({ Effekte: 'Effects', Makros: 'Macros', Atmosphäre: 'Atmosphere', Spuren: 'Tracks' }[cat]) : cat;
 
   return (
-    <section className="custom-macro-deck" aria-label={isMinimal ? 'Custom Macros' : 'Eigene Makros'}>
+    <section className={`custom-macro-deck ${!enabled ? 'is-disabled' : ''}`} aria-label={isMinimal ? 'Custom Macros' : 'Eigene Makros'}>
       <header className="custom-macro-header">
         <div>
-          <span className="eyebrow">{isMinimal ? 'CUSTOM MACROS' : 'DEINE EIGENEN MAKROS'}</span>
+          <span className="eyebrow">
+            {isMinimal ? 'CUSTOM MACROS' : 'DEINE EIGENEN MAKROS'}
+            {!enabled ? (isMinimal ? ' · BYPASSED' : ' · AUS') : ''}
+          </span>
           <h2>{isMinimal ? 'Map Multiple Parameters to One Slider' : 'Verbinde mehrere Parameter mit einem einzigen Dreh.'}</h2>
           {!isMinimal && <p className="helper">Erstelle deine eigenen Makro-Regler. Ein Regler kann gleichzeitig Hall öffnen, die Kick leiser drehen und Tape-Drive hinzufügen.</p>}
         </div>
@@ -200,7 +207,7 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
                   type="number"
                   step="0.01"
                   value={newTargetMin}
-                  onChange={e => setNewTargetMin(Number(e.target.value))}
+                  onChange={e => { const v = Number(e.target.value); if (e.target.value !== '' && Number.isFinite(v)) setNewTargetMin(v); }}
                 />
               </label>
               <label>
@@ -209,7 +216,7 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
                   type="number"
                   step="0.01"
                   value={newTargetMax}
-                  onChange={e => setNewTargetMax(Number(e.target.value))}
+                  onChange={e => { const v = Number(e.target.value); if (e.target.value !== '' && Number.isFinite(v)) setNewTargetMax(v); }}
                 />
               </label>
               <label className="invert-check">
@@ -226,9 +233,9 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
           <div className="new-macro-footer">
             <div className="macro-starter-chips">
               <span className="helper">{isMinimal ? 'Or add preset:' : 'Oder Vorlage übernehmen:'}</span>
-              <button type="button" className="starter-chip" onClick={() => handleAddTemplate(0)}>+ {isMinimal ? 'Ambient Shimmer' : 'Psybient Shimmer'}</button>
-              <button type="button" className="starter-chip" onClick={() => handleAddTemplate(1)}>+ {isMinimal ? 'Grit & Space' : 'Dreck & Space'}</button>
-              <button type="button" className="starter-chip" onClick={() => handleAddTemplate(2)}>+ Breakdown Drop</button>
+              <button type="button" className="starter-chip" onClick={() => handleAddTemplate(0)}>+ {isMinimal ? 'Shimmer & Delay' : 'Psybient Shimmer'}</button>
+              <button type="button" className="starter-chip" onClick={() => handleAddTemplate(1)}>+ {isMinimal ? 'Drive & Space' : 'Dreck & Space'}</button>
+              <button type="button" className="starter-chip" onClick={() => handleAddTemplate(2)}>+ {isMinimal ? 'Filter Breakdown' : 'Breakdown Drop'}</button>
             </div>
             <button type="submit" className="button finish-create-btn">
               <Sparkles size={15} /> {isMinimal ? 'Create Macro' : 'Makro anlegen'}
@@ -244,9 +251,9 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
             <SlidersHorizontal size={24} />
             <p>{isMinimal ? 'No custom macros yet. Create one or load a preset.' : 'Du hast noch keine eigenen Makros angelegt. Erstelle dein erstes oder wähle eine Vorlage!'}</p>
             <div className="macro-template-btns">
-              <button type="button" className="button" onClick={() => handleAddTemplate(0)}>+ {isMinimal ? 'Preset: Ambient Shimmer' : 'Vorlage: Psybient Shimmer'}</button>
-              <button type="button" className="button" onClick={() => handleAddTemplate(1)}>+ {isMinimal ? 'Preset: Grit & Space' : 'Vorlage: Dreck & Space'}</button>
-              <button type="button" className="button" onClick={() => handleAddTemplate(2)}>+ {isMinimal ? 'Preset: Breakdown Drop' : 'Vorlage: Breakdown Drop'}</button>
+              <button type="button" className="button" onClick={() => handleAddTemplate(0)}>+ {isMinimal ? 'Preset: Shimmer & Delay' : 'Vorlage: Psybient Shimmer'}</button>
+              <button type="button" className="button" onClick={() => handleAddTemplate(1)}>+ {isMinimal ? 'Preset: Drive & Space' : 'Vorlage: Dreck & Space'}</button>
+              <button type="button" className="button" onClick={() => handleAddTemplate(2)}>+ {isMinimal ? 'Preset: Filter Breakdown' : 'Vorlage: Breakdown Drop'}</button>
             </div>
           </div>
         ) : (
@@ -298,6 +305,7 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
                     min={0}
                     max={1}
                     step={0.01}
+                    disabled={!enabled}
                     value={macro.value}
                     aria-label={`${isMinimal ? 'Custom macro' : 'Eigenes Makro'}: ${macroDisplayName}`}
                     onChange={e => handleSliderChange(macro.id, Number(e.target.value))}
@@ -372,7 +380,7 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
                           step="0.01"
                           placeholder="Min"
                           value={targetMinToAdd}
-                          onChange={e => setTargetMinToAdd(Number(e.target.value))}
+                          onChange={e => { const v = Number(e.target.value); if (e.target.value !== '' && Number.isFinite(v)) setTargetMinToAdd(v); }}
                           style={{ width: '65px' }}
                         />
                         <input
@@ -380,7 +388,7 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
                           step="0.01"
                           placeholder="Max"
                           value={targetMaxToAdd}
-                          onChange={e => setTargetMaxToAdd(Number(e.target.value))}
+                          onChange={e => { const v = Number(e.target.value); if (e.target.value !== '' && Number.isFinite(v)) setTargetMaxToAdd(v); }}
                           style={{ width: '65px' }}
                         />
                         <label className="invert-check-mini">

@@ -1,5 +1,5 @@
-import { ArrowRight, ArrowLeft, Power, Sparkles } from 'lucide-react';
-import { JamEngine } from '../../engine/jam/JamEngine';
+import { ArrowRight, Power, Sparkles } from 'lucide-react';
+import { JamEngine, effectiveEffects } from '../../engine/jam/JamEngine';
 import { useUiEdition } from '../../contexts/UiEditionContext';
 import { MINIMAL_EFFECT_MODULES } from '../../engine/jam/minimalCatalog';
 import type { EffectChainMode, EffectModuleId, JamSession } from '../../types/jam';
@@ -13,12 +13,13 @@ export function EffectChainDeck({ session }: { session: JamSession }) {
   const currentMode = chain.mode;
   const modules = chain.modules;
   const fxPatch = session.effectsPatch || {};
-  const currentDrive = fxPatch.masterDrive ?? (session.macros.warmth * 0.12);
-  const currentFlutter = fxPatch.delayFlutter ?? (session.macros.warmth * 0.12);
-  const currentDelayMix = fxPatch.delayMix ?? (session.macros.space * 0.28);
-  const currentDelayFeedback = fxPatch.delayFeedback ?? (0.3 + session.macros.space * 0.35);
-  const currentReverbMix = fxPatch.reverbMix ?? (session.macros.space * 0.45);
-  const currentReverbSize = fxPatch.reverbSize ?? (0.4 + session.macros.space * 0.5);
+  const effFx = effectiveEffects(session);
+  const currentDrive = effFx.masterDrive;
+  const currentFlutter = effFx.delayFlutter;
+  const currentDelayMix = effFx.delayMix;
+  const currentDelayFeedback = effFx.delayFeedback;
+  const currentReverbMix = effFx.reverbMix;
+  const currentReverbSize = effFx.reverbSize;
   const currentPump = session.pump ?? 0;
 
   const handleModeChange = (mode: EffectChainMode) => {
@@ -27,16 +28,6 @@ export function EffectChainDeck({ session }: { session: JamSession }) {
 
   const handleToggleBypass = (id: EffectModuleId) => {
     engine.toggleEffectBypass(id);
-  };
-
-  const handleMoveModule = (index: number, direction: 'left' | 'right') => {
-    const targetIdx = direction === 'left' ? index - 1 : index + 1;
-    if (targetIdx < 0 || targetIdx >= modules.length) return;
-    const ids = modules.map(m => m.id);
-    const temp = ids[index];
-    ids[index] = ids[targetIdx];
-    ids[targetIdx] = temp;
-    engine.reorderEffectChain(ids);
   };
 
   const updateParam = (key: string, val: number) => {
@@ -124,24 +115,6 @@ export function EffectChainDeck({ session }: { session: JamSession }) {
                         aria-pressed={!isBypassed}
                       >
                         <Power size={13} />
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-button move-btn"
-                        disabled={idx === 0}
-                        onClick={() => handleMoveModule(idx, 'left')}
-                        title={isMinimal ? 'Move left' : 'Nach links verschieben'}
-                      >
-                        <ArrowLeft size={13} />
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-button move-btn"
-                        disabled={idx === modules.length - 1}
-                        onClick={() => handleMoveModule(idx, 'right')}
-                        title={isMinimal ? 'Move right' : 'Nach rechts verschieben'}
-                      >
-                        <ArrowRight size={13} />
                       </button>
                     </div>
                   </div>

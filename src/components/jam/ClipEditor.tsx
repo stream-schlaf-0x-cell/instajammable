@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Play, Square, Download, Save, Copy, Trash2, Undo2, Redo2, Plus, Repeat2, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { MidiClip, ClipNote } from '../../types/jam';
+import { JamEngine } from '../../engine/jam/JamEngine';
 import { PianoRoll, noteName } from './PianoRoll';
 import { useUiEdition } from '../../contexts/UiEditionContext';
 
@@ -36,8 +37,14 @@ export function ClipEditor({ clip: original, onClose, onSave, onExport, onPrevie
   const snapshot = () => { past.current.push(copy(clip)); past.current = past.current.slice(-40); future.current = []; setRevision(r => r + 1); };
   const replace = (next: MidiClip) => { snapshot(); setClip(next); };
   const changeNote = (next: ClipNote, record = true) => {
+    const prev = clip.notes.find(v => v.id === next.id);
+    const rawNote = Number.isFinite(next.note) ? next.note : (prev?.note ?? 60);
+    const rawVelocity = Number.isFinite(next.velocity) ? next.velocity : (prev?.velocity ?? 80);
+    const rawStart = Number.isFinite(next.startBeat) ? next.startBeat : (prev?.startBeat ?? 0);
+    const rawDuration = Number.isFinite(next.durationBeats) ? next.durationBeats : (prev?.durationBeats ?? 0.5);
+    const rawChannel = Number.isFinite(next.channel) ? next.channel : (prev?.channel ?? 1);
     if (record) snapshot();
-    const n = { ...next, note: Math.round(Math.min(127, Math.max(0, next.note))), velocity: Math.round(Math.min(127, Math.max(1, next.velocity))), startBeat: Math.max(0, next.startBeat), durationBeats: Math.max(.0625, next.durationBeats), channel: Math.round(Math.min(16, Math.max(1, next.channel))) };
+    const n = { ...next, note: Math.round(Math.min(127, Math.max(0, rawNote))), velocity: Math.round(Math.min(127, Math.max(1, rawVelocity))), startBeat: Math.max(0, rawStart), durationBeats: Math.max(.0625, rawDuration), channel: Math.round(Math.min(16, Math.max(1, rawChannel))) };
     setClip(current => ({ ...current, lengthBeats: Math.max(current.lengthBeats, Math.ceil((n.startBeat + n.durationBeats) / 4) * 4), notes: current.notes.map(v => v.id === n.id ? n : v) }));
   };
   const add = (beat = viewStart, pitch = drums ? 36 : 62) => {
@@ -60,20 +67,23 @@ export function ClipEditor({ clip: original, onClose, onSave, onExport, onPrevie
   };
   const undo = () => { const previous = past.current.pop(); if (previous) { future.current.push(copy(clip)); setClip(previous); setRevision(r => r + 1); } };
   const redo = () => { const next = future.current.pop(); if (next) { past.current.push(copy(clip)); setClip(next); setRevision(r => r + 1); } };
+  const keyHandlerRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  keyHandlerRef.current = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') { e.preventDefault(); onClose(); return; }
+    if ((e.target as HTMLElement)?.matches('input,select,textarea')) return;
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); setSelectedAll(true); }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); if (note || selectedAll) remove(); }
+    if (note && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+      e.preventDefault(); changeNote({ ...note, startBeat: note.startBeat + (e.key === 'ArrowLeft' ? -grid : e.key === 'ArrowRight' ? grid : 0), note: note.note + (e.key === 'ArrowUp' ? 1 : e.key === 'ArrowDown' ? -1 : 0) });
+    }
+  };
   useEffect(() => {
-    const listener = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.preventDefault(); onClose(); return; }
-      if ((e.target as HTMLElement)?.matches('input,select,textarea')) return;
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); setSelectedAll(true); }
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
-      if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); if (note || selectedAll) remove(); }
-      if (note && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
-        e.preventDefault(); changeNote({ ...note, startBeat: note.startBeat + (e.key === 'ArrowLeft' ? -grid : e.key === 'ArrowRight' ? grid : 0), note: note.note + (e.key === 'ArrowUp' ? 1 : e.key === 'ArrowDown' ? -1 : 0) });
-      }
-    };
+    const listener = (e: KeyboardEvent) => keyHandlerRef.current(e);
     window.addEventListener('keydown', listener);
     return () => window.removeEventListener('keydown', listener);
-  });
+  }, []);
+  useEffect(() => JamEngine.getInstance().onPreviewChange(setPreview), []);
   useEffect(() => () => onStopPreview(), [onStopPreview]);
   useEffect(() => {
     const before = document.activeElement as HTMLElement;
@@ -102,15 +112,15 @@ export function ClipEditor({ clip: original, onClose, onSave, onExport, onPrevie
       </div>
       {clip.warnings?.length ? <p className="notice">{clip.warnings.join(' · ')}</p> : null}
       <div className="roll-focus"><label>{isMinimal ? 'Focus' : 'Fokus'} <select aria-label={isMinimal ? 'Track focus' : 'Editor-Spurfokus'} value={focus} onChange={e=>setFocus(e.target.value)}><option value="">{isMinimal ? 'All tracks' : 'Alle Spuren'}</option>{clip.tracks.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label>{!isMinimal && <span>Die Auswahl oben bestimmt das Ziel neuer Noten.</span>}</div><PianoRoll focusedTrack={focus || undefined} notes={clip.notes} tracks={clip.tracks} startBeat={viewStart} span={span} drums={drums} height={430} grid={grid} selectedId={selectedAll ? undefined : selected} onSelect={id => { snapshot(); setSelected(id); setSelectedAll(false); }} onChange={n => changeNote(n, false)} onAdd={add} onAudition={onAudition} />
-      <div className="editor-navigation"><button className="icon-button" aria-label={isMinimal ? 'Previous bars' : 'Vorherige Takte'} onClick={() => setViewStart(Math.max(0, viewStart - span))}><ChevronLeft /></button><span>{isMinimal ? 'Bar' : 'Takt'} {Math.floor(viewStart / 4) + 1}–{Math.ceil((viewStart + span) / 4)} · {clip.notes.length} {isMinimal ? 'Notes' : 'Noten'} · {clip.bpm} BPM</span><button className="icon-button" aria-label={isMinimal ? 'Next bars' : 'Nächste Takte'} onClick={() => setViewStart(Math.min(Math.max(0, clip.lengthBeats - 4), viewStart + span))}><ChevronRight /></button><label>{isMinimal ? 'View' : 'Ansicht'} <select value={span} onChange={e => setSpan(Number(e.target.value))}><option value={8}>2 {isMinimal ? 'Bars' : 'Takte'}</option><option value={16}>4 {isMinimal ? 'Bars' : 'Takte'}</option><option value={32}>8 {isMinimal ? 'Bars' : 'Takte'}</option><option value={64}>16 {isMinimal ? 'Bars' : 'Takte'}</option></select></label></div>
+      <div className="editor-navigation"><button className="icon-button" aria-label={isMinimal ? 'Previous bars' : 'Vorherige Takte'} onClick={() => setViewStart(Math.max(0, viewStart - span))}><ChevronLeft /></button><span>{isMinimal ? 'Bar' : 'Takt'} {Math.floor(viewStart / 4) + 1}–{Math.ceil((viewStart + span) / 4)} · {clip.notes.length} {isMinimal ? 'Notes' : 'Noten'} · {clip.bpm} BPM</span><button className="icon-button" aria-label={isMinimal ? 'Next bars' : 'Nächste Takte'} onClick={() => setViewStart(Math.min(Math.max(0, clip.lengthBeats - span), viewStart + span))}><ChevronRight /></button><label>{isMinimal ? 'View' : 'Ansicht'} <select value={span} onChange={e => { const nextSpan = Number(e.target.value); setSpan(nextSpan); setViewStart(v => Math.min(v, Math.max(0, clip.lengthBeats - nextSpan))); }}><option value={8}>2 {isMinimal ? 'Bars' : 'Takte'}</option><option value={16}>4 {isMinimal ? 'Bars' : 'Takte'}</option><option value={32}>8 {isMinimal ? 'Bars' : 'Takte'}</option><option value={64}>16 {isMinimal ? 'Bars' : 'Takte'}</option></select></label></div>
       <div className="note-inspector">
         <div><span className="eyebrow">{isMinimal ? (selectedAll ? 'ALL NOTES SELECTED' : 'SELECTED NOTE') : (selectedAll ? 'ALLE NOTEN AUSGEWÄHLT' : 'AUSGEWÄHLTE NOTE')}</span><strong>{note ? noteName(note.note) + ' / MIDI ' + note.note : (isMinimal ? 'Click or add a note' : 'Note anklicken oder hinzufügen')}</strong></div>
         {note && <>
-          <label>{isMinimal ? 'Pitch' : 'Tonhöhe'}<input aria-label={isMinimal ? 'Note pitch' : 'Tonhöhe der Note'} type="number" min={0} max={127} value={note.note} onChange={e => changeNote({ ...note, note: Number(e.target.value) })} /></label>
-          <label>{isMinimal ? 'Start (Beats)' : 'Beginn (Beats)'}<input aria-label={isMinimal ? 'Note start' : 'Beginn der Note'} type="number" min={0} step={grid} value={Number(note.startBeat.toFixed(3))} onChange={e => changeNote({ ...note, startBeat: Number(e.target.value) })} /></label>
-          <label>{isMinimal ? 'Length (Beats)' : 'Länge (Beats)'}<input aria-label={isMinimal ? 'Note length' : 'Länge der Note'} type="number" min={.0625} step={grid} value={Number(note.durationBeats.toFixed(3))} onChange={e => changeNote({ ...note, durationBeats: Number(e.target.value) })} /></label>
-          <label>Velocity<input aria-label={isMinimal ? 'Note velocity' : 'Velocity der Note'} type="number" min={1} max={127} value={note.velocity} onChange={e => changeNote({ ...note, velocity: Number(e.target.value) })} /></label>
-          <label>{isMinimal ? 'Channel' : 'Kanal'}<input aria-label={isMinimal ? 'Note MIDI channel' : 'MIDI-Kanal der Note'} type="number" min={1} max={16} value={note.channel} onChange={e => changeNote({ ...note, channel: Number(e.target.value) })} /></label>
+          <label>{isMinimal ? 'Pitch' : 'Tonhöhe'}<input aria-label={isMinimal ? 'Note pitch' : 'Tonhöhe der Note'} type="number" min={0} max={127} value={note.note} onChange={e => { const v = Number(e.target.value); if (e.target.value !== '' && Number.isFinite(v)) changeNote({ ...note, note: v }); }} /></label>
+          <label>{isMinimal ? 'Start (Beats)' : 'Beginn (Beats)'}<input aria-label={isMinimal ? 'Note start' : 'Beginn der Note'} type="number" min={0} step={grid} value={Number(note.startBeat.toFixed(3))} onChange={e => { const v = Number(e.target.value); if (e.target.value !== '' && Number.isFinite(v)) changeNote({ ...note, startBeat: v }); }} /></label>
+          <label>{isMinimal ? 'Length (Beats)' : 'Länge (Beats)'}<input aria-label={isMinimal ? 'Note length' : 'Länge der Note'} type="number" min={.0625} step={grid} value={Number(note.durationBeats.toFixed(3))} onChange={e => { const v = Number(e.target.value); if (e.target.value !== '' && Number.isFinite(v)) changeNote({ ...note, durationBeats: v }); }} /></label>
+          <label>Velocity<input aria-label={isMinimal ? 'Note velocity' : 'Velocity der Note'} type="number" min={1} max={127} value={note.velocity} onChange={e => { const v = Number(e.target.value); if (e.target.value !== '' && Number.isFinite(v)) changeNote({ ...note, velocity: v }); }} /></label>
+          <label>{isMinimal ? 'Channel' : 'Kanal'}<input aria-label={isMinimal ? 'Note MIDI channel' : 'MIDI-Kanal der Note'} type="number" min={1} max={16} value={note.channel} onChange={e => { const v = Number(e.target.value); if (e.target.value !== '' && Number.isFinite(v)) changeNote({ ...note, channel: v }); }} /></label>
         </>}
         <button className="icon-button" disabled={!note && !selectedAll} onClick={duplicate} aria-label={isMinimal ? 'Duplicate selection' : 'Notenauswahl duplizieren'}><Copy /></button><button className="icon-button" disabled={!note && !selectedAll} onClick={remove} aria-label={isMinimal ? 'Delete selection' : 'Notenauswahl löschen'}><Trash2 /></button>
       </div>

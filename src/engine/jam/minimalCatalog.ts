@@ -1,9 +1,12 @@
 import type {
   AtmosphereSettings,
+  DrumModel,
+  DrumVoice,
   EffectModuleId,
   MacroName,
   MacroTargetParam,
   SceneDefinition,
+  Timbre,
 } from '../../types/jam';
 import type { UiEdition } from '../../types/ui';
 import type { SoundscapePreset } from './soundscapes';
@@ -251,6 +254,10 @@ export const MINIMAL_SEQUENCE_TEMPLATES: Record<string, { name: string; descript
     name: 'Deep Dub Cycle',
     description: '8 bars sub groove, 4 bars echo break, 8 bars drop, 4 bars space.',
   },
+  'lofi-pocket': {
+    name: 'Chillhop Pocket',
+    description: '8 bars relaxed groove, 4 bars keys breakdown, 8 bars full chorus, 4 bars quiet outro.',
+  },
 };
 
 const BLOCK_LABEL_MAP: Array<[RegExp, string]> = [
@@ -275,13 +282,37 @@ const BLOCK_LABEL_MAP: Array<[RegExp, string]> = [
   [/^4T Tiefer Raum & Nachhall$/i, '4B Deep Space'],
 ];
 
+const DYNAMIC_BLOCK_LABEL_RULES: Array<[RegExp, string]> = [
+  [/^(\d+)T\s+Chorus\s*\(Peak\)$/i, '$1B Peak'],
+  [/^(\d+)T\s+Buildup\s*\(Spannung\)$/i, '$1B Buildup'],
+  [/^(\d+)T\s+Voller Groove$/i, '$1B Full Groove'],
+  [/^(\d+)T\s+Voller Beat$/i, '$1B Full Groove'],
+  [/^(\d+)T\s+Breakdown\s*\(Drums aus\)$/i, '$1B Breakdown'],
+  [/^(\d+)T\s+Stille\s*\(Minimal\)$/i, '$1B Stillness'],
+  [/^(\d+)T\s+Stille$/i, '$1B Stillness'],
+];
+
 export function getSequenceBlockLabel(label: string | undefined, edition: UiEdition): string {
   if (!label) return '';
   if (edition === 'classic') return label;
   for (const [re, rep] of BLOCK_LABEL_MAP) {
     if (re.test(label)) return rep;
   }
-  return stripArtistRefs(label).replace(/^(\d+)T\b/g, '$1B');
+  let out = label;
+  for (const [re, rep] of DYNAMIC_BLOCK_LABEL_RULES) {
+    if (re.test(out)) return out.replace(re, rep);
+  }
+  out = stripArtistRefs(out)
+    .replace(/\b(\d+)T\b/g, '$1B')
+    .replace(/\bVoller Groove\b/gi, 'Full Groove')
+    .replace(/\bVoller Beat\b/gi, 'Full Groove')
+    .replace(/\(Spannung\)/gi, '(Tension)')
+    .replace(/\(Drums aus\)/gi, '(Drums Off)')
+    .replace(/\bSpannungsaufbau\b/gi, 'Buildup')
+    .replace(/\bStreicher im Hall\b/gi, 'Strings')
+    .replace(/\bEcho-Fahnen\b/gi, 'Echo Tails')
+    .replace(/\bStille\b/gi, 'Stillness');
+  return out.replace(/\s{2,}/g, ' ').trim();
 }
 
 export const MINIMAL_INSTRUMENT_PRESETS: Record<string, { name: string; description: string }> = {
@@ -545,4 +576,251 @@ export function getEqPresetDisplay(preset: EqPreset, edition: UiEdition) {
 export function getCustomMacroDisplayName(name: string, edition: UiEdition): string {
   if (edition === 'classic') return name;
   return CUSTOM_MACRO_EN_MAP[name] ?? stripArtistRefs(name);
+}
+
+const PRESET_CATEGORY_EN_MAP: Record<string, string> = {
+  'Cell-Grade Ultimae': 'Wide Space Studio',
+};
+
+export function getPresetCategoryDisplay(category: string, edition: UiEdition): string {
+  if (edition === 'classic') return category;
+  return PRESET_CATEGORY_EN_MAP[category] ?? stripArtistRefs(category);
+}
+
+const TIMBRE_LABELS_DE: Record<Timbre, string> = {
+  warm: 'Warm',
+  air: 'Luftig',
+  keys: 'Keys',
+  bell: 'Glocke',
+  strings: 'Streicher',
+  wash: 'Wash-Fläche',
+  dub: 'Dub-Stab',
+  root: 'Root-Anker',
+  glass: 'Glas-Schimmer',
+  organ: 'Weiche Orgel',
+  solina: 'Solina Ensemble',
+  shimmer: 'Shimmer-Hall',
+  celeste: 'Celesta',
+};
+
+const TIMBRE_LABELS_EN: Record<Timbre, string> = {
+  warm: 'Warm Pad',
+  air: 'Airy Pad',
+  keys: 'Electric Keys',
+  bell: 'Bell',
+  strings: 'Strings',
+  wash: 'Wash Pad',
+  dub: 'Dub Stab',
+  root: 'Deep Root',
+  glass: 'Crystal Glass',
+  organ: 'Soft Organ',
+  solina: 'Analog Ensemble',
+  shimmer: 'Shimmer Halo',
+  celeste: 'Felt Celesta',
+};
+
+export function getTimbreDisplayName(timbre: Timbre, edition: UiEdition): string {
+  return (edition === 'minimal' ? TIMBRE_LABELS_EN : TIMBRE_LABELS_DE)[timbre] ?? timbre;
+}
+
+const DRUM_MODEL_LABELS_DE: Record<DrumModel | DrumVoice, string> = {
+  woodblock: 'Holzblock',
+  shaker: 'Shaker',
+  rim: 'Rimshot',
+  conga: 'Conga',
+  clave: 'Clave',
+  glassDrop: 'Glastropfen',
+  tablaTick: 'Tabla-Klick',
+  vinylTick: 'Vinyl-Klick',
+  clap: 'Clap',
+  brush: 'Besen-Snare',
+  closedHat: 'Geschlossene Hi-Hat',
+  shakerHat: 'Shaker-Hi-Hat',
+  tick808: '808 Rim-Klick',
+  kick: 'Kick',
+  snare: 'Snare',
+  hihat: 'Hi-Hat',
+  perc: 'Perkussion',
+};
+
+const DRUM_MODEL_LABELS_EN: Record<DrumModel | DrumVoice, string> = {
+  woodblock: 'Woodblock',
+  shaker: 'Shaker',
+  rim: 'Rimshot',
+  conga: 'Conga',
+  clave: 'Clave',
+  glassDrop: 'Glass Drop',
+  tablaTick: 'Tabla Click',
+  vinylTick: 'Vinyl Click',
+  clap: 'Clap',
+  brush: 'Brushed Snare',
+  closedHat: 'Closed Hi-Hat',
+  shakerHat: 'Shaker Hi-Hat',
+  tick808: '808 Rim Click',
+  kick: 'Kick',
+  snare: 'Snare',
+  hihat: 'Hi-Hat',
+  perc: 'Percussion',
+};
+
+export function getDrumModelDisplayName(model: DrumModel | DrumVoice | undefined, edition: UiEdition): string {
+  if (!model) return '';
+  return (edition === 'minimal' ? DRUM_MODEL_LABELS_EN : DRUM_MODEL_LABELS_DE)[model] ?? model;
+}
+
+const CLASSIC_TO_MINIMAL_SCENE_NAME: Record<string, string> = {
+  'Dorian Dawn': 'Amber Horizon',
+  'Ultimae Drift': 'Deep Drift',
+  'Hydroponic Drift': 'Subterranean Drift',
+  'Interloper Sky': 'High Altitude',
+  'Carbon Oasis': 'Luminous Oasis',
+  'Solar Fields Orbit': 'Luminous Orbit',
+  'Berlin 4AM Dub': '4AM Dub',
+  'Apollo Zero Gravity': 'Zero Gravity',
+  'Tokyo Midnight Rain': 'Midnight Rain',
+};
+
+export function getClipTitleDisplay(title: string, edition: UiEdition): string {
+  if (edition === 'classic') return title;
+  let out = title;
+  for (const [classicName, minName] of Object.entries(CLASSIC_TO_MINIMAL_SCENE_NAME)) {
+    if (out.startsWith(classicName)) {
+      out = minName + out.slice(classicName.length);
+      break;
+    }
+  }
+  out = stripArtistRefs(out)
+    .replace(/·\s*(\d+(?:\.\d+)?)\s*Takte\b/gi, '· $1 Bars')
+    .replace(/\b(\d+(?:\.\d+)?)\s*Takte\b/gi, '$1 Bars')
+    .replace(/\bAufnahme\b/gi, 'Capture')
+    .replace(/\bVorschau\b/gi, 'Preview');
+  return out;
+}
+
+const CLASSIC_RHYTHM_NAME_TO_ID: Array<[string, string]> = [
+  ['CBL Psybient Pulse', 'cbl-psybient'],
+  ['Aes Dana Slow Techno', 'aes-dana-dub'],
+  ['Euclidean Interlock', 'euclidean-interlock'],
+  ['Lo-Fi Lazy Swing', 'lofi-backbeat'],
+  ['Markov Stochastic Flow', 'markov-organic'],
+  ['Ambient Floating Bells', 'ambient-micro'],
+  ['Density Burst Swarm', 'density-burst'],
+];
+
+const CLASSIC_SOUNDSCAPE_NAME_TO_ID: Array<[string, string]> = [
+  ['Großes Streichorchester', 'symphonic-strings'],
+  ['Psybient Hydroponic Horizon', 'cbl-wash'],
+  ['Ethereal Nebula', 's1gns-nebula'],
+  ['Monolith Power Monolith', 'asura-monolith'],
+  ['Kristalliner Glas-Raum', 'crystal-glass'],
+  ['Vintage Solina Strings', 'solina-vintage'],
+  ['Cozy Mellow Cozy Keys', 'rainy-rhodes'],
+  ['Deep Dub Chamber', 'aes-dana-dub'],
+  ['Sakraler Chor & Kathedrale', 'sacral-choir'],
+];
+
+const EXACT_CHANGE_EN: Record<string, string> = {
+  'Panic · Stimmen und MIDI gestoppt': 'Panic · Voices and MIDI stopped',
+  'Bearbeitete Phrase übernommen': 'Edited phrase applied',
+  'Neue Motivvariation · sanfte Klangbewegung': 'New motif variation · subtle motion',
+  'Neue Phrase · Harmonie und Groove': 'New phrase · harmony and groove',
+  'Freeze · Vorschauphrase (noch kein gespieltes Material)': 'Freeze · Preview phrase',
+  'Arrangement: ⚡ Buildup gestartet (Drop in 4 Takten)': 'Arrangement: Buildup started (drop in 4 bars)',
+  'Arrangement: 💥 Breakdown · Drums ausgeblendet, Pad schwebt': 'Arrangement: Breakdown · Drums out, pad open',
+  'Arrangement: 🌟 Chorus / Peak · Volle Klangdichte': 'Arrangement: Peak · Full density',
+  'Arrangement: 🤫 Stille · Intimer Ambient-Teil': 'Arrangement: Stillness · Quiet ambient section',
+  'Arrangement: 🌊 Voller Beat (Drop In)': 'Arrangement: Full groove (Drop In)',
+  'Spontanes Arrangement: Deaktiviert': 'Auto-Arrangement: Off',
+  'Arrangement-Sequencer: Aktiviert': 'Sequencer: Enabled',
+  'Arrangement-Sequencer: Deaktiviert': 'Sequencer: Off',
+  'Eigene Makros: Aktiviert': 'Custom Macros: Enabled',
+  'Eigene Makros: Bypassed': 'Custom Macros: Bypassed',
+  'Organischer Attraktor: Aktiviert': 'Organic Attractor: Enabled',
+  'Organischer Attraktor: Aus': 'Organic Attractor: Off',
+  '⚡ Chaotischer Impuls (Organischer Timbre-Drift)': 'Chaos Impulse (Organic Drift)',
+  'Übergang · Zurück zum vollen Groove': 'Transition · Back to full groove',
+  'Übergang · Raum öffnet sich': 'Transition · Space opens up',
+  'Übergang · Klang wird dunkler': 'Transition · Darker tone',
+  'Übergang · Klang öffnet sich': 'Transition · Brighter tone',
+  'Übergang · Das Ensemble atmet': 'Transition · Ensemble breathing',
+  'Übergang · Drums treten zurück': 'Transition · Drums pull back',
+  'Übergang · Neue Motive, gleiche Harmonie': 'Transition · New motifs, same harmony',
+};
+
+export function getChangeDisplay(label: string, edition: UiEdition): string {
+  if (edition === 'classic') return label;
+  if (EXACT_CHANGE_EN[label]) return EXACT_CHANGE_EN[label];
+
+  let m: RegExpMatchArray | null;
+  if ((m = label.match(/^Spontanes Arrangement: Aktiv \(alle (\d+) Takte\)$/))) {
+    return `Auto-Arrangement: On (every ${m[1]} bars)`;
+  }
+  if ((m = label.match(/^Sequencer: \[(.+)\] \((\d+) Takte\)$/))) {
+    return `Sequencer: [${getSequenceBlockLabel(m[1], 'minimal')}] (${m[2]} bars)`;
+  }
+  if ((m = label.match(/^Sequencer: Zu \[(.+)\] gesprungen$/))) {
+    return `Sequencer: Jumped to [${getSequenceBlockLabel(m[1], 'minimal')}]`;
+  }
+  if ((m = label.match(/^Sequenz: Block #(\d+) verschoben nach #(\d+)$/))) {
+    return `Sequence: Moved block #${m[1]} to #${m[2]}`;
+  }
+  if ((m = label.match(/^Sequenz: Block-Dauer auf (\d+) Takte geändert$/))) {
+    return `Sequence: Block length ${m[1]} bars`;
+  }
+  if ((m = label.match(/^Sequenz: Block auf \[(.+)\] \(([A-Z]+)\) gesetzt & aktiviert$/))) {
+    return `Sequence: Block set to [${getSequenceBlockLabel(m[1], 'minimal')}] (${m[2]})`;
+  }
+  if ((m = label.match(/^Rhythmus: ([^(]+?)(?:\s*\([^)]*\))?$/))) {
+    const rawName = m[1].trim();
+    const matched = CLASSIC_RHYTHM_NAME_TO_ID.find(([n]) => n === rawName);
+    const minName = matched ? MINIMAL_RHYTHM_PRESETS[matched[1]]?.name : stripArtistRefs(rawName);
+    return `Rhythm: ${minName || rawName}`;
+  }
+  if ((m = label.match(/^Klangwelt: (?:🎻\s*)?([^(]+?)(?:\s*\([^)]*\))?$/))) {
+    const rawName = m[1].trim();
+    const matched = CLASSIC_SOUNDSCAPE_NAME_TO_ID.find(([n]) => n === rawName);
+    const minPreset = matched ? MINIMAL_SOUNDSCAPE_PRESETS[matched[1]] : undefined;
+    return `Soundscape: ${minPreset?.name ?? stripArtistRefs(rawName)}`;
+  }
+  if ((m = label.match(/^Akkord-Klang: (.+)$/))) {
+    const raw = m[1] === 'Großes Streichorchester' ? 'strings' : m[1];
+    const timbreName = raw in TIMBRE_LABELS_EN ? TIMBRE_LABELS_EN[raw as Timbre] : stripArtistRefs(raw);
+    return `Chord Timbre: ${timbreName}`;
+  }
+  if ((m = label.match(/^Effekt-Kette: Modus (.+)$/))) {
+    return `FX Chain: ${stripArtistRefs(m[1])}`;
+  }
+  if ((m = label.match(/^Neues Makro erstellt: (.+)$/))) {
+    return `Custom Macro Created: ${getCustomMacroDisplayName(m[1], 'minimal')}`;
+  }
+  if (label.startsWith('Grundton: ')) return `Root Key: ${label.slice('Grundton: '.length)}`;
+  if ((m = label.match(/^Akkordnote #(\d+): (.+)$/))) return `Chord Note #${m[1]}: ${m[2]}`;
+  if (label.startsWith('Akkord gewechselt: ')) return `Chord Changed: ${label.slice('Akkord gewechselt: '.length)}`;
+  if (label.startsWith('Akkordmuster: ')) return `Chord Pattern: ${label.slice('Akkordmuster: '.length)}`;
+  if (label.startsWith('Harmoniewechsel: ')) return `Chord Pace: ${label.slice('Harmoniewechsel: '.length)}`;
+  if (label.startsWith('Akkord-Begleittextur: ')) return `Chord Texture: ${label.slice('Akkord-Begleittextur: '.length)}`;
+  if (label === 'Chord Layer B: Aus') return 'Chord Track B: Off';
+  if (label.startsWith('Variation · Motive und Groove')) {
+    return label.replace('Variation · Motive und Groove', 'Variation · Motifs and groove');
+  }
+  if ((m = label.match(/^(.+?) · Register enthält keinen Skalenton; Layer bleibt stumm$/))) {
+    return `${m[1]} · Range has no scale notes; track stays silent`;
+  }
+  if ((m = label.match(/^(.+?) Zufalls-Sound · (.+)$/))) {
+    return `${m[1]} Random Preset · ${stripArtistRefs(m[2])}`;
+  }
+  if ((m = label.match(/^(.+?) Preset · (.+)$/))) {
+    return `${m[1]} Preset · ${stripArtistRefs(m[2])}`;
+  }
+  if (label.startsWith('🎲 Radical Random · ')) {
+    return `Randomize · ${stripArtistRefs(label.slice('🎲 Radical Random · '.length))}`;
+  }
+  if ((m = label.match(/^Sequencer-Vorlage: (.+)$/))) {
+    return `Sequence Template: ${stripArtistRefs(m[1])}`;
+  }
+
+  return stripArtistRefs(label)
+    .replace(/\bTakte\b/g, 'bars')
+    .replace(/\bTakt\b/g, 'bar')
+    .replace(/·/g, '·');
 }

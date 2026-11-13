@@ -18,6 +18,7 @@ import {
   Tv,
   LayoutGrid,
   Volume2,
+  Palette,
 } from 'lucide-react';
 import { JamEngine, SCENES } from '../../engine/jam/JamEngine';
 import { MasterAudio } from '../../engine/audio/audioContext';
@@ -26,7 +27,15 @@ import type { JamPosition, JamSession, ChordPattern, ChordPace } from '../../typ
 import type { MusicalScale } from '../../types';
 import type { ViewDensityMode } from './WorkspaceBar';
 import type { RecorderState } from '../../engine/audio/recorder';
-import { LAYOUT_OPTIONS, type LayoutVariant, type UiEdition } from '../../types/ui';
+import {
+  DEFAULT_CUSTOM_THEME,
+  LAYOUT_OPTIONS,
+  STUDIO_THEMES,
+  type CustomThemeColors,
+  type LayoutVariant,
+  type ThemePresetId,
+  type UiEdition,
+} from '../../types/ui';
 import { getSceneDisplay, getSequenceBlockLabel } from '../../engine/jam/minimalCatalog';
 
 const SCALES: [MusicalScale, string][] = [
@@ -61,6 +70,10 @@ interface EssentialMasterBarProps {
   onUiEditionChange?: (edition: UiEdition) => void;
   layoutVariant?: LayoutVariant;
   onLayoutVariantChange?: (variant: LayoutVariant) => void;
+  themeId?: ThemePresetId;
+  onThemeIdChange?: (id: ThemePresetId) => void;
+  customColors?: CustomThemeColors;
+  onCustomColorsChange?: (colors: CustomThemeColors) => void;
 }
 
 const engine = JamEngine.getInstance();
@@ -86,12 +99,36 @@ export function EssentialMasterBar({
   onUiEditionChange,
   layoutVariant = 'console',
   onLayoutVariantChange,
+  themeId = 'forest',
+  onThemeIdChange,
+  customColors = DEFAULT_CUSTOM_THEME,
+  onCustomColorsChange,
 }: EssentialMasterBarProps) {
   const [bpmDraft, setBpmDraft] = useState(String(session.bpm));
   const tempoFocused = useRef(false);
   const taps = useRef<number[]>([]);
   const [peakDb, setPeakDb] = useState(-96);
   const lastTapRef = useRef(0);
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+  const themeWrapRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!themeMenuOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (themeWrapRef.current && !themeWrapRef.current.contains(e.target as Node)) {
+        setThemeMenuOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setThemeMenuOpen(false);
+    };
+    window.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('mousedown', onPointerDown);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [themeMenuOpen]);
 
   useEffect(() => {
     if (!tempoFocused.current) setBpmDraft(String(session.bpm));
@@ -149,10 +186,15 @@ export function EssentialMasterBar({
   };
 
   const currentSceneIndex = SCENES.findIndex(s => s.id === session.sceneId);
-  const root = position.chordRoot;
-  const holdBars = position.chordHoldBars || 4;
-  const progress = holdBars ? 1 - position.chordBarsLeft / holdBars : 0;
-  const scaleName = SCALES.find(s => s[0] === session.scale)?.[1] || session.scale;
+  const chordRoot = position.chordRoot;
+  const keyRootPc = ((session.root % 12) + 12) % 12;
+  const holdBars = Math.max(1, Math.round(position.chordHoldBars || 4));
+  const rawLeft = Number.isFinite(position.chordBarsLeft) ? position.chordBarsLeft : holdBars;
+  const elapsedBars = position.playing
+    ? Math.max(0, Math.min(holdBars - 0.0001, holdBars - rawLeft))
+    : 0;
+  const currentBarInChord = position.playing ? Math.min(holdBars, Math.floor(elapsedBars) + 1) : 1;
+  const progress = holdBars ? Math.max(0, Math.min(1, elapsedBars / holdBars)) : 0;
   const beatIndex = Math.floor(position.beat) % 4;
   const chordsLayer = session.layers.find(l => l.role === 'chords');
   const currentChordPattern =
@@ -288,13 +330,119 @@ export function EssentialMasterBar({
                 <button
                   key={opt.id}
                   type="button"
-                  className={`layout-pill-btn ${layoutVariant === opt.id ? 'active' : ''}`}
+                  className={`layout-pill-btn ${layoutVariant === opt.id ? 'active' : ''} ${opt.experimental ? 'experimental' : ''}`}
                   onClick={() => onLayoutVariantChange(opt.id)}
                   title={opt.description}
                 >
                   {uiEdition === 'minimal' ? opt.minimalLabel : opt.classicLabel}
                 </button>
               ))}
+            </div>
+          )}
+
+          {onThemeIdChange && (
+            <div className="theme-picker-wrap" ref={themeWrapRef}>
+              <button
+                type="button"
+                className={`button quiet theme-picker-btn ${themeMenuOpen ? 'active' : ''}`}
+                onClick={() => setThemeMenuOpen(o => !o)}
+                title={uiEdition === 'minimal' ? 'Customize color theme' : 'Farbschema frei wählen'}
+                aria-expanded={themeMenuOpen}
+              >
+                <Palette size={14} />
+                <span>{uiEdition === 'minimal' ? 'Theme' : 'Farben'}</span>
+                <span className="theme-chip-dots" aria-hidden="true">
+                  <span style={{ background: 'var(--bg)' }} />
+                  <span style={{ background: 'var(--amber)' }} />
+                  <span style={{ background: 'var(--accent-2)' }} />
+                </span>
+              </button>
+
+              {themeMenuOpen && (
+                <div className="theme-popover" role="dialog" aria-label={uiEdition === 'minimal' ? 'Color Theme Picker' : 'Farbschema'}>
+                  <div className="theme-popover-head">
+                    <div>
+                      <span className="eyebrow">{uiEdition === 'minimal' ? 'STUDIO PALETTE' : 'STUDIO-FARBWELT'}</span>
+                      <strong>{uiEdition === 'minimal' ? 'Choose Your Colors' : 'Freie Farbwahl'}</strong>
+                    </div>
+                    <button
+                      type="button"
+                      className="button quiet"
+                      onClick={() => {
+                        onThemeIdChange('forest');
+                        onCustomColorsChange?.(DEFAULT_CUSTOM_THEME);
+                      }}
+                    >
+                      Reset
+                    </button>
+                  </div>
+
+                  <div className="theme-swatch-grid">
+                    {STUDIO_THEMES.map(preset => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        className={`theme-swatch-btn ${themeId === preset.id ? 'active' : ''}`}
+                        onClick={() => onThemeIdChange(preset.id)}
+                      >
+                        <span className="theme-swatch-preview" style={{ background: preset.bg, borderColor: preset.line }}>
+                          <span style={{ background: preset.accent }} />
+                          <span style={{ background: preset.accent2 }} />
+                        </span>
+                        <span className="theme-swatch-name">
+                          {uiEdition === 'minimal' ? preset.name : preset.classicName}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {onCustomColorsChange && (
+                    <div className="theme-custom-section">
+                      <div className="theme-custom-head">
+                        <span className="eyebrow">{uiEdition === 'minimal' ? 'CUSTOM MIX' : 'FREIE EIGENE FARBEN'}</span>
+                        {themeId === 'custom' && (
+                          <span className="theme-custom-badge">{uiEdition === 'minimal' ? 'Active' : 'Aktiv'}</span>
+                        )}
+                      </div>
+                      <div className="theme-custom-pickers">
+                        <label className="theme-color-field">
+                          <span>{uiEdition === 'minimal' ? 'Base' : 'Basis'}</span>
+                          <input
+                            type="color"
+                            value={customColors.bg}
+                            onChange={e => {
+                              onCustomColorsChange({ ...customColors, bg: e.target.value });
+                              onThemeIdChange('custom');
+                            }}
+                          />
+                        </label>
+                        <label className="theme-color-field">
+                          <span>{uiEdition === 'minimal' ? 'Primary' : 'Akzent 1'}</span>
+                          <input
+                            type="color"
+                            value={customColors.accent}
+                            onChange={e => {
+                              onCustomColorsChange({ ...customColors, accent: e.target.value });
+                              onThemeIdChange('custom');
+                            }}
+                          />
+                        </label>
+                        <label className="theme-color-field">
+                          <span>{uiEdition === 'minimal' ? 'Harmonic' : 'Akzent 2'}</span>
+                          <input
+                            type="color"
+                            value={customColors.accent2}
+                            onChange={e => {
+                              onCustomColorsChange({ ...customColors, accent2: e.target.value });
+                              onThemeIdChange('custom');
+                            }}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -497,37 +645,50 @@ export function EssentialMasterBar({
 
         {/* Unit 2: Harmonic Center & Dual-Chord Quick Access */}
         <div className="essential-cell harmony-cell">
-          <div className="root-stepper-cluster" title={uiEdition === 'minimal' ? 'Transpose root (− / + semitone) or audition' : 'Grundton anpassen (− / + Halbton) oder anspielen'}>
-            <button
-              type="button"
-              className="icon-button note-step-btn"
-              onClick={() => engine.transposeRoot(-1)}
-              title={uiEdition === 'minimal' ? 'Transpose root down (−1 semitone)' : 'Grundton 1 Halbton tiefer (−1)'}
-              aria-label={uiEdition === 'minimal' ? 'Transpose root down' : 'Grundton tiefer'}
-            >
-              −
-            </button>
+          <div className="key-control-cluster">
+            <div className="root-stepper-cluster" title={uiEdition === 'minimal' ? 'Transpose session key (− / + semitone) or audition' : 'Tonart anpassen (− / + Halbton) oder anspielen'}>
+              <button
+                type="button"
+                className="icon-button note-step-btn"
+                onClick={() => engine.transposeRoot(-1)}
+                title={uiEdition === 'minimal' ? 'Transpose key down (−1 semitone)' : 'Tonart 1 Halbton tiefer (−1)'}
+                aria-label={uiEdition === 'minimal' ? 'Transpose key down' : 'Tonart tiefer'}
+              >
+                −
+              </button>
 
-            <div className="root-orb-wrapper">
               <button
                 type="button"
                 className="master-root-orb"
                 onClick={() => void engine.auditionNote(session.root + 12)}
-                title={uiEdition === 'minimal' ? 'Click to audition root note' : 'Klicken: Grundton anspielen'}
+                title={uiEdition === 'minimal' ? 'Session Key (click to audition)' : 'Gewählte Tonart (Klicken: Grundton anspielen)'}
               >
-                <small>ROOT</small>
-                <strong>{pitch(root)}</strong>
+                <small>{uiEdition === 'minimal' ? 'KEY' : 'TONART'}</small>
+                <strong>{pitch(session.root)}</strong>
               </button>
+
+              <button
+                type="button"
+                className="icon-button note-step-btn"
+                onClick={() => engine.transposeRoot(1)}
+                title={uiEdition === 'minimal' ? 'Transpose key up (+1 semitone)' : 'Tonart 1 Halbton höher (+1)'}
+                aria-label={uiEdition === 'minimal' ? 'Transpose key up' : 'Tonart höher'}
+              >
+                +
+              </button>
+            </div>
+
+            <div className="root-key-scale-pickers">
               <select
                 className="root-inline-picker"
-                aria-label={uiEdition === 'minimal' ? 'Select root note' : 'Grundton direkt auswählen'}
-                value={((session.root % 12) + 12) % 12}
+                aria-label={uiEdition === 'minimal' ? 'Select Key' : 'Tonart auswählen'}
+                value={keyRootPc}
                 onChange={e => {
                   const pc = Number(e.target.value);
                   const oct = Math.floor(session.root / 12);
                   engine.setRoot(oct * 12 + pc);
                 }}
-                title={uiEdition === 'minimal' ? 'Select root note' : 'Grundton direkt auswählen'}
+                title={uiEdition === 'minimal' ? 'Select Key' : 'Grundtonart wählen'}
               >
                 {['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'].map((pName, pIdx) => (
                   <option key={pIdx} value={pIdx}>
@@ -535,17 +696,21 @@ export function EssentialMasterBar({
                   </option>
                 ))}
               </select>
-            </div>
 
-            <button
-              type="button"
-              className="icon-button note-step-btn"
-              onClick={() => engine.transposeRoot(1)}
-              title={uiEdition === 'minimal' ? 'Transpose root up (+1 semitone)' : 'Grundton 1 Halbton höher (+1)'}
-              aria-label={uiEdition === 'minimal' ? 'Transpose root up' : 'Grundton höher'}
-            >
-              +
-            </button>
+              <select
+                className="key-tag-select"
+                value={session.scale}
+                onChange={e => engine.updateSession({ scale: e.target.value as MusicalScale })}
+                title={uiEdition === 'minimal' ? 'Select Scale' : 'Tonleiter wählen'}
+                aria-label={uiEdition === 'minimal' ? 'Select Scale' : 'Skala wechseln'}
+              >
+                {SCALES.map(([val, label]) => (
+                  <option key={val} value={val}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="master-chord-info">
@@ -572,19 +737,12 @@ export function EssentialMasterBar({
                 </button>
               </div>
 
-              <select
-                className="key-tag-select"
-                value={session.scale}
-                onChange={e => engine.updateSession({ scale: e.target.value as MusicalScale })}
-                title={uiEdition === 'minimal' ? `Scale: ${pitch(session.root)} ${scaleName}` : `Tonleiter: ${pitch(session.root)} ${scaleName}`}
-                aria-label={uiEdition === 'minimal' ? 'Change scale' : 'Skala wechseln'}
+              <span
+                className="chord-root-indicator"
+                title={uiEdition === 'minimal' ? 'Root note of the current sounding chord' : 'Grundton des aktuell klingenden Akkords'}
               >
-                {SCALES.map(([val, label]) => (
-                  <option key={val} value={val}>
-                    {pitch(session.root)} {label}
-                  </option>
-                ))}
-              </select>
+                {uiEdition === 'minimal' ? 'Chord Root' : 'Akkordbasis'}: <strong>{pitch(chordRoot)}</strong>
+              </span>
             </div>
 
             {/* Individual chord notes: on-the-fly transposing and auditioning */}
@@ -602,7 +760,7 @@ export function EssentialMasterBar({
                   </button>
                   <button
                     type="button"
-                    className={`mini-tone-btn ${((n % 12) + 12) % 12 === ((root % 12) + 12) % 12 ? 'is-root' : ''}`}
+                    className={`mini-tone-btn ${((n % 12) + 12) % 12 === ((chordRoot % 12) + 12) % 12 ? 'is-root' : ''}`}
                     onClick={() => void engine.auditionNote(n)}
                     title={uiEdition === 'minimal' ? `Audition ${pitch(n)} (${n})` : `${pitch(n)} (${n}) anspielen`}
                   >
@@ -673,8 +831,10 @@ export function EssentialMasterBar({
             </div>
             <span className="next-chord-helper">
               {position.playing
-                ? `in ${Math.max(1, Math.ceil(position.chordBarsLeft))}${uiEdition === 'minimal' ? 'B' : 'T'}`
-                : (uiEdition === 'minimal' ? 'Ready' : 'Bereit')}
+                ? (uiEdition === 'minimal'
+                    ? `Bar ${currentBarInChord}/${holdBars} · Beat ${beatIndex + 1}/4`
+                    : `Takt ${currentBarInChord}/${holdBars} · ${beatIndex + 1}/4`)
+                : (uiEdition === 'minimal' ? `${holdBars}B · Ready` : `${holdBars}T · Bereit`)}
             </span>
           </div>
         </div>

@@ -27,9 +27,9 @@ const MODULE_DEFINITIONS: ModuleMeta[] = [
   { id: 'sequencer', label: 'Sequencer (4 Takte)', enLabel: 'Sequencer', shortLabel: 'Sequencer', enShortLabel: 'Sequencer', icon: Activity, description: 'Verlaufskette: 4 Takte dies, 4 Takte jenes', enDescription: 'Block-based arrangement timeline' },
   { id: 'fxchain', label: 'Modulare FX-Kette', enLabel: 'FX Chain', shortLabel: 'FX-Kette', enShortLabel: 'FX Chain', icon: Waves, description: 'Effekt-Signalfluss, Routing (Delay ➔ Reverb) & Bypass', enDescription: 'Signal routing (Delay/Reverb order) and module bypass' },
   { id: 'chaos', label: 'Chaos & Organischer Drift', enLabel: 'Chaos & Drift', shortLabel: 'Chaos', enShortLabel: 'Drift', icon: Sparkles, description: 'Wandernder Attraktor, 2D-Drift & spontane Impulse', enDescription: '2D attractor modulating motion and space' },
-  { id: 'atmosphere', label: 'Textur & Kick-Atmung', enLabel: 'Texture & Flow', shortLabel: 'Textur', enShortLabel: 'Texture', icon: Wand2, description: 'Hintergrund-Bett (max 20%) und Ducking', enDescription: 'Background texture layer, sidechain ducking and auto-flow' },
+  { id: 'atmosphere', label: 'Textur & Kick-Atmung', enLabel: 'Texture & Flow', shortLabel: 'Textur', enShortLabel: 'Texture', icon: Wand2, description: 'Hintergrund-Bett (max 10%) und Ducking', enDescription: 'Background texture layer, sidechain ducking and auto-flow' },
   { id: 'rhythms', label: 'Rhythmus-Pool', enLabel: 'Rhythm Engine', shortLabel: 'Rhythmen', enShortLabel: 'Rhythms', icon: Layers, description: 'Generative Rhythmus-Algorithmen (Euclidean, Markov, CBL)', enDescription: 'Generative rhythm algorithms (Euclidean, Markov, Ambient Pulse)' },
-  { id: 'scenes', label: 'Szenen (16)', enLabel: 'Scenes (24)', shortLabel: 'Szenen', enShortLabel: 'Scenes', icon: Disc3, description: '16 kuratierte musikalische Ausgangspunkte', enDescription: '24 curated musical starting presets' },
+  { id: 'scenes', label: 'Szenen (24)', enLabel: 'Scenes (24)', shortLabel: 'Szenen', enShortLabel: 'Scenes', icon: Disc3, description: '24 kuratierte musikalische Ausgangspunkte', enDescription: '24 curated musical starting presets' },
 ];
 
 const MINIMAL_WORKSPACE_PRESETS: Record<string, { label: string; description: string }> = {

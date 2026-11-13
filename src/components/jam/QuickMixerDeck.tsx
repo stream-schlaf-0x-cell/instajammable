@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Volume2, LockKeyhole, Snowflake, RotateCcw, ChevronLeft, ChevronRight, ChevronDown, Dices, X } from 'lucide-react';
 import {
   JamEngine,
@@ -8,7 +9,7 @@ import {
 } from '../../engine/jam/JamEngine';
 import type { JamPosition, JamSession, LayerRole } from '../../types/jam';
 import { useUiEdition } from '../../contexts/UiEditionContext';
-import { getInstrumentPresetDisplay } from '../../engine/jam/minimalCatalog';
+import { getInstrumentPresetDisplay, getPresetCategoryDisplay } from '../../engine/jam/minimalCatalog';
 
 interface QuickMixerDeckProps {
   session: JamSession;
@@ -31,23 +32,73 @@ export function QuickMixerDeck({ session }: QuickMixerDeckProps) {
   const isMinimal = edition === 'minimal';
   const layers = session.layers;
   const [activeMenuLayerId, setActiveMenuLayerId] = useState<string | null>(null);
+  const [popoverCoords, setPopoverCoords] = useState<{ top: number; left: number; isRightAligned: boolean } | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const triggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  const updatePopoverPosition = useCallback(() => {
+    if (!activeMenuLayerId || typeof window === 'undefined' || window.innerWidth <= 640) {
+      setPopoverCoords(null);
+      return;
+    }
+    const triggerEl = triggerRefs.current[activeMenuLayerId];
+    if (!triggerEl) {
+      setPopoverCoords(null);
+      return;
+    }
+    const rect = triggerEl.getBoundingClientRect();
+    const layerIdx = layers.findIndex(l => l.id === activeMenuLayerId);
+    const isRightAligned = layerIdx >= 0 ? layerIdx % 4 >= 2 : false;
+    const popoverWidth = 235;
+    const margin = 8;
+    const rawLeft = isRightAligned ? rect.right - popoverWidth : rect.left;
+    const left = Math.max(margin, Math.min(window.innerWidth - popoverWidth - margin, rawLeft));
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const preferAbove = spaceBelow < 240 && rect.top > 320;
+    const top = preferAbove
+      ? Math.max(margin, rect.top - 314)
+      : Math.max(margin, Math.min(window.innerHeight - 280, rect.bottom + 4));
+    setPopoverCoords({ top, left, isRightAligned });
+  }, [activeMenuLayerId, layers]);
+
+  useLayoutEffect(() => {
+    updatePopoverPosition();
+  }, [updatePopoverPosition]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      const targetEl = e.target as HTMLElement | null;
+      if (activeMenuLayerId && targetEl?.closest(`[data-preset-menu-layer="${activeMenuLayerId}"]`)) {
+        return;
+      }
       if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
         setActiveMenuLayerId(null);
       }
     };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setActiveMenuLayerId(null);
+    };
+    const handleReposition = (e: Event) => {
+      if (e.type === 'scroll' && popoverRef.current && popoverRef.current.contains(e.target as Node)) {
+        return;
+      }
+      updatePopoverPosition();
+    };
     if (activeMenuLayerId) {
       document.addEventListener('mousedown', handleClickOutside);
       document.addEventListener('touchstart', handleClickOutside, { passive: true });
+      document.addEventListener('keydown', handleKeyDown);
+      window.addEventListener('resize', handleReposition);
+      window.addEventListener('scroll', handleReposition, true);
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', handleReposition);
+      window.removeEventListener('scroll', handleReposition, true);
     };
-  }, [activeMenuLayerId]);
+  }, [activeMenuLayerId, updatePopoverPosition]);
 
   const setVolume = (id: string, vol: number) => {
     engine.updateLayer(id, { volume: Math.max(0, Math.min(1, vol)) });
@@ -129,13 +180,11 @@ export function QuickMixerDeck({ session }: QuickMixerDeckProps) {
 
       {/* 8 Channel Strips Grid */}
       <div className="mixer-strips-grid">
-        {layers.map((layer, index) => {
+        {layers.map(layer => {
           const pct = Math.round(layer.volume * 100);
           const isSilent = layer.muted || (layers.some(l => l.solo) && !layer.solo);
           const activePreset: InstrumentPreset | undefined = detectActiveInstrumentPreset(layer);
-          const availablePresets = getInstrumentPresets(layer.role, layer.drumVoice);
           const isMenuOpen = activeMenuLayerId === layer.id;
-          const isRightAlignedPopover = index % 4 >= 2;
 
           return (
             <div
@@ -163,6 +212,8 @@ export function QuickMixerDeck({ session }: QuickMixerDeckProps) {
                 </button>
 
                 <button
+                  ref={el => { triggerRefs.current[layer.id] = el; }}
+                  data-preset-menu-layer={layer.id}
                   type="button"
                   className={`strip-preset-badge ${isMenuOpen ? 'menu-open' : ''}`}
                   onClick={() => setActiveMenuLayerId(isMenuOpen ? null : layer.id)}
@@ -193,42 +244,6 @@ export function QuickMixerDeck({ session }: QuickMixerDeckProps) {
                 >
                   <Dices size={11} />
                 </button>
-
-                {/* Preset Popover Menu */}
-                {isMenuOpen && (
-                  <div className={`strip-preset-popover ${isRightAlignedPopover ? 'align-right' : 'align-left'}`} ref={popoverRef}>
-                    <div className="preset-popover-header">
-                      <span className="preset-popover-title">{layer.name} Presets</span>
-                      <button
-                        type="button"
-                        className="preset-popover-close"
-                        onClick={() => setActiveMenuLayerId(null)}
-                        aria-label={isMinimal ? 'Close' : 'Schließen'}
-                      >
-                        <X size={11} />
-                      </button>
-                    </div>
-                    <div className="preset-popover-list">
-                      {availablePresets.map(preset => {
-                        const disp = getInstrumentPresetDisplay(preset, edition);
-                        return (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          className={`preset-popover-item ${activePreset?.id === preset.id ? 'is-active' : ''}`}
-                          onClick={() => selectPreset(layer.id, preset.id)}
-                        >
-                          <div className="preset-item-header">
-                            <span className="preset-item-name">{disp.name}</span>
-                            <span className="preset-item-cat">{preset.category}</span>
-                          </div>
-                          <span className="preset-item-desc">{disp.description}</span>
-                        </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Dual-Chord Layer B Compact Sub-Mixer (Chords Strip Only) */}
@@ -363,6 +378,52 @@ export function QuickMixerDeck({ session }: QuickMixerDeckProps) {
           );
         })}
       </div>
+
+      {activeMenuLayerId && (() => {
+        const activeLayer = layers.find(l => l.id === activeMenuLayerId);
+        if (!activeLayer) return null;
+        const activePreset = detectActiveInstrumentPreset(activeLayer);
+        const availablePresets = getInstrumentPresets(activeLayer.role, activeLayer.drumVoice);
+        const portalNode = (
+          <div
+            ref={popoverRef}
+            className={`strip-preset-popover ${popoverCoords?.isRightAligned ? 'align-right' : 'align-left'}`}
+            style={popoverCoords ? { position: 'fixed', top: `${popoverCoords.top}px`, left: `${popoverCoords.left}px`, right: 'auto', marginTop: 0 } : undefined}
+          >
+            <div className="preset-popover-header">
+              <span className="preset-popover-title">{activeLayer.name} Presets</span>
+              <button
+                type="button"
+                className="preset-popover-close"
+                onClick={() => setActiveMenuLayerId(null)}
+                aria-label={isMinimal ? 'Close' : 'Schließen'}
+              >
+                <X size={11} />
+              </button>
+            </div>
+            <div className="preset-popover-list">
+              {availablePresets.map(preset => {
+                const disp = getInstrumentPresetDisplay(preset, edition);
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={`preset-popover-item ${activePreset?.id === preset.id ? 'is-active' : ''}`}
+                    onClick={() => selectPreset(activeLayer.id, preset.id)}
+                  >
+                    <div className="preset-item-header">
+                      <span className="preset-item-name">{disp.name}</span>
+                      <span className="preset-item-cat">{getPresetCategoryDisplay(preset.category, edition)}</span>
+                    </div>
+                    <span className="preset-item-desc">{disp.description}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+        return typeof document !== 'undefined' ? createPortal(portalNode, document.body) : portalNode;
+      })()}
     </div>
   );
 }

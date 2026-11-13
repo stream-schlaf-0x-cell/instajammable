@@ -110,7 +110,7 @@ export function SplitLayout({
             })}
           </div>
           <div className="split-tool-body">
-            <ToolDrawerContent tool={activeTool} session={session} position={position} onClose={() => {}} />
+            <ToolDrawerContent tool={activeTool} session={session} position={position} />
           </div>
         </section>
       </div>
