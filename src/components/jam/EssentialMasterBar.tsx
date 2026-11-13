@@ -26,6 +26,8 @@ import type { JamPosition, JamSession, ChordPattern, ChordPace } from '../../typ
 import type { MusicalScale } from '../../types';
 import type { ViewDensityMode } from './WorkspaceBar';
 import type { RecorderState } from '../../engine/audio/recorder';
+import { LAYOUT_OPTIONS, type LayoutVariant, type UiEdition } from '../../types/ui';
+import { getSceneDisplay } from '../../engine/jam/minimalCatalog';
 
 const SCALES: [MusicalScale, string][] = [
   ['dorian', 'Dorian'],
@@ -55,6 +57,10 @@ interface EssentialMasterBarProps {
   allCollapsed?: boolean;
   onExpandAll?: () => void;
   onCollapseAll?: () => void;
+  uiEdition?: UiEdition;
+  onUiEditionChange?: (edition: UiEdition) => void;
+  layoutVariant?: LayoutVariant;
+  onLayoutVariantChange?: (variant: LayoutVariant) => void;
 }
 
 const engine = JamEngine.getInstance();
@@ -76,6 +82,10 @@ export function EssentialMasterBar({
   recording,
   onRecord,
   onTogglePlay,
+  uiEdition = 'classic',
+  onUiEditionChange,
+  layoutVariant = 'console',
+  onLayoutVariantChange,
 }: EssentialMasterBarProps) {
   const [bpmDraft, setBpmDraft] = useState(String(session.bpm));
   const tempoFocused = useRef(false);
@@ -198,10 +208,10 @@ export function EssentialMasterBar({
           </a>
 
           {onTabChange && (
-            <nav className="primary-nav unified-nav" aria-label="Hauptnavigation">
+            <nav className="primary-nav unified-nav" aria-label={uiEdition === 'minimal' ? 'Main Navigation' : 'Hauptnavigation'}>
               {([
                 ['jam', 'Jam'],
-                ['library', 'Sammlung'],
+                ['library', uiEdition === 'minimal' ? 'Library' : 'Sammlung'],
                 ['details', 'Details'],
               ] as const).map(([id, label]) => (
                 <button
@@ -225,28 +235,68 @@ export function EssentialMasterBar({
             <span className="scene-num-badge">
               #{String((currentSceneIndex >= 0 ? currentSceneIndex : 0) + 1).padStart(2, '0')}
             </span>
-            <div className="scene-picker-container" title="Kuratierte Klangwelt / Szene direkt wechseln">
+            <div className="scene-picker-container" title={uiEdition === 'minimal' ? 'Switch scene preset' : 'Kuratierte Klangwelt / Szene direkt wechseln'}>
               <select
-                aria-label="Preset auswählen"
+                aria-label={uiEdition === 'minimal' ? 'Select Scene' : 'Preset auswählen'}
                 value={session.sceneId || 'moss-pulse'}
                 onChange={e => {
                   void engine.loadScene(e.target.value);
                 }}
                 className="scene-picker-dropdown"
               >
-                {SCENES.map((s, idx) => (
-                  <option key={s.id} value={s.id}>
-                    #{String(idx + 1).padStart(2, '0')} · {s.name} ({s.style.toUpperCase()} · {s.bpm} BPM)
-                  </option>
-                ))}
+                {SCENES.map((s, idx) => {
+                  const meta = getSceneDisplay(s, uiEdition);
+                  return (
+                    <option key={s.id} value={s.id}>
+                      #{String(idx + 1).padStart(2, '0')} · {meta.name} ({s.style.toUpperCase()} · {s.bpm} BPM)
+                    </option>
+                  );
+                })}
               </select>
               <ChevronDown size={14} className="dropdown-arrow-icon" />
             </div>
           </div>
         </div>
 
-        {/* Right Studio Controls: View Mode, Settings & Ableton, Audio/MIDI, Rec, Live Status */}
+        {/* Right Studio Controls: Edition & Layout Switcher, View Mode, Settings & Ableton, Audio/MIDI, Rec, Live Status */}
         <div className="master-meta-cluster">
+          {onUiEditionChange && (
+            <div className="edition-pill-switch" role="group" aria-label="UI Edition">
+              <button
+                type="button"
+                className={`edition-pill-btn ${uiEdition === 'classic' ? 'active' : ''}`}
+                onClick={() => onUiEditionChange('classic')}
+                title="Classic German Full Edition"
+              >
+                Classic
+              </button>
+              <button
+                type="button"
+                className={`edition-pill-btn ${uiEdition === 'minimal' ? 'active' : ''}`}
+                onClick={() => onUiEditionChange('minimal')}
+                title="Clean English Minimal Edition (no artist references)"
+              >
+                Minimal EN
+              </button>
+            </div>
+          )}
+
+          {onLayoutVariantChange && (
+            <div className="layout-switcher-pills" role="group" aria-label="Layout Switcher">
+              {LAYOUT_OPTIONS.map(opt => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={`layout-pill-btn ${layoutVariant === opt.id ? 'active' : ''}`}
+                  onClick={() => onLayoutVariantChange(opt.id)}
+                  title={opt.description}
+                >
+                  {uiEdition === 'minimal' ? opt.minimalLabel : opt.classicLabel}
+                </button>
+              ))}
+            </div>
+          )}
+
           {onViewModeChange && (
             <div className="console-density-pills" role="group" aria-label="Ansichts-Modus">
               <button
@@ -330,10 +380,10 @@ export function EssentialMasterBar({
       </div>
 
       {/* Prominent Master Volume Bar (Touch-ready 44px target, dB display & Peak LED) */}
-      <div className="master-volume-strip" aria-label="Master Lautstärke">
+      <div className="master-volume-strip" aria-label={uiEdition === 'minimal' ? 'Master Volume' : 'Master Lautstärke'}>
         <div className="master-volume-label">
           <Volume2 size={15} />
-          <span>Lautstärke</span>
+          <span>{uiEdition === 'minimal' ? 'Volume' : 'Lautstärke'}</span>
         </div>
         <input
           type="range"
@@ -341,8 +391,8 @@ export function EssentialMasterBar({
           max={1}
           step={0.01}
           value={session.volume}
-          aria-label="Master Lautstärke"
-          title="Master-Lautstärke (Doppelklick/Doppeltap = 90 % Reset)"
+          aria-label={uiEdition === 'minimal' ? 'Master Volume' : 'Master Lautstärke'}
+          title={uiEdition === 'minimal' ? 'Master volume (double-click/tap = 90% reset)' : 'Master-Lautstärke (Doppelklick/Doppeltap = 90 % Reset)'}
           className="master-volume-slider"
           onChange={e => engine.updateSession({ volume: Number(e.target.value) })}
           onDoubleClick={resetMasterVolume}
@@ -380,7 +430,7 @@ export function EssentialMasterBar({
             title={position.playing ? 'Jam stoppen (Leertaste)' : 'Jam starten (Leertaste)'}
           >
             {position.playing ? <Square size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
-            <span>{position.playing ? 'Stop' : 'Start'}</span>
+            <span>{position.playing ? 'Stop' : (uiEdition === 'minimal' ? 'Play' : 'Start')}</span>
           </button>
 
           <div className="tempo-cluster">

@@ -18,6 +18,12 @@ import { ChaosModulatorDeck } from './components/jam/ChaosModulatorDeck';
 import { EssentialMasterBar } from './components/jam/EssentialMasterBar';
 import { PresetsSettingsModal } from './components/jam/PresetsSettingsModal';
 import { QuickMixerDeck, MiniMixerPreview } from './components/jam/QuickMixerDeck';
+import { SplitLayout } from './components/layouts/SplitLayout';
+import { FocusStageLayout } from './components/layouts/FocusStageLayout';
+import { CommandGridLayout } from './components/layouts/CommandGridLayout';
+import { GrooveboxLayout } from './components/layouts/GrooveboxLayout';
+import { MINIMAL_MACROS } from './engine/jam/minimalCatalog';
+import type { LayoutVariant, UiEdition } from './types/ui';
 import { findParamOption } from './engine/jam/customMacros';
 import { TIMBRES, type JamLayer, type JamSession, type MacroName, type MidiClip } from './types/jam';
 import type { MusicalScale } from './types';
@@ -54,6 +60,17 @@ export default function App() {
   const [midiStatus, setMidiStatus] = useState(engine.midi.getStatus());
   const [recording, setRecording] = useState<RecorderState>(() => engine.recorder.getState());
   const [viewMode, setViewMode] = useState<ViewDensityMode>('compact');
+  const [uiEdition, setUiEdition] = useState<UiEdition>(() => {
+    try { return localStorage.getItem('instajammable.uiEdition') === 'minimal' ? 'minimal' : 'classic'; } catch { return 'classic'; }
+  });
+  const [layoutVariant, setLayoutVariant] = useState<LayoutVariant>(() => {
+    try {
+      const v = localStorage.getItem('instajammable.layoutVariant');
+      return v === 'split' || v === 'stage' || v === 'grid' || v === 'groovebox' ? v : 'console';
+    } catch { return 'console'; }
+  });
+  useEffect(() => { try { localStorage.setItem('instajammable.uiEdition', uiEdition); } catch { /* ignore */ } }, [uiEdition]);
+  useEffect(() => { try { localStorage.setItem('instajammable.layoutVariant', layoutVariant); } catch { /* ignore */ } }, [layoutVariant]);
   const [activeDrawer, setActiveDrawer] = useState<string | null>('soundscape');
   const [mixerExpanded, setMixerExpanded] = useState<boolean>(true);
   const [chaosEnabled, setChaosEnabled] = useState<boolean>(true);
@@ -118,29 +135,83 @@ export default function App() {
         recording={recording}
         onRecord={record}
         onTogglePlay={toggle}
+        uiEdition={uiEdition}
+        onUiEditionChange={setUiEdition}
+        layoutVariant={layoutVariant}
+        onLayoutVariantChange={setLayoutVariant}
       />
 
       {position.clipOverride && (
         <div className="loop-banner">
-          <Music2 /> Dein Clip spielt als Loop. <button onClick={() => engine.clearClipOverride()}>Zurück zum Generator <X size={15}/></button>
+          <Music2 /> {uiEdition === 'minimal' ? 'Playing captured loop.' : 'Dein Clip spielt als Loop.'} <button onClick={() => engine.clearClipOverride()}>{uiEdition === 'minimal' ? 'Back to Generator' : 'Zurück zum Generator'} <X size={15}/></button>
         </div>
       )}
 
-      {tab === 'jam' && (
+      {tab === 'jam' && layoutVariant === 'split' && (
+        <SplitLayout
+          session={session}
+          position={position}
+          edition={uiEdition}
+          rollNotes={rollNotes}
+          startBeat={startBeat}
+          span={span}
+          live={live}
+          onAudition={n => { void act(() => engine.auditionNote(n)); }}
+        />
+      )}
+
+      {tab === 'jam' && layoutVariant === 'stage' && (
+        <FocusStageLayout
+          session={session}
+          position={position}
+          edition={uiEdition}
+          rollNotes={rollNotes}
+          startBeat={startBeat}
+          span={span}
+          live={live}
+          onAudition={n => { void act(() => engine.auditionNote(n)); }}
+        />
+      )}
+
+      {tab === 'jam' && layoutVariant === 'grid' && (
+        <CommandGridLayout
+          session={session}
+          position={position}
+          edition={uiEdition}
+          rollNotes={rollNotes}
+          startBeat={startBeat}
+          span={span}
+          live={live}
+          onAudition={n => { void act(() => engine.auditionNote(n)); }}
+        />
+      )}
+
+      {tab === 'jam' && layoutVariant === 'groovebox' && (
+        <GrooveboxLayout
+          session={session}
+          position={position}
+          edition={uiEdition}
+        />
+      )}
+
+      {tab === 'jam' && layoutVariant === 'console' && (
         <>
           {viewMode === 'distance' && (
             <DistanceStageHUD session={session} position={position} onClose={() => setViewMode('compact')} />
           )}
 
           {/* Core & Custom Macros Ribbon */}
-          <section className="macro-strip" aria-label="Musikalische Makros">
-            {pinned.length ? pinned.map(m => (
-              <label className="macro" key={m.id}>
-                <span>{m.name}<output>{Math.round(session.macros[m.id]*100)}</output></span>
-                <input aria-label={m.name} type="range" min={0} max={1} step={.01} value={session.macros[m.id]} onChange={e => engine.setMacro(m.id, Number(e.target.value))}/>
-                <small>{m.text}</small>
-              </label>
-            )) : <p className="helper">Deine Makros kannst du unter Details anheften.</p>}
+          <section className="macro-strip" aria-label={uiEdition === 'minimal' ? 'Sound Macros' : 'Musikalische Makros'}>
+            {pinned.length ? pinned.map(m => {
+              const label = uiEdition === 'minimal' ? MINIMAL_MACROS[m.id] : m;
+              return (
+                <label className="macro" key={m.id}>
+                  <span>{label.name}<output>{Math.round(session.macros[m.id]*100)}</output></span>
+                  <input aria-label={label.name} type="range" min={0} max={1} step={.01} value={session.macros[m.id]} onChange={e => engine.setMacro(m.id, Number(e.target.value))}/>
+                  <small>{label.text}</small>
+                </label>
+              );
+            }) : <p className="helper">{uiEdition === 'minimal' ? 'Pin macros in Details.' : 'Deine Makros kannst du unter Details anheften.'}</p>}
 
             {/* User Custom Macros on Main Strip */}
             {session.customMacros && session.customMacros.map(cm => (
