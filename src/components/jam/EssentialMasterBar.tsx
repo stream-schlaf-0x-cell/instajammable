@@ -139,13 +139,11 @@ export function EssentialMasterBar({
       setPeakDb(-96);
       return;
     }
-    let raf = 0;
-    const tick = () => {
-      setPeakDb(engine.getPeakDb());
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    const timer = window.setInterval(() => {
+      const next = Math.round(engine.getPeakDb());
+      setPeakDb((prev) => (prev === next ? prev : next));
+    }, 100);
+    return () => window.clearInterval(timer);
   }, [position.playing]);
 
   const masterGainLinear = MasterAudio.volumeToGain(session.volume);

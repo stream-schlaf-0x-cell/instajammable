@@ -49,11 +49,25 @@ test('Phase 3 & 6: woodblock used in <= 2 scenes, no perc model > 4 scenes, uniq
   }
 });
 
+const ATMOSPHERIC_NAMED_SCENES = new Set([
+  'tidal-glass',
+  'still-water',
+  'rain-window',
+  'dusty-keys',
+  'late-train',
+  'streamlight',
+  'cbl-interloper',
+  'cbl-carbon-oasis',
+  'nils-felt-hall',
+  'tokyo-midnight-rain',
+]);
+
 test('Phase 6: every scene produces >= 3 distinct chord names in 32 bars (night-rumble/night-orbit >= 2) and unique ambient 4-hold sequences', () => {
   const ambientSeqs = new Map<string, string>();
   for (const scene of SCENES) {
     const s = createSession(scene.id, 142857);
-    assert.equal(s.atmosphere?.level ?? 0, 0, `${scene.id} atmosphere.level must default to 0`);
+    const expectedAtmos = ATMOSPHERIC_NAMED_SCENES.has(scene.id) ? 0.05 : 0;
+    assert.equal(s.atmosphere?.level ?? 0, expectedAtmos, `${scene.id} atmosphere.level must default to ${expectedAtmos}`);
     const composer = new JamComposer();
     const names32 = new Set<string>();
     const first4: string[] = [];

@@ -62,8 +62,8 @@ interface Tuning {
   layers?: Partial<Record<string, LayerTuning>>;
 }
 const NO_DRUMS: Tuning['layers'] = { kick: { muted: true }, snare: { muted: true }, hihat: { muted: true }, perc: { muted: true } };
-const bed = (kind: AtmosphereSettings['kind'], _level: number, tone = 0.5, movement = 0.4): AtmosphereSettings => {
-  return { kind, level: 0, tone, movement };
+const bed = (kind: AtmosphereSettings['kind'], level: number, tone = 0.5, movement = 0.4): AtmosphereSettings => {
+  return { kind, level: Math.max(0, Math.min(0.10, level)), tone, movement };
 };
 const SCENE_TUNING: Record<string, Tuning> = {
   'symphonic-dawn': {
@@ -111,7 +111,7 @@ const SCENE_TUNING: Record<string, Tuning> = {
     }
   },
   'tidal-glass': {
-    atmosphere: bed('air', 0, 0.60, 0.52),
+    atmosphere: bed('air', 0.05, 0.60, 0.52),
     ensemble: 0.7,
     progressions: [[0, 1, 0, 4], [0, 4, 1, 5]],
     voicingFamily: 'sus',
@@ -198,7 +198,7 @@ const SCENE_TUNING: Record<string, Tuning> = {
     }
   },
   'still-water': {
-    atmosphere: bed('air', 0, 0.42, 0.35),
+    atmosphere: bed('air', 0.05, 0.42, 0.35),
     ensemble: 0.7,
     progressions: [[0, 4, 0, 1]],
     voicingFamily: 'sus',
@@ -218,7 +218,7 @@ const SCENE_TUNING: Record<string, Tuning> = {
     }
   },
   'rain-window': {
-    atmosphere: bed('rain', 0, 0.54, 0.30),
+    atmosphere: bed('rain', 0.05, 0.54, 0.30),
     ensemble: 0.4,
     progressions: [[0, 3, 5, 4]],
     voicingFamily: 'triad',
@@ -288,7 +288,7 @@ const SCENE_TUNING: Record<string, Tuning> = {
     }
   },
   'dusty-keys': {
-    atmosphere: bed('vinyl', 0, 0.52, 0.30),
+    atmosphere: bed('vinyl', 0.05, 0.52, 0.30),
     pump: 0.28,
     swing: 0.38,
     ensemble: 0.35,
@@ -312,7 +312,7 @@ const SCENE_TUNING: Record<string, Tuning> = {
     }
   },
   'late-train': {
-    atmosphere: bed('vinyl', 0, 0.48, 0.30),
+    atmosphere: bed('vinyl', 0.05, 0.48, 0.30),
     pump: 0.26,
     swing: 0.36,
     ensemble: 0.35,
@@ -363,7 +363,7 @@ const SCENE_TUNING: Record<string, Tuning> = {
   },
   'streamlight': {
     swing: 0.34,
-    atmosphere: bed('rain', 0, 0.50, 0.40),
+    atmosphere: bed('rain', 0.05, 0.50, 0.40),
     pump: 0.24,
     ensemble: 0.35,
     progressions: [[0, 6, 5, 4]],
@@ -412,7 +412,7 @@ const SCENE_TUNING: Record<string, Tuning> = {
   },
   'cbl-interloper': {
     swing: 0.12,
-    atmosphere: bed('tape', 0, 0.48, 0.50),
+    atmosphere: bed('tape', 0.05, 0.48, 0.50),
     pump: 0.22,
     ensemble: 0.55,
     progressions: [[0, 6, 5, 3]],
@@ -437,7 +437,7 @@ const SCENE_TUNING: Record<string, Tuning> = {
   },
   'cbl-carbon-oasis': {
     swing: 0.12,
-    atmosphere: bed('tape', 0, 0.48, 0.50),
+    atmosphere: bed('tape', 0.05, 0.48, 0.50),
     pump: 0.22,
     ensemble: 0.6,
     progressions: [[0, 1, 4, 5], [0, 4, 5, 1]],
@@ -461,7 +461,7 @@ const SCENE_TUNING: Record<string, Tuning> = {
     }
   },
   'nils-felt-hall': {
-    atmosphere: bed('rain', 0, 0.55, 0.35),
+    atmosphere: bed('rain', 0.05, 0.55, 0.35),
     ensemble: 0.4,
     progressions: [[0, 5, 2, 6], [0, 3, 4, 0]],
     voicingFamily: 'triad',
@@ -577,7 +577,7 @@ const SCENE_TUNING: Record<string, Tuning> = {
   },
   'tokyo-midnight-rain': {
     swing: 0.38,
-    atmosphere: bed('rain', 0, 0.52, 0.38),
+    atmosphere: bed('rain', 0.05, 0.52, 0.38),
     pump: 0.30,
     ensemble: 0.35,
     progressions: [[0, 3, 4, 5], [0, 5, 6, 4]],

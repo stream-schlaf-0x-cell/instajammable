@@ -13,7 +13,7 @@ export class MusicalClock {
 
   // Lookahead parameters
   private readonly lookaheadMs: number = 20;       // frequency of scheduler checks (20ms)
-  private readonly scheduleAheadTime: number = 0.12; // how far ahead to schedule Web Audio events (120ms)
+  private readonly scheduleAheadTime: number = 0.18; // how far ahead to schedule Web Audio events (180ms)
 
   // Max scheduling catch-up threshold to prevent audio machine-gun bursts after background-tab throttle
   private readonly maxCatchupThresholdSec: number = 0.35;

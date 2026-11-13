@@ -59,18 +59,20 @@ export function PatchbayLayout({ session, position, edition, rollNotes }: Patchb
   const [focusedMacro, setFocusedMacro] = useState<MacroName | null>(null);
 
   const beatPos = Math.max(0, position.beat);
+  const stepBeat = Math.floor(beatPos * 4) / 4;
   const rootPc = ((session.root % 12) + 12) % 12;
 
   const activeLayerIds = useMemo(() => {
     const set = new Set<string>();
     const recent = rollNotes.slice(-260);
+    const stepEnd = stepBeat + 0.24;
     for (const n of recent) {
-      if (beatPos >= n.startBeat && beatPos <= n.startBeat + Math.max(0.24, n.durationBeats)) {
+      if (n.startBeat <= stepEnd && stepBeat <= n.startBeat + Math.max(0.24, n.durationBeats)) {
         set.add(n.layerId);
       }
     }
     return set;
-  }, [rollNotes, beatPos]);
+  }, [rollNotes, stepBeat]);
 
   const fxMode: EffectChainMode = session.effectChain?.mode ?? 'delay-into-reverb';
   const fxActive = engine.isFxChainActive();

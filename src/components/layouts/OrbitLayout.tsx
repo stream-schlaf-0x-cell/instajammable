@@ -18,7 +18,7 @@ import {
   getTimbreDisplayName,
 } from '../../engine/jam/minimalCatalog';
 import { noteName } from '../jam/PianoRoll';
-import { ChordBarStepMeter, SCALES_LIST } from './LayoutShared';
+import { ChordBarStepMeter, SCALES_LIST, useSmoothBeat } from './LayoutShared';
 import type { ArrangementSection, ClipNote, JamLayer, JamPosition, JamSession, MacroName } from '../../types/jam';
 import type { UiEdition } from '../../types/ui';
 
@@ -75,33 +75,54 @@ export function OrbitLayout({
     [position.chordNotes],
   );
 
-  // Beat phase & pulse for cosmic sweep
-  const beatPos = Math.max(0, position.beat);
+  // Beat phase & pulse for cosmic sweep (smooth 60fps interpolated beat)
+  const beatPos = Math.max(0, useSmoothBeat(position, session.lowResource, session.bpm));
+  const stepKey = Math.floor(beatPos * 4);
+  const stepBeat = stepKey / 4;
   const beatFrac = beatPos % 1;
   const beatPulse = position.playing ? Math.exp(-beatFrac * 3.8) : 0.18;
   const sweepAngle = -Math.PI / 2 + ((beatPos % 16) / 16) * Math.PI * 2;
   const chordHold = Math.max(1, position.chordHoldBars || 2);
-  const chordProgress = Math.max(0, Math.min(1, 1 - (position.chordBarsLeft || 0) / chordHold));
+  const dtBars = position.playing ? Math.max(0, (beatPos - (position.beat || 0)) / 4) : 0;
+  const smoothLeft = Math.max(0, (position.chordBarsLeft || 0) - dtBars);
+  const chordProgress = Math.max(0, Math.min(1, 1 - smoothLeft / chordHold));
 
-  // Recent/active notes around the current 4-bar cycle (16 beats)
+  // Recent/active notes quantized on 16th-note boundaries to avoid per-frame filter churn
   const loopWindowStart = Math.floor(beatPos / 16) * 16;
   const recentNotes = useMemo(
     () =>
       rollNotes
-        .filter((n) => n.startBeat >= Math.max(0, beatPos - 16) && n.startBeat <= beatPos + 16)
+        .filter((n) => n.startBeat >= Math.max(0, stepBeat - 16) && n.startBeat <= stepBeat + 16)
         .slice(-240),
-    [rollNotes, beatPos],
+    [rollNotes, stepBeat],
   );
+
+  const notesByLayer = useMemo(() => {
+    const map = new Map<string, ClipNote[]>();
+    for (const n of recentNotes) {
+      let arr = map.get(n.layerId);
+      if (!arr) {
+        arr = [];
+        map.set(n.layerId, arr);
+      }
+      arr.push(n);
+    }
+    for (const [id, arr] of map) {
+      if (arr.length > 24) map.set(id, arr.slice(-24));
+    }
+    return map;
+  }, [recentNotes]);
 
   const activeLayerIds = useMemo(() => {
     const active = new Set<string>();
+    const stepEnd = stepBeat + 0.24;
     for (const n of recentNotes) {
-      if (beatPos >= n.startBeat && beatPos <= n.startBeat + Math.max(0.22, n.durationBeats)) {
+      if (n.startBeat <= stepEnd && stepBeat <= n.startBeat + Math.max(0.22, n.durationBeats)) {
         active.add(n.layerId);
       }
     }
     return active;
-  }, [recentNotes, beatPos]);
+  }, [recentNotes, stepBeat]);
 
   const chordPolygonPoints = useMemo(() => {
     const sorted = [...chordPcs].sort((a, b) => a - b);
@@ -222,7 +243,7 @@ export function OrbitLayout({
               const planetRadius = 8 + vol * 11 + (isFiring ? 3 : 0);
 
               // Notes belonging to this layer around the ring
-              const layerNotes = recentNotes.filter((n) => n.layerId === layer.id).slice(-24);
+              const layerNotes = notesByLayer.get(layer.id) ?? [];
 
               return (
                 <g key={layer.id} className="orbit-ring-group">

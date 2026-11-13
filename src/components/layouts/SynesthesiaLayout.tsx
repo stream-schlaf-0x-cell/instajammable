@@ -15,7 +15,7 @@ import {
   getTimbreDisplayName,
 } from '../../engine/jam/minimalCatalog';
 import { noteName } from '../jam/PianoRoll';
-import { ChordBarStepMeter, SCALES_LIST } from './LayoutShared';
+import { ChordBarStepMeter, SCALES_LIST, useSmoothBeat } from './LayoutShared';
 import type { ClipNote, JamPosition, JamSession, MacroName } from '../../types/jam';
 import type { UiEdition } from '../../types/ui';
 
@@ -111,7 +111,9 @@ export function SynesthesiaLayout({
   onAudition,
 }: SynesthesiaLayoutProps) {
   const isMin = edition === 'minimal';
-  const beatPos = Math.max(0, position.beat);
+  const beatPos = Math.max(0, useSmoothBeat(position, session.lowResource, session.bpm));
+  const stepKey = Math.floor(beatPos * 4);
+  const stepBeat = stepKey / 4;
   const beatPulse = position.playing ? Math.exp(-(beatPos % 1) * 3.6) : 0.16;
   const rootPc = ((session.root % 12) + 12) % 12;
 
@@ -124,21 +126,22 @@ export function SynesthesiaLayout({
   const skyNotes = useMemo(
     () =>
       rollNotes
-        .filter((n) => n.startBeat >= Math.max(0, beatPos - 16) && n.startBeat <= beatPos + 12 && n.channel !== 10)
+        .filter((n) => n.startBeat >= Math.max(0, stepBeat - 16) && n.startBeat <= stepBeat + 12 && n.channel !== 10)
         .slice(-90),
-    [rollNotes, beatPos],
+    [rollNotes, stepBeat],
   );
 
   const activeLayerIds = useMemo(() => {
     const active = new Set<string>();
     const recent = rollNotes.slice(-240);
+    const stepEnd = stepBeat + 0.24;
     for (const n of recent) {
-      if (beatPos >= n.startBeat && beatPos <= n.startBeat + Math.max(0.24, n.durationBeats)) {
+      if (n.startBeat <= stepEnd && stepBeat <= n.startBeat + Math.max(0.24, n.durationBeats)) {
         active.add(n.layerId);
       }
     }
     return active;
-  }, [rollNotes, beatPos]);
+  }, [rollNotes, stepBeat]);
 
   // Construct smooth multi-ribbon aurora SVG paths
   const auroraPaths = useMemo(() => {

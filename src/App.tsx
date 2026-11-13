@@ -153,21 +153,26 @@ export default function App() {
   }, [act, message]);
   useEffect(() => {
     let wasPlaying = engine.getPosition().playing;
+    let lastEventStep = -1;
     const timer = setInterval(() => {
       const pos = engine.getPosition();
       if (!pos.playing && !wasPlaying) return;
+      const nextStep = Math.floor(pos.beat * 4);
+      if (nextStep !== lastEventStep || pos.playing !== wasPlaying) {
+        lastEventStep = nextStep;
+        setEvents(engine.getRecentEvents(64));
+      }
       wasPlaying = pos.playing;
       setPosition(pos);
-      setEvents(engine.getRecentEvents(64));
     }, session.lowResource ? 120 : 80);
     return () => clearInterval(timer);
-  }, [session.lowResource]);
+  }, [session.lowResource, session.seed, session.sceneId]);
   useEffect(() => { if(session.globalOutputId!==undefined)setOutputId(session.globalOutputId||''); }, [session.globalOutputId]);
   useEffect(() => { const timer = setTimeout(() => { const error = persistSession(engine.saveSession()); if (error) message(error); }, 700); return () => clearTimeout(timer); }, [session, message]);
   const toggle = useCallback(async () => { await act(() => engine.getPosition().playing ? engine.stop() : engine.start()); setPosition(engine.getPosition()); }, [act]);
   useEffect(() => {
     if (!session.chaosEnabled || (session.chaosMode || 'calm') === 'manual') return;
-    const timer = setInterval(() => engine.stepChaosDrift(0.08), 80);
+    const timer = setInterval(() => engine.stepChaosDrift(0.14), 140);
     return () => clearInterval(timer);
   }, [session.chaosEnabled, session.chaosMode]);
   useEffect(() => {

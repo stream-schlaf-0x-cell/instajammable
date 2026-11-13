@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { Sparkles, Dice5, Dices, Volume2, LockKeyhole, Snowflake, SkipForward } from 'lucide-react';
 import { JamEngine, SCENES } from '../../engine/jam/JamEngine';
 import { getInstrumentPresets, detectActiveInstrumentPreset } from '../../engine/jam/instrumentPresets';
@@ -39,6 +40,49 @@ const CLASSIC_MACROS: Record<MacroName, { name: string; text: string }> = {
   space: { name: 'Raum', text: 'Weite, Delay und Nachklang.' },
 };
 
+export function useSmoothBeat(position: JamPosition, lowResource = false, bpm?: number): number {
+  const [beat, setBeat] = useState(() => position.beat || 0);
+  const anchorRef = useRef({ beat: position.beat || 0, time: performance.now(), rateBps: (bpm && bpm > 0 ? bpm : 80) / 60 });
+
+  useEffect(() => {
+    const now = performance.now();
+    const baseBeat = position.beat || 0;
+    const prev = anchorRef.current;
+    let nextRateBps = bpm && bpm > 0 ? bpm / 60 : prev.rateBps;
+    if (!bpm && position.playing && baseBeat > prev.beat) {
+      const measuredDt = (now - prev.time) / 1000;
+      if (measuredDt >= 0.03 && measuredDt <= 0.35) {
+        const measuredRate = (baseBeat - prev.beat) / measuredDt;
+        if (measuredRate >= 0.4 && measuredRate <= 4.5) {
+          nextRateBps = measuredRate;
+        }
+      }
+    }
+    anchorRef.current = { beat: baseBeat, time: now, rateBps: nextRateBps };
+    setBeat(baseBeat);
+    if (!position.playing) return;
+
+    let raf = 0;
+    let lastPaint = 0;
+    const minFrameMs = lowResource ? 32 : 0;
+
+    const tick = (frameNow: number) => {
+      if (minFrameMs > 0 && frameNow - lastPaint < minFrameMs) {
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+      lastPaint = frameNow;
+      const dtSec = Math.min(0.16, Math.max(0, (frameNow - anchorRef.current.time) / 1000));
+      setBeat(anchorRef.current.beat + dtSec * anchorRef.current.rateBps);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [position.beat, position.playing, lowResource, bpm]);
+
+  return position.playing ? beat : position.beat || 0;
+}
+
 export function ChordBarStepMeter({
   position,
   edition,
@@ -47,14 +91,19 @@ export function ChordBarStepMeter({
   edition: UiEdition;
 }) {
   const min = edition === 'minimal';
+  const smoothBeat = useSmoothBeat(position);
   const holdBars = Math.max(1, Math.round(position.chordHoldBars || 4));
   const rawLeft = Number.isFinite(position.chordBarsLeft) ? position.chordBarsLeft : holdBars;
+  const dtBars = position.playing ? Math.max(0, (smoothBeat - (position.beat || 0)) / 4) : 0;
+  const smoothLeft = Math.max(0, rawLeft - dtBars);
   const elapsedBars = position.playing
-    ? Math.max(0, Math.min(holdBars - 0.0001, holdBars - rawLeft))
+    ? Math.max(0, Math.min(holdBars - 0.0001, holdBars - smoothLeft))
     : 0;
   const currentBarInChord = position.playing ? Math.min(holdBars, Math.floor(elapsedBars) + 1) : 1;
-  const barFillPct = position.playing ? Math.round((elapsedBars - Math.floor(elapsedBars)) * 100) : 0;
-  const stepInBar = position.playing ? ((Math.floor(position.beat * 4) % 16) + 16) % 16 : 0;
+  const barFillPct = position.playing
+    ? Math.round((elapsedBars - Math.floor(elapsedBars)) * 1000) / 10
+    : 0;
+  const stepInBar = position.playing ? ((Math.floor(smoothBeat * 4) % 16) + 16) % 16 : 0;
   const beatInBar = Math.floor(stepInBar / 4);
 
   return (
