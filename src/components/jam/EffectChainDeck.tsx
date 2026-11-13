@@ -1,10 +1,14 @@
 import { ArrowRight, ArrowLeft, Power, Sparkles } from 'lucide-react';
 import { JamEngine } from '../../engine/jam/JamEngine';
+import { useUiEdition } from '../../contexts/UiEditionContext';
+import { MINIMAL_EFFECT_MODULES } from '../../engine/jam/minimalCatalog';
 import type { EffectChainMode, EffectModuleId, JamSession } from '../../types/jam';
 
 const engine = JamEngine.getInstance();
 
 export function EffectChainDeck({ session }: { session: JamSession }) {
+  const uiEdition = useUiEdition();
+  const isMinimal = uiEdition === 'minimal';
   const chain = engine.getEffectChain();
   const currentMode = chain.mode;
   const modules = chain.modules;
@@ -45,42 +49,42 @@ export function EffectChainDeck({ session }: { session: JamSession }) {
   };
 
   return (
-    <section className="effect-chain-deck" aria-label="Modulare Effekt-Kette">
+    <section className="effect-chain-deck" aria-label={isMinimal ? 'Modular FX Chain' : 'Modulare Effekt-Kette'}>
       <header className="effect-chain-header">
         <div className="header-text">
           <div className="title-row">
-            <span className="eyebrow">MODULARE SIGNALKETTE</span>
-            <h2>Audiosignal & Effekt-Routing.</h2>
+            <span className="eyebrow">{isMinimal ? 'SIGNAL CHAIN' : 'MODULARE SIGNALKETTE'}</span>
+            <h2>{isMinimal ? 'FX & Signal Routing' : 'Audiosignal & Effekt-Routing.'}</h2>
           </div>
-          <p className="helper">Befreie dich vom starren Aufbau. Schalte Module ein/aus, vertausche die Reihenfolge und wähle zwischen parallelem Hall oder ineinanderfließenden Psybient-Echos.</p>
+          {!isMinimal && <p className="helper">Befreie dich vom starren Aufbau. Schalte Module ein/aus, vertausche die Reihenfolge und wähle zwischen parallelem Hall oder ineinanderfließenden Psybient-Echos.</p>}
         </div>
 
         {/* Routing Mode Buttons */}
-        <div className="routing-mode-selector" role="group" aria-label="Signalweg-Modus">
-          <span className="mode-label">Signalweg:</span>
+        <div className="routing-mode-selector" role="group" aria-label={isMinimal ? 'Routing mode' : 'Signalweg-Modus'}>
+          <span className="mode-label">{isMinimal ? 'Routing:' : 'Signalweg:'}</span>
           <button
             type="button"
             className={'button routing-btn ' + (currentMode === 'parallel' ? 'active' : '')}
             onClick={() => handleModeChange('parallel')}
-            title="Delay und Reverb laufen unabhängig parallel"
+            title={isMinimal ? 'Delay and reverb run independently in parallel' : 'Delay und Reverb laufen unabhängig parallel'}
           >
-            Parallel (Klassisch)
+            {isMinimal ? 'Parallel' : 'Parallel (Klassisch)'}
           </button>
           <button
             type="button"
             className={'button routing-btn ' + (currentMode === 'delay-into-reverb' ? 'active' : '')}
             onClick={() => handleModeChange('delay-into-reverb')}
-            title="Delays fließen direkt in den Reverb (Carbon Based Lifeforms / Psybient Wash)"
+            title={isMinimal ? 'Delays feed directly into the reverb for wide washes' : 'Delays fließen direkt in den Reverb (Carbon Based Lifeforms / Psybient Wash)'}
           >
-            <Sparkles size={14} /> Delay ➔ Reverb (Psybient Wash)
+            <Sparkles size={14} /> {isMinimal ? 'Delay ➔ Reverb (Wash)' : 'Delay ➔ Reverb (Psybient Wash)'}
           </button>
           <button
             type="button"
             className={'button routing-btn ' + (currentMode === 'reverb-into-delay' ? 'active' : '')}
             onClick={() => handleModeChange('reverb-into-delay')}
-            title="Die Hallfahne wird vom Delay rhythmisch zerschnitten"
+            title={isMinimal ? 'Reverb tail gets sliced rhythmically by the delay' : 'Die Hallfahne wird vom Delay rhythmisch zerschnitten'}
           >
-            Reverb ➔ Delay (Echo-Wash)
+            {isMinimal ? 'Reverb ➔ Delay (Echo)' : 'Reverb ➔ Delay (Echo-Wash)'}
           </button>
         </div>
       </header>
@@ -95,6 +99,7 @@ export function EffectChainDeck({ session }: { session: JamSession }) {
         <div className="chain-modules-list">
           {modules.map((mod, idx) => {
             const isBypassed = mod.bypassed;
+            const modLabel = isMinimal ? (MINIMAL_EFFECT_MODULES[mod.id] || mod.name) : mod.name;
             return (
               <div key={mod.id} className="chain-slot-wrapper">
                 {idx > 0 && (
@@ -108,14 +113,14 @@ export function EffectChainDeck({ session }: { session: JamSession }) {
                   <div className="module-card-header">
                     <div className="module-status">
                       <span className={'status-led ' + (isBypassed ? 'off' : 'on')} />
-                      <strong>{mod.name}</strong>
+                      <strong>{modLabel}</strong>
                     </div>
                     <div className="module-actions">
                       <button
                         type="button"
                         className={'icon-button bypass-toggle ' + (isBypassed ? 'is-bypassed' : 'is-active')}
                         onClick={() => handleToggleBypass(mod.id)}
-                        title={isBypassed ? 'Modul aktivieren' : 'Modul auf Bypass schalten'}
+                        title={isMinimal ? (isBypassed ? 'Enable module' : 'Bypass module') : (isBypassed ? 'Modul aktivieren' : 'Modul auf Bypass schalten')}
                         aria-pressed={!isBypassed}
                       >
                         <Power size={13} />
@@ -125,7 +130,7 @@ export function EffectChainDeck({ session }: { session: JamSession }) {
                         className="icon-button move-btn"
                         disabled={idx === 0}
                         onClick={() => handleMoveModule(idx, 'left')}
-                        title="Nach links verschieben"
+                        title={isMinimal ? 'Move left' : 'Nach links verschieben'}
                       >
                         <ArrowLeft size={13} />
                       </button>
@@ -134,7 +139,7 @@ export function EffectChainDeck({ session }: { session: JamSession }) {
                         className="icon-button move-btn"
                         disabled={idx === modules.length - 1}
                         onClick={() => handleMoveModule(idx, 'right')}
-                        title="Nach rechts verschieben"
+                        title={isMinimal ? 'Move right' : 'Nach rechts verschieben'}
                       >
                         <ArrowRight size={13} />
                       </button>
@@ -146,7 +151,7 @@ export function EffectChainDeck({ session }: { session: JamSession }) {
                     {mod.id === 'warmth' && (
                       <div className="ctrl-item">
                         <div className="ctrl-label">
-                          <span>Sättigung / Drive</span>
+                          <span>{isMinimal ? 'Drive / Saturation' : 'Sättigung / Drive'}</span>
                           <output>{Math.round(currentDrive * 100)}%</output>
                         </div>
                         <input
@@ -164,7 +169,7 @@ export function EffectChainDeck({ session }: { session: JamSession }) {
                     {mod.id === 'flutter' && (
                       <div className="ctrl-item">
                         <div className="ctrl-label">
-                          <span>Tape-Flutter (Leiern)</span>
+                          <span>{isMinimal ? 'Tape Flutter' : 'Tape-Flutter (Leiern)'}</span>
                           <output>{Math.round(currentFlutter * 100)}%</output>
                         </div>
                         <input
@@ -198,7 +203,7 @@ export function EffectChainDeck({ session }: { session: JamSession }) {
                         </div>
                         <div className="ctrl-item">
                           <div className="ctrl-label">
-                            <span>Feedback (Echos)</span>
+                            <span>{isMinimal ? 'Feedback' : 'Feedback (Echos)'}</span>
                             <output>{Math.round(currentDelayFeedback * 100)}%</output>
                           </div>
                           <input
@@ -233,7 +238,7 @@ export function EffectChainDeck({ session }: { session: JamSession }) {
                         </div>
                         <div className="ctrl-item">
                           <div className="ctrl-label">
-                            <span>Raumgröße</span>
+                            <span>{isMinimal ? 'Room Size' : 'Raumgröße'}</span>
                             <output>{Math.round(currentReverbSize * 100)}%</output>
                           </div>
                           <input
@@ -268,7 +273,7 @@ export function EffectChainDeck({ session }: { session: JamSession }) {
                         </div>
                         <div className="ctrl-item">
                           <div className="ctrl-label">
-                            <span>Mitten / Mid</span>
+                            <span>{isMinimal ? 'Mid' : 'Mitten / Mid'}</span>
                             <output>{(fxPatch.eqMid ?? 0) > 0 ? `+${(fxPatch.eqMid ?? 0).toFixed(1)}` : (fxPatch.eqMid ?? 0).toFixed(1)} dB</output>
                           </div>
                           <input
@@ -283,7 +288,7 @@ export function EffectChainDeck({ session }: { session: JamSession }) {
                         </div>
                         <div className="ctrl-item">
                           <div className="ctrl-label">
-                            <span>Höhen / High</span>
+                            <span>{isMinimal ? 'High' : 'Höhen / High'}</span>
                             <output>{(fxPatch.eqHigh ?? 0) > 0 ? `+${(fxPatch.eqHigh ?? 0).toFixed(1)}` : (fxPatch.eqHigh ?? 0).toFixed(1)} dB</output>
                           </div>
                           <input
@@ -302,7 +307,7 @@ export function EffectChainDeck({ session }: { session: JamSession }) {
                     {mod.id === 'pump' && (
                       <div className="ctrl-item">
                         <div className="ctrl-label">
-                          <span>Kick-Pump Ducking</span>
+                          <span>{isMinimal ? 'Kick Ducking' : 'Kick-Pump Ducking'}</span>
                           <output>{Math.round(currentPump * 100)}%</output>
                         </div>
                         <input

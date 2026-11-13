@@ -4,7 +4,12 @@ import { JamEngine, SOUNDSCAPE_PRESETS, SEQUENCE_TEMPLATES } from '../../engine/
 import { RHYTHM_POOL, type RhythmPreset } from '../../engine/jam/rhythms';
 import type { ArrangementSection, JamPosition, JamSession, MacroName, SequenceBlock, Timbre, ChordPattern, ChordPace, ChordTexture } from '../../types/jam';
 import { useUiEdition } from '../../contexts/UiEditionContext';
-import { stripArtistRefs } from '../../engine/jam/minimalCatalog';
+import {
+  getSoundscapeDisplay,
+  getRhythmDisplay,
+  getSequenceTemplateDisplay,
+  getSequenceBlockLabel,
+} from '../../engine/jam/minimalCatalog';
 
 const engine = JamEngine.getInstance();
 
@@ -26,20 +31,20 @@ export function SoundscapeDeck({ session, onClose }: { session: JamSession; posi
     <section className="soundscape-block" aria-label={isMinimal ? 'Soundscape & Chords' : 'Klangwelt & Streichorchester'}>
       <header className="soundscape-header">
         <div>
-          <span className="eyebrow">{isMinimal ? 'SOUNDSCAPE & DUAL-CHORD ARCHITECTURE' : 'KLANGWELT & DUAL-CHORD ARCHITEKTUR'}</span>
-          <h2>{isMinimal ? 'Align Chords A + B, Reverb & Atmosphere.' : 'Akkorde A + B, Hall & Atmosphäre aufeinander abstimmen.'}</h2>
-          <p className="helper">{isMinimal ? 'Two harmonically linked chord layers (A + B) with independent timbre and counter-motion.' : 'Zwei harmonisch gekoppelte Akkordspuren (A + B) mit unabhängiger Klangfarbe & Gegenbewegung – inspiriert von CBL, S1gns Of L1fe, Aes Dana, Asura, Kupla & No Spirit.'}</p>
+          <span className="eyebrow">{isMinimal ? 'SOUNDSCAPE' : 'KLANGWELT & DUAL-CHORD ARCHITEKTUR'}</span>
+          <h2>{isMinimal ? 'Chords A + B, Space & Tone.' : 'Akkorde A + B, Hall & Atmosphäre aufeinander abstimmen.'}</h2>
+          {!isMinimal && <p className="helper">Zwei harmonisch gekoppelte Akkordspuren (A + B) mit unabhängiger Klangfarbe &amp; Gegenbewegung – inspiriert von CBL, S1gns Of L1fe, Aes Dana, Asura, Kupla &amp; No Spirit.</p>}
         </div>
         <div className="header-right-actions">
           <div className="chord-timbre-badge">
             <Music2 size={16} />
             <span>
-              {isMinimal ? 'Chord A' : 'Akkord A'}: <strong>{currentChordTimbre === 'strings' ? (isMinimal ? 'String Orchestra' : 'Streichorchester') : currentChordTimbre}</strong>
+              {isMinimal ? 'A' : 'Akkord A'}: <strong>{currentChordTimbre === 'strings' ? (isMinimal ? 'Strings' : 'Streichorchester') : currentChordTimbre}</strong>
               {secondaryEnabled && <> + B: <strong>{secondaryTimbre} ({Math.round(secondaryVolume * 100)}%)</strong></>}
             </span>
           </div>
           {onClose && (
-            <button type="button" className="icon-button close-deck-btn" onClick={onClose} title={isMinimal ? 'Close deck' : 'Deck schließen'}>
+            <button type="button" className="icon-button close-deck-btn" onClick={onClose} title={isMinimal ? 'Close' : 'Deck schließen'}>
               <X size={16} />
             </button>
           )}
@@ -50,6 +55,7 @@ export function SoundscapeDeck({ session, onClose }: { session: JamSession; posi
       <div className="soundscape-presets-grid">
         {SOUNDSCAPE_PRESETS.map(preset => {
           const isActive = currentChordTimbre === preset.chordTimbre && session.atmosphere?.kind === preset.atmosphere.kind;
+          const disp = getSoundscapeDisplay(preset, edition);
           return (
             <button
               key={preset.id}
@@ -58,13 +64,13 @@ export function SoundscapeDeck({ session, onClose }: { session: JamSession; posi
               onClick={() => engine.applySoundscapePreset(preset.id)}
             >
               <div className="soundscape-card-top">
-                <strong>{isMinimal ? stripArtistRefs(preset.name) : preset.name}</strong>
+                <strong>{disp.name}</strong>
                 <span className="soundscape-hall-pill">{isMinimal ? 'Reverb' : 'Hall'} {Math.round(preset.hallAmount * 100)}%</span>
               </div>
-              <span className="soundscape-sub">{isMinimal ? stripArtistRefs(preset.subtitle) : preset.subtitle}</span>
-              <p className="soundscape-desc">{isMinimal ? stripArtistRefs(preset.description) : preset.description}</p>
+              <span className="soundscape-sub">{disp.subtitle}</span>
+              {!isMinimal && <p className="soundscape-desc">{disp.description}</p>}
               <div className="soundscape-tags">
-                {preset.tags.map(t => <span key={t} className="soundscape-tag">{isMinimal ? stripArtistRefs(t) : t}</span>)}
+                {disp.tags.map(t => <span key={t} className="soundscape-tag">{t}</span>)}
               </div>
               {isActive && <span className="active-dot">{isMinimal ? 'Active' : 'Aktiv abgestimmt'}</span>}
             </button>
@@ -192,23 +198,23 @@ export function SoundscapeDeck({ session, onClose }: { session: JamSession; posi
         </div>
 
         <div className="ctrl-group">
-          <label htmlFor="chord-texture-select">Intervall-Glanz (Sub-Voice)</label>
+          <label htmlFor="chord-texture-select">{isMinimal ? 'Interval Sheen (Sub-Voice)' : 'Intervall-Glanz (Sub-Voice)'}</label>
           <select
             id="chord-texture-select"
             value={chordsLayer?.settings.chordTexture || 'off'}
             onChange={e => engine.setChordTexture(e.target.value as ChordTexture)}
           >
-            <option value="off">Aus (Reines A+B Voicing)</option>
-            <option value="shimmer">✨ Shimmer Layer (+12st Oktav-Glanz)</option>
-            <option value="octave">⚡ Doppel-Oktave (+12st tragender Aufbau)</option>
-            <option value="sub5th">🪐 Harmonische Quinte (+7st offener Raum)</option>
+            <option value="off">{isMinimal ? 'Off (Pure A+B Voicing)' : 'Aus (Reines A+B Voicing)'}</option>
+            <option value="shimmer">{isMinimal ? '✨ Shimmer (+12st Octave Glow)' : '✨ Shimmer Layer (+12st Oktav-Glanz)'}</option>
+            <option value="octave">{isMinimal ? '⚡ Double Octave (+12st Layer)' : '⚡ Doppel-Oktave (+12st tragender Aufbau)'}</option>
+            <option value="sub5th">{isMinimal ? '🪐 Open Fifth (+7st Space)' : '🪐 Harmonische Quinte (+7st offener Raum)'}</option>
           </select>
         </div>
 
         <div className="ctrl-group hall-slider-group">
           <div className="slider-label-row">
-            <label htmlFor="chord-hall-slider">Konzertsaal-Hall & Raum</label>
-            <output>{Math.round(currentSpace * 100)}% {currentSpace > 0.75 ? '· Große Kathedrale (7-9s RT60)' : currentSpace > 0.4 ? '· Konzertsaal' : '· Intimer Raum'}</output>
+            <label htmlFor="chord-hall-slider">{isMinimal ? 'Hall Reverb & Space' : 'Konzertsaal-Hall & Raum'}</label>
+            <output>{Math.round(currentSpace * 100)}% {isMinimal ? (currentSpace > 0.75 ? '· Cathedral (7-9s)' : currentSpace > 0.4 ? '· Concert Hall' : '· Intimate') : (currentSpace > 0.75 ? '· Große Kathedrale (7-9s RT60)' : currentSpace > 0.4 ? '· Konzertsaal' : '· Intimer Raum')}</output>
           </div>
           <input
             id="chord-hall-slider"
@@ -226,18 +232,18 @@ export function SoundscapeDeck({ session, onClose }: { session: JamSession; posi
             type="button"
             className="reharmonize-deck-btn"
             onClick={() => engine.evolve()}
-            title="Akkordfolge und Voicings generativ weiterentwickeln"
+            title={isMinimal ? 'Evolve chord progression and voicings' : 'Akkordfolge und Voicings generativ weiterentwickeln'}
           >
             <Dice5 size={14} />
-            <span>🎲 Re-Harmonisieren</span>
+            <span>{isMinimal ? 'Re-Harmonize' : '🎲 Re-Harmonisieren'}</span>
           </button>
-          <label className="checkbox-label" title="Passe Hintergrund-Atmosphäre (Air, Tape, Rain, Vinyl, max 10%) automatisch dem gewählten Akkord-Klang an">
+          <label className="checkbox-label" title={isMinimal ? 'Automatically match background atmosphere (max 10%) to selected chord sound' : 'Passe Hintergrund-Atmosphäre (Air, Tape, Rain, Vinyl, max 10%) automatisch dem gewählten Akkord-Klang an'}>
             <input
               type="checkbox"
               checked={matchAtmoWithChords}
               onChange={e => setMatchAtmoWithChords(e.target.checked)}
             />
-            <span>Atmosphäre koppeln (≤10%)</span>
+            <span>{isMinimal ? 'Link Atmosphere (≤10%)' : 'Atmosphäre koppeln (≤10%)'}</span>
           </label>
         </div>
       </div>
@@ -246,6 +252,8 @@ export function SoundscapeDeck({ session, onClose }: { session: JamSession; posi
 }
 
 export function SequencerDeck({ session, position, onClose }: { session: JamSession; position: JamPosition; onClose?: () => void }) {
+  const edition = useUiEdition();
+  const isMinimal = edition === 'minimal';
   const [expandedMacroBlockId, setExpandedMacroBlockId] = useState<string | null>(null);
   const sequencerState = position.sequencer;
   const isSequencerActive = Boolean(sequencerState?.enabled);
@@ -270,16 +278,18 @@ export function SequencerDeck({ session, position, onClose }: { session: JamSess
   };
 
   return (
-    <section className={`sequencer-block ${!isSequencerActive ? 'is-seq-off' : ''}`} aria-label="Arrangement-Sequencer & Makro-Automation">
+    <section className={`sequencer-block ${!isSequencerActive ? 'is-seq-off' : ''}`} aria-label={isMinimal ? 'Arrangement Sequencer' : 'Arrangement-Sequencer & Makro-Automation'}>
       <header className="sequencer-header">
         <div>
-          <span className="eyebrow">ARRANGEMENT-SEQUENCER & MAKRO-AUTOMATION</span>
-          <h2>Der Ablauf: 4 Takte dies, 4 Takte jenes.</h2>
-          <p className="helper">
-            {isSequencerActive
-              ? 'Sequencer läuft aktiv. Die Abschnitte wechseln automatisch und lassen die Makros organisch morphen.'
-              : 'Sequencer ist aktuell AUS. Klicke auf den Schalter oder direkt auf einen beliebigen Block/Pfeil unten, um ihn sofort zu aktivieren.'}
-          </p>
+          <span className="eyebrow">{isMinimal ? 'ARRANGEMENT SEQUENCER' : 'ARRANGEMENT-SEQUENCER & MAKRO-AUTOMATION'}</span>
+          <h2>{isMinimal ? 'Section Timeline & Macro Morphs.' : 'Der Ablauf: 4 Takte dies, 4 Takte jenes.'}</h2>
+          {!isMinimal && (
+            <p className="helper">
+              {isSequencerActive
+                ? 'Sequencer läuft aktiv. Die Abschnitte wechseln automatisch und lassen die Makros organisch morphen.'
+                : 'Sequencer ist aktuell AUS. Klicke auf den Schalter oder direkt auf einen beliebigen Block/Pfeil unten, um ihn sofort zu aktivieren.'}
+            </p>
+          )}
         </div>
 
         <div className="sequencer-master-actions">
@@ -289,13 +299,13 @@ export function SequencerDeck({ session, position, onClose }: { session: JamSess
             aria-checked={isSequencerActive}
             className={`hardware-switch-pill large ${isSequencerActive ? 'is-on' : 'is-off'}`}
             onClick={() => engine.toggleSequencer(!isSequencerActive)}
-            title="Sequencer ein-/ausschalten"
+            title={isMinimal ? 'Toggle Sequencer' : 'Sequencer ein-/ausschalten'}
           >
             <span className="switch-dot" />
             <span>{isSequencerActive ? 'SEQUENCER: ON' : 'SEQUENCER: OFF'}</span>
           </button>
           {onClose && (
-            <button type="button" className="icon-button close-deck-btn" onClick={onClose} title="Deck schließen">
+            <button type="button" className="icon-button close-deck-btn" onClick={onClose} title={isMinimal ? 'Close' : 'Deck schließen'}>
               <X size={16} />
             </button>
           )}
@@ -304,20 +314,23 @@ export function SequencerDeck({ session, position, onClose }: { session: JamSess
 
       {/* Templates Bar */}
       <div className="sequencer-templates-row">
-        <span className="templates-label">Vorlagen:</span>
+        <span className="templates-label">{isMinimal ? 'Templates:' : 'Vorlagen:'}</span>
         <div className="templates-list">
-          {SEQUENCE_TEMPLATES.map(tmpl => (
+          {SEQUENCE_TEMPLATES.map(tmpl => {
+            const tmplDisp = getSequenceTemplateDisplay(tmpl, edition);
+            return (
             <button
               key={tmpl.id}
               type="button"
               className="button template-pill-btn"
               onClick={() => engine.applySequenceTemplate(tmpl.id)}
-              title={tmpl.description}
+              title={tmplDisp.description}
             >
-              <strong>{tmpl.name}</strong>
-              <small>({tmpl.blocks.length} Blöcke)</small>
+              <strong>{tmplDisp.name}</strong>
+              <small>({tmpl.blocks.length} {isMinimal ? 'blocks' : 'Blöcke'})</small>
             </button>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -326,6 +339,7 @@ export function SequencerDeck({ session, position, onClose }: { session: JamSess
         {seqBlocks.map((block, idx) => {
           const isCurrent = isSequencerActive && idx === activeBlockIdx;
           const isMacrosExpanded = expandedMacroBlockId === block.id;
+          const blockTitle = getSequenceBlockLabel(block.label, edition);
 
           return (
             <div
@@ -336,22 +350,22 @@ export function SequencerDeck({ session, position, onClose }: { session: JamSess
               {isCurrent && (
                 <div className="live-playing-badge">
                   <span className="pulse-dot" />
-                  <strong>Spielt jetzt · Takt {barProgress + 1} von {totalBlockBars}</strong>
+                  <strong>{isMinimal ? `Playing · Bar ${barProgress + 1}/${totalBlockBars}` : `Spielt jetzt · Takt ${barProgress + 1} von ${totalBlockBars}`}</strong>
                 </div>
               )}
 
               {/* Top Row: Index, Reorder arrows, and Delete */}
               <div className="block-card-header">
                 <div className="block-title-cluster">
-                  <span className="block-index">#{idx + 1}</span>
+                  <span className="block-index">#{idx + 1}{blockTitle ? ` · ${blockTitle}` : ''}</span>
                   <div className="block-reorder-cluster">
                     <button
                       type="button"
                       className="icon-button move-block-btn"
                       onClick={() => engine.moveSequenceBlock(block.id, 'left')}
                       disabled={idx === 0}
-                      title="Block nach links verschieben"
-                      aria-label="Block nach links verschieben"
+                      title={isMinimal ? 'Move block left' : 'Block nach links verschieben'}
+                      aria-label={isMinimal ? 'Move block left' : 'Block nach links verschieben'}
                     >
                       <ChevronLeft size={13} />
                     </button>
@@ -360,8 +374,8 @@ export function SequencerDeck({ session, position, onClose }: { session: JamSess
                       className="icon-button move-block-btn"
                       onClick={() => engine.moveSequenceBlock(block.id, 'right')}
                       disabled={idx === seqBlocks.length - 1}
-                      title="Block nach rechts verschieben"
-                      aria-label="Block nach rechts verschieben"
+                      title={isMinimal ? 'Move block right' : 'Block nach rechts verschieben'}
+                      aria-label={isMinimal ? 'Move block right' : 'Block nach rechts verschieben'}
                     >
                       <ChevronRight size={13} />
                     </button>
@@ -372,7 +386,7 @@ export function SequencerDeck({ session, position, onClose }: { session: JamSess
                   type="button"
                   className="icon-button block-del-btn"
                   onClick={() => engine.removeSequenceBlock(block.id)}
-                  title="Diesen Block löschen"
+                  title={isMinimal ? 'Delete block' : 'Diesen Block löschen'}
                   disabled={seqBlocks.length <= 1}
                 >
                   <Trash2 size={14} />
@@ -380,7 +394,7 @@ export function SequencerDeck({ session, position, onClose }: { session: JamSess
               </div>
 
               {/* Energy Direction: Mini Buttons Referencing Arrows for Up, High, Down, and Low */}
-              <div className="block-energy-arrows" role="group" aria-label="Abschnitt-Energie für diesen Block">
+              <div className="block-energy-arrows" role="group" aria-label={isMinimal ? 'Block energy level' : 'Abschnitt-Energie für diesen Block'}>
                 <button
                   type="button"
                   className={`energy-arrow-btn high ${block.section === 'chorus' ? 'is-selected' : ''}`}
@@ -394,7 +408,7 @@ export function SequencerDeck({ session, position, onClose }: { session: JamSess
                   type="button"
                   className={`energy-arrow-btn up ${block.section === 'buildup' ? 'is-selected' : ''}`}
                   onClick={() => engine.setBlockSectionByEnergy(block.id, 'up')}
-                  title="Up (↗) · Buildup / Steigerung"
+                  title={isMinimal ? 'Up (↗) · Buildup' : 'Up (↗) · Buildup / Steigerung'}
                 >
                   <span className="arrow-sym">↗</span>
                   <span className="arrow-txt">Up</span>
@@ -403,7 +417,7 @@ export function SequencerDeck({ session, position, onClose }: { session: JamSess
                   type="button"
                   className={`energy-arrow-btn groove ${block.section === 'groove' ? 'is-selected' : ''}`}
                   onClick={() => engine.setBlockSectionByEnergy(block.id, 'groove')}
-                  title="Flow (➔) · Voller Beat"
+                  title={isMinimal ? 'Flow (➔) · Full Groove' : 'Flow (➔) · Voller Beat'}
                 >
                   <span className="arrow-sym">➔</span>
                   <span className="arrow-txt">Flow</span>
@@ -412,7 +426,7 @@ export function SequencerDeck({ session, position, onClose }: { session: JamSess
                   type="button"
                   className={`energy-arrow-btn down ${block.section === 'breakdown' ? 'is-selected' : ''}`}
                   onClick={() => engine.setBlockSectionByEnergy(block.id, 'down')}
-                  title="Down (↘) · Breakdown / Drums aus"
+                  title={isMinimal ? 'Down (↘) · Breakdown (Drums off)' : 'Down (↘) · Breakdown / Drums aus'}
                 >
                   <span className="arrow-sym">↘</span>
                   <span className="arrow-txt">Down</span>
@@ -421,7 +435,7 @@ export function SequencerDeck({ session, position, onClose }: { session: JamSess
                   type="button"
                   className={`energy-arrow-btn low ${block.section === 'silent' ? 'is-selected' : ''}`}
                   onClick={() => engine.setBlockSectionByEnergy(block.id, 'low')}
-                  title="Low (↓) · Stille / Minimal"
+                  title={isMinimal ? 'Low (↓) · Quiet / Space' : 'Low (↓) · Stille / Minimal'}
                 >
                   <span className="arrow-sym">↓</span>
                   <span className="arrow-txt">Low</span>
@@ -430,24 +444,24 @@ export function SequencerDeck({ session, position, onClose }: { session: JamSess
 
               {/* Duration Stepper: - and + like tempo settings */}
               <div className="block-card-duration">
-                <label>Länge: </label>
+                <label>{isMinimal ? 'Length: ' : 'Länge: '}</label>
                 <div className="bars-stepper-cluster">
                   <button
                     type="button"
                     className="icon-button bar-step-btn"
                     onClick={() => engine.stepBlockBars(block.id, -1)}
-                    title="Takte verkürzen (−)"
-                    aria-label="Takte verkürzen"
+                    title={isMinimal ? 'Shorten bars (−)' : 'Takte verkürzen (−)'}
+                    aria-label={isMinimal ? 'Shorten bars' : 'Takte verkürzen'}
                   >
                     −
                   </button>
-                  <span className="bar-number-badge">{block.bars} Takte</span>
+                  <span className="bar-number-badge">{block.bars} {isMinimal ? 'Bars' : 'Takte'}</span>
                   <button
                     type="button"
                     className="icon-button bar-step-btn"
                     onClick={() => engine.stepBlockBars(block.id, 1)}
-                    title="Takte verlängern (+)"
-                    aria-label="Takte verlängern"
+                    title={isMinimal ? 'Extend bars (+)' : 'Takte verlängern (+)'}
+                    aria-label={isMinimal ? 'Extend bars' : 'Takte verlängern'}
                   >
                     +
                   </button>
@@ -470,17 +484,17 @@ export function SequencerDeck({ session, position, onClose }: { session: JamSess
                   type="button"
                   className="toggle-block-macros-btn"
                   onClick={() => setExpandedMacroBlockId(isMacrosExpanded ? null : block.id)}
-                  title="Makro-Ziele für diesen Block bearbeiten"
+                  title={isMinimal ? 'Edit macro targets for this block' : 'Makro-Ziele für diesen Block bearbeiten'}
                 >
                   <Sliders size={13} />
-                  <span>Makros für diesen Block</span>
+                  <span>{isMinimal ? 'Block Macros' : 'Makros für diesen Block'}</span>
                   {isMacrosExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                 </button>
 
                 {isMacrosExpanded && (
                   <div className="block-macro-sliders">
                     <label className="macro-target-slider">
-                      <span>Raum / Hall: {Math.round((block.macroTargets?.space ?? 0.5) * 100)}%</span>
+                      <span>{isMinimal ? 'Space' : 'Raum / Hall'}: {Math.round((block.macroTargets?.space ?? 0.5) * 100)}%</span>
                       <input
                         type="range"
                         min="0"
@@ -492,7 +506,7 @@ export function SequencerDeck({ session, position, onClose }: { session: JamSess
                     </label>
 
                     <label className="macro-target-slider">
-                      <span>Wärme: {Math.round((block.macroTargets?.warmth ?? 0.6) * 100)}%</span>
+                      <span>{isMinimal ? 'Warmth' : 'Wärme'}: {Math.round((block.macroTargets?.warmth ?? 0.6) * 100)}%</span>
                       <input
                         type="range"
                         min="0"
@@ -504,7 +518,7 @@ export function SequencerDeck({ session, position, onClose }: { session: JamSess
                     </label>
 
                     <label className="macro-target-slider">
-                      <span>Dichte: {Math.round((block.macroTargets?.density ?? 0.5) * 100)}%</span>
+                      <span>{isMinimal ? 'Density' : 'Dichte'}: {Math.round((block.macroTargets?.density ?? 0.5) * 100)}%</span>
                       <input
                         type="range"
                         min="0"
@@ -516,7 +530,7 @@ export function SequencerDeck({ session, position, onClose }: { session: JamSess
                     </label>
 
                     <label className="macro-target-slider">
-                      <span>Bewegung: {Math.round((block.macroTargets?.movement ?? 0.4) * 100)}%</span>
+                      <span>{isMinimal ? 'Movement' : 'Bewegung'}: {Math.round((block.macroTargets?.movement ?? 0.4) * 100)}%</span>
                       <input
                         type="range"
                         min="0"
@@ -535,9 +549,9 @@ export function SequencerDeck({ session, position, onClose }: { session: JamSess
                 type="button"
                 className="jump-block-btn"
                 onClick={() => engine.jumpToSequenceBlock(idx)}
-                title="Sofort zu diesem Block springen"
+                title={isMinimal ? 'Jump directly to this block' : 'Sofort zu diesem Block springen'}
               >
-                <ArrowRight size={12} /> Jetzt anspringen
+                <ArrowRight size={12} /> {isMinimal ? 'Jump Here' : 'Jetzt anspringen'}
               </button>
             </div>
           );
@@ -550,7 +564,7 @@ export function SequencerDeck({ session, position, onClose }: { session: JamSess
           onClick={() => engine.addSequenceBlock('breakdown', 4)}
         >
           <Plus size={20} />
-          <span>+ Block anhängen</span>
+          <span>{isMinimal ? '+ Add Block' : '+ Block anhängen'}</span>
         </button>
       </div>
     </section>
@@ -558,6 +572,7 @@ export function SequencerDeck({ session, position, onClose }: { session: JamSess
 }
 
 export function SpontaneousArrangementDeck({ position, onClose }: { session?: JamSession; position: JamPosition; onClose?: () => void }) {
+  const isMinimal = useUiEdition() === 'minimal';
   const section = position.arrangementSection || 'groove';
   const buildupBars = position.buildupCountdown;
   const isAuto = Boolean(position.autoArrangement);
@@ -567,23 +582,23 @@ export function SpontaneousArrangementDeck({ position, onClose }: { session?: Ja
   };
 
   return (
-    <section className="arrangement-block" aria-label="Spontane Arrangement-Aktionen">
+    <section className="arrangement-block" aria-label={isMinimal ? 'Instant Arrangement Actions' : 'Spontane Arrangement-Aktionen'}>
       <header className="arrangement-header">
         <div>
-          <span className="eyebrow">SOFORT-AKTIONEN</span>
-          <h2>Spontane Wendungen im Moment.</h2>
+          <span className="eyebrow">{isMinimal ? 'INSTANT ACTIONS' : 'SOFORT-AKTIONEN'}</span>
+          <h2>{isMinimal ? 'Trigger Section Transitions.' : 'Spontane Wendungen im Moment.'}</h2>
         </div>
         <div className="arrangement-status-badge">
           <span className={'status-indicator ' + section} />
           <strong>
             {section === 'chorus' && '🌟 Chorus / Peak'}
-            {section === 'breakdown' && '💥 Breakdown (Drums aus)'}
-            {section === 'buildup' && `⚡ Buildup · Drop in ${buildupBars ?? 1} Takt${buildupBars === 1 ? '' : 'en'}`}
-            {section === 'silent' && '🤫 Stille / Pause'}
-            {section === 'groove' && '🌊 Voller Groove'}
+            {section === 'breakdown' && (isMinimal ? '💥 Breakdown (Drums Off)' : '💥 Breakdown (Drums aus)')}
+            {section === 'buildup' && (isMinimal ? `⚡ Buildup · Drop in ${buildupBars ?? 1} ${buildupBars === 1 ? 'Bar' : 'Bars'}` : `⚡ Buildup · Drop in ${buildupBars ?? 1} Takt${buildupBars === 1 ? '' : 'en'}`)}
+            {section === 'silent' && (isMinimal ? '🤫 Silence / Space' : '🤫 Stille / Pause')}
+            {section === 'groove' && (isMinimal ? '🌊 Full Groove' : '🌊 Voller Groove')}
           </strong>
           {onClose && (
-            <button type="button" className="icon-button close-deck-btn" onClick={onClose} title="Deck schließen">
+            <button type="button" className="icon-button close-deck-btn" onClick={onClose} title={isMinimal ? 'Close' : 'Deck schließen'}>
               <X size={16} />
             </button>
           )}
@@ -595,43 +610,43 @@ export function SpontaneousArrangementDeck({ position, onClose }: { session?: Ja
           type="button"
           className={'arr-btn ' + (section === 'chorus' ? 'active' : '')}
           onClick={() => chooseArrangement('chorus')}
-          title="Hebt die Energie: wärmerer Synth, offene Melodie, dichtere Begleitung und voller Kick."
+          title={isMinimal ? 'Peak energy with full synth, open melody, and strong kick' : 'Hebt die Energie: wärmerer Synth, offene Melodie, dichtere Begleitung und voller Kick.'}
         >
           <Flame size={16} />
           <span>Chorus / Peak</span>
-          <small>Volle Energie</small>
+          <small>{isMinimal ? 'Full energy' : 'Volle Energie'}</small>
         </button>
 
         <button
           type="button"
           className={'arr-btn ' + (section === 'breakdown' ? 'active' : '')}
           onClick={() => chooseArrangement('breakdown')}
-          title="Blendet die Drums sofort aus. Chords und Drones tragen den Raum mit weitem Hall."
+          title={isMinimal ? 'Drop drums while chords and drones sustain in reverb' : 'Blendet die Drums sofort aus. Chords und Drones tragen den Raum mit weitem Hall.'}
         >
           <VolumeX size={16} />
           <span>Breakdown</span>
-          <small>Drums ausfaden</small>
+          <small>{isMinimal ? 'Drums out' : 'Drums ausfaden'}</small>
         </button>
 
         <button
           type="button"
           className={'arr-btn ' + (section === 'buildup' ? 'active' : '')}
           onClick={() => chooseArrangement('buildup')}
-          title="Baut 4 Takte lang stetig Spannung auf (Snare/Hat-Rolls, ansteigendes Filter) und droppt automatisch."
+          title={isMinimal ? 'Build tension for 4 bars then drop automatically' : 'Baut 4 Takte lang stetig Spannung auf (Snare/Hat-Rolls, ansteigendes Filter) und droppt automatisch.'}
         >
           <Zap size={16} />
-          <span>Buildup & Drop</span>
-          <small>4 Takte Spannung</small>
+          <span>Buildup &amp; Drop</span>
+          <small>{isMinimal ? '4-bar tension' : '4 Takte Spannung'}</small>
         </button>
 
         <button
           type="button"
           className={'arr-btn ' + (section === 'groove' ? 'active' : '')}
           onClick={() => chooseArrangement('groove')}
-          title="Lässt alle Drums und den Bass mit vollem Druck auf dem Downbeat wieder einsetzen."
+          title={isMinimal ? 'Bring full drums and bass back in on the downbeat' : 'Lässt alle Drums und den Bass mit vollem Druck auf dem Downbeat wieder einsetzen.'}
         >
           <Waves size={16} />
-          <span>Voller Groove</span>
+          <span>{isMinimal ? 'Full Groove' : 'Voller Groove'}</span>
           <small>Drop In / Release</small>
         </button>
 
@@ -639,22 +654,22 @@ export function SpontaneousArrangementDeck({ position, onClose }: { session?: Ja
           type="button"
           className={'arr-btn ' + (section === 'silent' ? 'active' : '')}
           onClick={() => chooseArrangement('silent')}
-          title="Nimmt Hektik raus: kaum Percussion, ruhige harmonische Dichte, intimer Meditations-Raum."
+          title={isMinimal ? 'Strip back to intimate quiet textures' : 'Nimmt Hektik raus: kaum Percussion, ruhige harmonische Dichte, intimer Meditations-Raum.'}
         >
           <Moon size={16} />
-          <span>Stille</span>
-          <small>Minimaler Raum</small>
+          <span>{isMinimal ? 'Stillness' : 'Stille'}</span>
+          <small>{isMinimal ? 'Minimal space' : 'Minimaler Raum'}</small>
         </button>
 
         <button
           type="button"
           className="arr-btn spontaneous"
           onClick={() => chooseArrangement('spontaneous')}
-          title="Trifft im Jam eine unvorhersehbare, musikalisch passende Entscheidung."
+          title={isMinimal ? 'Trigger a musical spontaneous section change' : 'Trifft im Jam eine unvorhersehbare, musikalisch passende Entscheidung.'}
         >
           <Shuffle size={16} />
-          <span>Spontane Wendung</span>
-          <small>Zufallsentscheidung</small>
+          <span>{isMinimal ? 'Random Twist' : 'Spontane Wendung'}</span>
+          <small>{isMinimal ? 'Spontaneous choice' : 'Zufallsentscheidung'}</small>
         </button>
       </div>
 
@@ -665,7 +680,9 @@ export function SpontaneousArrangementDeck({ position, onClose }: { session?: Ja
             checked={isAuto}
             onChange={e => engine.toggleAutoArrangement(e.target.checked, 16)}
           />
-          <span><strong>Zufälliger Autopilot:</strong> Wechselt alle 16 Takte ohne feste Sequenz</span>
+          <span>
+            {isMinimal ? <><strong>Auto-Pilot:</strong> Switch section every 16 bars</> : <><strong>Zufälliger Autopilot:</strong> Wechselt alle 16 Takte ohne feste Sequenz</>}
+          </span>
         </label>
       </div>
     </section>
@@ -673,6 +690,8 @@ export function SpontaneousArrangementDeck({ position, onClose }: { session?: Ja
 }
 
 export function RhythmPoolDeck({ onClose }: { session?: JamSession; position?: JamPosition; onClose?: () => void }) {
+  const edition = useUiEdition();
+  const isMinimal = edition === 'minimal';
   const [selectedRhythm, setSelectedRhythm] = useState<RhythmPreset>(RHYTHM_POOL[0]);
 
   const chooseRhythm = (preset: RhythmPreset) => {
@@ -687,19 +706,19 @@ export function RhythmPoolDeck({ onClose }: { session?: JamSession; position?: J
   };
 
   return (
-    <section className="rhythm-pool-block" aria-label="Rhythmus-Pool & Generative Grooves">
+    <section className="rhythm-pool-block" aria-label={isMinimal ? 'Rhythm Pool & Generative Grooves' : 'Rhythmus-Pool & Generative Grooves'}>
       <header className="rhythm-header">
         <div>
-          <span className="eyebrow">RHYTHMUS-POOL · GENERATIVE GROOVES</span>
-          <h2>Von CBL-Psybient bis Steve Reich.</h2>
-          <p className="helper">Klicke einen Rhythmus an: Die Drum-Algorithmen, Dichten und Swing-Regler verändern sich live.</p>
+          <span className="eyebrow">{isMinimal ? 'RHYTHM POOL · GENERATIVE GROOVES' : 'RHYTHMUS-POOL · GENERATIVE GROOVES'}</span>
+          <h2>{isMinimal ? 'Select Drum Algorithm & Feel.' : 'Von CBL-Psybient bis Steve Reich.'}</h2>
+          {!isMinimal && <p className="helper">Klicke einen Rhythmus an: Die Drum-Algorithmen, Dichten und Swing-Regler verändern sich live.</p>}
         </div>
         <div className="rhythm-header-actions">
-          <button type="button" className="button quiet" onClick={randomRhythm} title="Zufälligen Rhythmus aus dem Pool anwenden">
-            <RefreshCw size={14} /> Zufälliger Rhythmus
+          <button type="button" className="button quiet" onClick={randomRhythm} title={isMinimal ? 'Apply random rhythm preset' : 'Zufälligen Rhythmus aus dem Pool anwenden'}>
+            <RefreshCw size={14} /> {isMinimal ? 'Random Rhythm' : 'Zufälliger Rhythmus'}
           </button>
           {onClose && (
-            <button type="button" className="icon-button close-deck-btn" onClick={onClose} title="Deck schließen">
+            <button type="button" className="icon-button close-deck-btn" onClick={onClose} title={isMinimal ? 'Close' : 'Deck schließen'}>
               <X size={16} />
             </button>
           )}
@@ -709,6 +728,7 @@ export function RhythmPoolDeck({ onClose }: { session?: JamSession; position?: J
       <div className="rhythm-grid">
         {RHYTHM_POOL.map(preset => {
           const isSelected = selectedRhythm.id === preset.id;
+          const disp = getRhythmDisplay(preset, edition);
           return (
             <button
               key={preset.id}
@@ -717,12 +737,12 @@ export function RhythmPoolDeck({ onClose }: { session?: JamSession; position?: J
               onClick={() => chooseRhythm(preset)}
             >
               <div className="rhythm-card-header">
-                <strong>{preset.name}</strong>
-                <span className="inspiration-pill">{preset.artistInspiration}</span>
+                <strong>{disp.name}</strong>
+                {disp.artistInspiration && <span className="inspiration-pill">{disp.artistInspiration}</span>}
               </div>
-              <span className="rhythm-genre">{preset.genre}</span>
-              <p className="rhythm-desc">{preset.description}</p>
-              {isSelected && <span className="active-dot">Aktiv · Knobs angepasst</span>}
+              <span className="rhythm-genre">{disp.genre}</span>
+              <p className="rhythm-desc">{disp.description}</p>
+              {isSelected && <span className="active-dot">{isMinimal ? 'Active' : 'Aktiv · Knobs angepasst'}</span>}
             </button>
           );
         })}

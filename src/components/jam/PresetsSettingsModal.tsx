@@ -18,6 +18,8 @@ import {
 import { JamEngine, SCENES } from '../../engine/jam/JamEngine';
 import { exportJson } from '../../engine/jam/storage';
 import { downloadClipMidi } from '../../engine/jam/clipMidi';
+import { useUiEdition } from '../../contexts/UiEditionContext';
+import { getSceneDisplay, MINIMAL_ATMOSPHERE_LABELS, stripArtistRefs } from '../../engine/jam/minimalCatalog';
 import { noteName } from './PianoRoll';
 import type { JamSession, SceneDefinition } from '../../types/jam';
 
@@ -38,6 +40,8 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
   session,
   onToast,
 }) => {
+  const uiEdition = useUiEdition();
+  const isMinimal = uiEdition === 'minimal';
   const engine = JamEngine.getInstance();
   const [activeTab, setActiveTab] = useState<TabType>('presets');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -57,11 +61,13 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
 
   // Filter scenes
   const filteredScenes = useMemo(() => {
+    const q = searchQuery.toLowerCase();
     return SCENES.filter(s => {
+      const disp = getSceneDisplay(s, uiEdition);
       const matchesSearch =
-        s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (s.mood && s.mood.toLowerCase().includes(searchQuery.toLowerCase()));
+        disp.name.toLowerCase().includes(q) ||
+        disp.description.toLowerCase().includes(q) ||
+        (disp.mood && disp.mood.toLowerCase().includes(q));
 
       if (!matchesSearch) return false;
 
@@ -73,7 +79,7 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
       if (categoryFilter === 'lofi') return s.style === 'lofi';
       return true;
     });
-  }, [searchQuery, categoryFilter]);
+  }, [searchQuery, categoryFilter, uiEdition]);
 
   if (!isOpen) return null;
 
@@ -87,9 +93,9 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
     try {
       const parsed = JSON.parse(text);
       if (typeof parsed !== 'object' || parsed === null) {
-        throw new Error('JSON muss ein Objekt sein.');
+        throw new Error(isMinimal ? 'JSON must be an object.' : 'JSON muss ein Objekt sein.');
       }
-      const name = parsed.name || 'Unbenannte Session';
+      const name = parsed.name || (isMinimal ? 'Untitled Session' : 'Unbenannte Session');
       const bpm = parsed.bpm || 78;
       const scale = parsed.scale || 'dorian';
       const root = parsed.root || 50;
@@ -104,7 +110,7 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
     } catch (err) {
       setJsonValidation({
         valid: false,
-        error: err instanceof Error ? err.message : 'Ungültiges JSON-Format.',
+        error: err instanceof Error ? err.message : (isMinimal ? 'Invalid JSON format.' : 'Ungültiges JSON-Format.'),
       });
     }
   };
@@ -113,10 +119,10 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
     if (!jsonValidation?.valid || !jsonValidation.parsed) return;
     try {
       engine.loadSession(jsonValidation.parsed);
-      onToast(`Einstellungen "${jsonValidation.name}" erfolgreich importiert & geladen!`);
+      onToast(isMinimal ? `Settings "${jsonValidation.name}" imported.` : `Einstellungen "${jsonValidation.name}" erfolgreich importiert & geladen!`);
       onClose();
     } catch (err) {
-      onToast(err instanceof Error ? err.message : 'Fehler beim Laden der Session.');
+      onToast(err instanceof Error ? err.message : (isMinimal ? 'Failed to load session.' : 'Fehler beim Laden der Session.'));
     }
   };
 
@@ -124,7 +130,7 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 12_000_000) {
-      onToast('Datei ist zu groß (max 12 MB).');
+      onToast(isMinimal ? 'File is too large (max 12 MB).' : 'Datei ist zu groß (max 12 MB).');
       return;
     }
     const reader = new FileReader();
@@ -133,10 +139,10 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
         const text = String(reader.result);
         const parsed = JSON.parse(text);
         engine.loadSession(parsed);
-        onToast(`Session "${parsed.name || file.name}" geladen!`);
+        onToast(isMinimal ? `Session "${parsed.name || file.name}" loaded.` : `Session "${parsed.name || file.name}" geladen!`);
         onClose();
       } catch (err) {
-        onToast(err instanceof Error ? err.message : 'Fehler beim Importieren der Datei.');
+        onToast(err instanceof Error ? err.message : (isMinimal ? 'Failed to import file.' : 'Fehler beim Importieren der Datei.'));
       }
     };
     reader.readAsText(file);
@@ -148,9 +154,9 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
     try {
       const clip = engine.exportAbletonClip(8);
       downloadClipMidi(clip);
-      onToast('Ableton Multitrack MIDI (.mid) erfolgreich exportiert!');
+      onToast(isMinimal ? 'Multitrack MIDI (.mid) exported.' : 'Ableton Multitrack MIDI (.mid) erfolgreich exportiert!');
     } catch (err) {
-      onToast(err instanceof Error ? err.message : 'MIDI-Export fehlgeschlagen.');
+      onToast(err instanceof Error ? err.message : (isMinimal ? 'MIDI export failed.' : 'MIDI-Export fehlgeschlagen.'));
     }
   };
 
@@ -166,9 +172,9 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
         }, index * 200);
         count++;
       });
-      onToast(`${count} Spuren als separate Ableton MIDI-Stems exportiert!`);
+      onToast(isMinimal ? `${count} tracks exported as MIDI stems.` : `${count} Spuren als separate Ableton MIDI-Stems exportiert!`);
     } catch (err) {
-      onToast(err instanceof Error ? err.message : 'Stem-Export fehlgeschlagen.');
+      onToast(err instanceof Error ? err.message : (isMinimal ? 'Stem export failed.' : 'Stem-Export fehlgeschlagen.'));
     }
   };
 
@@ -178,9 +184,9 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
       const current = engine.saveSession();
       const safeName = current.name.toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
       exportJson(current, `atem-session-${safeName}-${Date.now()}.json`);
-      onToast('Vollständige Session (.json) exportiert!');
+      onToast(isMinimal ? 'Full session (.json) exported.' : 'Vollständige Session (.json) exportiert!');
     } catch (err) {
-      onToast(err instanceof Error ? err.message : 'Export fehlgeschlagen.');
+      onToast(err instanceof Error ? err.message : (isMinimal ? 'Export failed.' : 'Export fehlgeschlagen.'));
     }
   };
 
@@ -192,11 +198,15 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
       navigator.clipboard.writeText(jsonStr);
       setCopied(true);
       setTimeout(() => setCopied(false), 2400);
-      onToast('Gesamte Einstellungen in die Zwischenablage kopiert!');
+      onToast(isMinimal ? 'Settings copied to clipboard.' : 'Gesamte Einstellungen in die Zwischenablage kopiert!');
     } catch {
-      onToast('Konnte nicht in die Zwischenablage kopieren.');
+      onToast(isMinimal ? 'Could not copy to clipboard.' : 'Konnte nicht in die Zwischenablage kopieren.');
     }
   };
+
+  const sessionDisplayName = isMinimal ? stripArtistRefs(session.name) : session.name;
+  const activeScene = SCENES.find(s => s.id === session.sceneId);
+  const shownSessionName = isMinimal && activeScene ? getSceneDisplay(activeScene, uiEdition).name : sessionDisplayName;
 
   return (
     <div className="modal-scrim" onClick={onClose}>
@@ -211,16 +221,18 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
         <header className="settings-modal-header">
           <div className="header-titles">
             <span className="eyebrow">PRESETS & BACKUP</span>
-            <h2 id="settings-dialog-title">Alles importieren, exportieren & Ableton Live</h2>
-            <p className="header-sub">
-              Standardisierte Vorlagen, vollständige Backups und nahtloser Workflow mit Ableton Live 10/11/12.
-            </p>
+            <h2 id="settings-dialog-title">{isMinimal ? 'Import, Export & DAW MIDI' : 'Alles importieren, exportieren & Ableton Live'}</h2>
+            {!isMinimal && (
+              <p className="header-sub">
+                Standardisierte Vorlagen, vollständige Backups und nahtloser Workflow mit Ableton Live 10/11/12.
+              </p>
+            )}
           </div>
           <button
             type="button"
             className="icon-button close-modal-btn"
             onClick={onClose}
-            aria-label="Schließen"
+            aria-label={isMinimal ? 'Close' : 'Schließen'}
           >
             <X size={18} />
           </button>
@@ -236,7 +248,7 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
             aria-selected={activeTab === 'presets'}
           >
             <Sparkles size={15} />
-            <span>Standardisierte Presets ({SCENES.length})</span>
+            <span>{isMinimal ? `Presets (${SCENES.length})` : `Standardisierte Presets (${SCENES.length})`}</span>
           </button>
           <button
             type="button"
@@ -246,7 +258,7 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
             aria-selected={activeTab === 'import'}
           >
             <Upload size={15} />
-            <span>Einstellungen importieren</span>
+            <span>{isMinimal ? 'Import' : 'Einstellungen importieren'}</span>
           </button>
           <button
             type="button"
@@ -256,7 +268,7 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
             aria-selected={activeTab === 'export'}
           >
             <Download size={15} />
-            <span>Alles exportieren & Ableton</span>
+            <span>{isMinimal ? 'Export & MIDI' : 'Alles exportieren & Ableton'}</span>
           </button>
         </nav>
 
@@ -265,14 +277,24 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
           <div className="tab-content presets-tab-content">
             <div className="presets-toolbar">
               <div className="filter-pills">
-                {[
-                  ['all', 'Alle Presets'],
-                  ['psybient', 'Psybient · CBL'],
-                  ['ambient', 'Ambient & Space'],
-                  ['classical', 'Orchestral / Felt'],
-                  ['techno', 'Deep Techno'],
-                  ['lofi', 'Lo-Fi Flow'],
-                ].map(([id, label]) => (
+                {(isMinimal
+                  ? [
+                      ['all', 'All Presets'],
+                      ['psybient', 'Psybient'],
+                      ['ambient', 'Ambient & Space'],
+                      ['classical', 'Orchestral / Felt'],
+                      ['techno', 'Deep Techno'],
+                      ['lofi', 'Lo-Fi Flow'],
+                    ]
+                  : [
+                      ['all', 'Alle Presets'],
+                      ['psybient', 'Psybient · CBL'],
+                      ['ambient', 'Ambient & Space'],
+                      ['classical', 'Orchestral / Felt'],
+                      ['techno', 'Deep Techno'],
+                      ['lofi', 'Lo-Fi Flow'],
+                    ]
+                ).map(([id, label]) => (
                   <button
                     key={id}
                     type="button"
@@ -287,7 +309,7 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
               <input
                 type="text"
                 className="preset-search-input"
-                placeholder="Preset nach Name oder Stimmung suchen …"
+                placeholder={isMinimal ? 'Search preset by name or mood…' : 'Preset nach Name oder Stimmung suchen …'}
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
               />
@@ -296,21 +318,22 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
             <div className="preset-cards-grid">
               {filteredScenes.map((scene: SceneDefinition) => {
                 const isCurrent = scene.id === session.sceneId;
+                const disp = getSceneDisplay(scene, uiEdition);
                 return (
                   <article
                     key={scene.id}
                     className={`preset-card ${isCurrent ? 'is-current' : ''}`}
                   >
                     <div className="card-top-row">
-                      <span className="preset-mood-badge">{scene.mood || scene.style.toUpperCase()}</span>
+                      <span className="preset-mood-badge">{disp.mood || scene.style.toUpperCase()}</span>
                       <span className="preset-tempo-badge">{scene.bpm} BPM</span>
                       <span className="preset-key-badge">
                         {pitch(scene.root)} {scene.scale}
                       </span>
                     </div>
 
-                    <h3 className="preset-card-title">{scene.name}</h3>
-                    <p className="preset-card-desc">{scene.description}</p>
+                    <h3 className="preset-card-title">{disp.name}</h3>
+                    {!isMinimal && <p className="preset-card-desc">{disp.description}</p>}
 
                     <div className="preset-card-footer">
                       <button
@@ -318,21 +341,21 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
                         className={`button ${isCurrent ? 'primary-active' : 'quiet'}`}
                         onClick={async () => {
                           await engine.loadScene(scene.id);
-                          onToast(`Preset "${scene.name}" geladen!`);
+                          onToast(isMinimal ? `Preset "${disp.name}" loaded.` : `Preset "${disp.name}" geladen!`);
                         }}
                       >
                         {isCurrent ? <CheckCircle2 size={14} /> : <Sparkles size={14} />}
-                        <span>{isCurrent ? 'Aktiv im Jam' : 'Laden'}</span>
+                        <span>{isMinimal ? (isCurrent ? 'Active' : 'Load') : (isCurrent ? 'Aktiv im Jam' : 'Laden')}</span>
                       </button>
 
                       <button
                         type="button"
                         className="icon-button"
-                        title="Als Ableton MIDI Clip exportieren"
+                        title={isMinimal ? 'Export as multitrack MIDI clip' : 'Als Ableton MIDI Clip exportieren'}
                         onClick={() => {
                           const preview = engine.previewScene(scene.id, 8);
                           downloadClipMidi(preview);
-                          onToast(`Preset "${scene.name}" als Ableton MIDI exportiert!`);
+                          onToast(isMinimal ? `Preset "${disp.name}" exported as MIDI.` : `Preset "${disp.name}" als Ableton MIDI exportiert!`);
                         }}
                       >
                         <Download size={14} />
@@ -355,11 +378,11 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
                 onClick={() => fileInputRef.current?.click()}
               >
                 <FileJson size={32} className="card-icon" />
-                <h3>JSON-Einstellungsdatei öffnen</h3>
-                <p>Klicke hier oder ziehe eine gespeicherte Session-Datei (.json) hinein.</p>
+                <h3>{isMinimal ? 'Open JSON Session File' : 'JSON-Einstellungsdatei öffnen'}</h3>
+                <p>{isMinimal ? 'Click or drop a saved session (.json) file here.' : 'Klicke hier oder ziehe eine gespeicherte Session-Datei (.json) hinein.'}</p>
                 <button type="button" className="button primary">
                   <Upload size={14} />
-                  <span>Datei auswählen</span>
+                  <span>{isMinimal ? 'Choose File' : 'Datei auswählen'}</span>
                 </button>
                 <input
                   ref={fileInputRef}
@@ -375,12 +398,12 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
               <div className="import-card paste-json-card">
                 <div className="card-header-line">
                   <FileCode size={20} />
-                  <h3>Oder JSON-Code direkt einfügen</h3>
+                  <h3>{isMinimal ? 'Or Paste Session JSON' : 'Oder JSON-Code direkt einfügen'}</h3>
                 </div>
                 <textarea
                   className="json-paste-area"
                   rows={8}
-                  placeholder="Kopierten Session-JSON-Code hier einfügen …"
+                  placeholder={isMinimal ? 'Paste copied session JSON here…' : 'Kopierten Session-JSON-Code hier einfügen …'}
                   value={pastedJson}
                   onChange={e => handleJsonChange(e.target.value)}
                 />
@@ -391,7 +414,7 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
                       <>
                         <CheckCircle2 size={16} />
                         <div>
-                          <strong>Gültige Session: {jsonValidation.name}</strong>
+                          <strong>{isMinimal ? `Valid session: ${jsonValidation.name}` : `Gültige Session: ${jsonValidation.name}`}</strong>
                           <small>
                             {jsonValidation.bpm} BPM · {pitch(jsonValidation.root ?? 50)} {jsonValidation.scale}
                           </small>
@@ -400,7 +423,7 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
                     ) : (
                       <>
                         <AlertCircle size={16} />
-                        <span>Fehler: {jsonValidation.error}</span>
+                        <span>{isMinimal ? `Error: ${jsonValidation.error}` : `Fehler: ${jsonValidation.error}`}</span>
                       </>
                     )}
                   </div>
@@ -413,19 +436,21 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
                   onClick={handleApplyPastedJson}
                 >
                   <Check size={14} />
-                  <span>Einstellungen jetzt anwenden (Hot-Load)</span>
+                  <span>{isMinimal ? 'Apply Settings Now' : 'Einstellungen jetzt anwenden (Hot-Load)'}</span>
                 </button>
               </div>
             </div>
 
-            <div className="import-security-notice">
-              <CheckCircle2 size={14} />
-              <span>
-                <strong>Sicherheits-Garantie:</strong> Beim Importieren wird die Lautstärke automatisch
-                normalisiert, der Vinyl-Geräuschpegel bleibt strikt auf max. 5% und die Atmosphäre auf max. 20%
-                gedeckelt, um Pegelsprünge zu verhindern.
-              </span>
-            </div>
+            {!isMinimal && (
+              <div className="import-security-notice">
+                <CheckCircle2 size={14} />
+                <span>
+                  <strong>Sicherheits-Garantie:</strong> Beim Importieren wird die Lautstärke automatisch
+                  normalisiert, der Vinyl-Geräuschpegel bleibt strikt auf max. 5% und die Atmosphäre auf max. 20%
+                  gedeckelt, um Pegelsprünge zu verhindern.
+                </span>
+              </div>
+            )}
           </div>
         )}
 
@@ -435,12 +460,12 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
             <div className="export-sections-grid">
               {/* Ableton Live Section */}
               <div className="export-card ableton-export-card">
-                <div className="card-badge">ABLETON LIVE STANDARD</div>
+                <div className="card-badge">{isMinimal ? 'MULTITRACK MIDI' : 'ABLETON LIVE STANDARD'}</div>
                 <div className="card-header-line">
                   <Headphones size={22} />
                   <div>
-                    <h3>Ableton Live Multitrack Export</h3>
-                    <p>Standard MIDI File (Type 1 SMF) mit getrennten Spuren & Tempospur.</p>
+                    <h3>{isMinimal ? 'DAW / Ableton MIDI Export' : 'Ableton Live Multitrack Export'}</h3>
+                    <p>{isMinimal ? 'Standard MIDI File (Type 1 SMF) with separated tracks & tempo map.' : 'Standard MIDI File (Type 1 SMF) mit getrennten Spuren & Tempospur.'}</p>
                   </div>
                 </div>
 
@@ -449,7 +474,7 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
                   <div className="track-tag">Ch 2: Melody</div>
                   <div className="track-tag">Ch 3: Bass</div>
                   <div className="track-tag">Ch 10: Drums (GM: Kick 36, Snare 38, Hat 42, Perc 37)</div>
-                  <div className="track-tag info">Oktaven-Standard: Ableton C3 = MIDI 60</div>
+                  <div className="track-tag info">{isMinimal ? 'Octave convention: C3 = MIDI 60' : 'Oktaven-Standard: Ableton C3 = MIDI 60'}</div>
                 </div>
 
                 <div className="export-actions-cluster">
@@ -459,7 +484,7 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
                     onClick={handleExportAbletonMidi}
                   >
                     <Music size={14} />
-                    <span>Multitrack MIDI für Ableton (.mid)</span>
+                    <span>{isMinimal ? 'Multitrack MIDI (.mid)' : 'Multitrack MIDI für Ableton (.mid)'}</span>
                   </button>
                   <button
                     type="button"
@@ -467,14 +492,14 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
                     onClick={handleExportStems}
                   >
                     <Sliders size={14} />
-                    <span>Alle Spuren als Stems herunterladen</span>
+                    <span>{isMinimal ? 'Export Track Stems (.mid)' : 'Alle Spuren als Stems herunterladen'}</span>
                   </button>
                   <a
                     href="./templates/InstaJammable_Studio_Catch.als"
                     download="InstaJammable_Studio_Catch.als"
                     className="button"
                     style={{ textDecoration: 'none' }}
-                    title="Live-Routing-Vorlage für Ableton Live 12 mit vorkonfiguriertem IAC-Empfang für DS Kick & Xpand!2"
+                    title={isMinimal ? 'Ableton Live 12 template with preconfigured IAC MIDI channels' : 'Live-Routing-Vorlage für Ableton Live 12 mit vorkonfiguriertem IAC-Empfang für DS Kick & Xpand!2'}
                   >
                     <Download size={14} />
                     <span>Ableton Catch Template (.als)</span>
@@ -484,31 +509,35 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
 
               {/* Complete Session Backup */}
               <div className="export-card full-session-card">
-                <div className="card-badge">VOLLSTÄNDIGES BACKUP</div>
+                <div className="card-badge">{isMinimal ? 'SESSION BACKUP' : 'VOLLSTÄNDIGES BACKUP'}</div>
                 <div className="card-header-line">
                   <FileJson size={22} />
                   <div>
-                    <h3>Gesamte Einstellungen exportieren</h3>
-                    <p>8 Mixer-Spuren, EQ, FX-Ketten, Makros, Sequenzen und Routing.</p>
+                    <h3>{isMinimal ? 'Export Full Settings' : 'Gesamte Einstellungen exportieren'}</h3>
+                    <p>{isMinimal ? '8 mixer channels, EQ, FX chain, macros, sequences and routing.' : '8 Mixer-Spuren, EQ, FX-Ketten, Makros, Sequenzen und Routing.'}</p>
                   </div>
                 </div>
 
                 <div className="session-summary-box">
                   <div className="summary-item">
                     <span>Session:</span>
-                    <strong>{session.name}</strong>
+                    <strong>{shownSessionName}</strong>
                   </div>
                   <div className="summary-item">
-                    <span>Tempo & Tonart:</span>
+                    <span>{isMinimal ? 'Tempo & Key:' : 'Tempo & Tonart:'}</span>
                     <strong>{session.bpm} BPM · {pitch(session.root)} {session.scale}</strong>
                   </div>
                   <div className="summary-item">
-                    <span>Spuren:</span>
-                    <strong>{session.layers.length} Kanäle konfiguriert</strong>
+                    <span>{isMinimal ? 'Tracks:' : 'Spuren:'}</span>
+                    <strong>{session.layers.length} {isMinimal ? 'channels configured' : 'Kanäle konfiguriert'}</strong>
                   </div>
                   <div className="summary-item">
-                    <span>Atmosphäre:</span>
-                    <strong>{session.atmosphere?.kind || 'off'} ({Math.round((session.atmosphere?.level ?? 0) * 100)}%)</strong>
+                    <span>{isMinimal ? 'Atmosphere:' : 'Atmosphäre:'}</span>
+                    <strong>
+                      {isMinimal
+                        ? MINIMAL_ATMOSPHERE_LABELS[session.atmosphere?.kind || 'off']
+                        : (session.atmosphere?.kind || 'off')} ({Math.round((session.atmosphere?.level ?? 0) * 100)}%)
+                    </strong>
                   </div>
                 </div>
 
@@ -519,7 +548,7 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
                     onClick={handleExportSessionJson}
                   >
                     <Download size={14} />
-                    <span>Session-Datei (.json) herunterladen</span>
+                    <span>{isMinimal ? 'Download Session (.json)' : 'Session-Datei (.json) herunterladen'}</span>
                   </button>
                   <button
                     type="button"
@@ -527,7 +556,7 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
                     onClick={handleCopyJson}
                   >
                     {copied ? <Check size={14} /> : <Copy size={14} />}
-                    <span>{copied ? 'In Zwischenablage kopiert!' : 'JSON in Zwischenablage kopieren'}</span>
+                    <span>{copied ? (isMinimal ? 'Copied to clipboard!' : 'In Zwischenablage kopiert!') : (isMinimal ? 'Copy JSON to Clipboard' : 'JSON in Zwischenablage kopieren')}</span>
                   </button>
                 </div>
               </div>
@@ -537,13 +566,12 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
             <div className="live-ableton-routing-strip">
               <div className="strip-title">
                 <Radio size={16} />
-                <strong>Echtzeit-MIDI zu Ableton Live über den macOS IAC-Treiber</strong>
+                <strong>{isMinimal ? 'Live MIDI to DAW via macOS IAC Driver' : 'Echtzeit-MIDI zu Ableton Live über den macOS IAC-Treiber'}</strong>
               </div>
               <p>
-                Du kannst die Noten während des Jammens auch live in Ableton aufnehmen:
-                Aktiviere in macOS Audio-MIDI-Setup den <strong>IAC-Treiber</strong>, wähle in der App unter{' '}
-                <em>Audio- & MIDI-Routing</em> den IAC-Treiber als Ausgang, und erstelle in Ableton MIDI-Spuren
-                mit <em>MIDI From: IAC-Treiber</em> auf den Kanälen 1, 2, 3 und 10.
+                {isMinimal
+                  ? 'Record live notes into your DAW: enable the IAC Driver in macOS Audio MIDI Setup, select it in MIDI Routing, and route channels 1, 2, 3 and 10.'
+                  : <>Du kannst die Noten während des Jammens auch live in Ableton aufnehmen: Aktiviere in macOS Audio-MIDI-Setup den <strong>IAC-Treiber</strong>, wähle in der App unter{' '}<em>Audio- & MIDI-Routing</em> den IAC-Treiber als Ausgang, und erstelle in Ableton MIDI-Spuren mit <em>MIDI From: IAC-Treiber</em> auf den Kanälen 1, 2, 3 und 10.</>}
               </p>
             </div>
           </div>

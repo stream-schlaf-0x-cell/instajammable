@@ -27,7 +27,7 @@ import type { MusicalScale } from '../../types';
 import type { ViewDensityMode } from './WorkspaceBar';
 import type { RecorderState } from '../../engine/audio/recorder';
 import { LAYOUT_OPTIONS, type LayoutVariant, type UiEdition } from '../../types/ui';
-import { getSceneDisplay } from '../../engine/jam/minimalCatalog';
+import { getSceneDisplay, getSequenceBlockLabel } from '../../engine/jam/minimalCatalog';
 
 const SCALES: [MusicalScale, string][] = [
   ['dorian', 'Dorian'],
@@ -173,7 +173,8 @@ export function EssentialMasterBar({
   const currentSection = seq?.currentSection || activeBlock?.section || position.arrangementSection || 'groove';
   const blockBarProgress = seq?.blockBarProgress ?? 0;
   const totalBlockBars = seq?.totalBlockBars ?? activeBlock?.bars ?? 4;
-  const nextLabel = seq?.nextBlockLabel || seq?.nextSection?.toUpperCase() || 'Loop';
+  const nextLabel = getSequenceBlockLabel(seq?.nextBlockLabel || seq?.nextSection?.toUpperCase() || 'Loop', uiEdition);
+  const currentBlockDisplayLabel = getSequenceBlockLabel(seq?.currentBlockLabel || currentSection, uiEdition);
   const barsUntilNext = seq?.barsUntilNextBlock ?? totalBlockBars;
 
   const handleEvolve = () => {
@@ -196,7 +197,7 @@ export function EssentialMasterBar({
               e.preventDefault();
               onTabChange?.('jam');
             }}
-            aria-label="instajammable — Jam öffnen"
+            aria-label={uiEdition === 'minimal' ? 'instajammable — Open Jam' : 'instajammable — Jam öffnen'}
           >
             <span className="brand-symbol">
               <i />
@@ -409,8 +410,8 @@ export function EssentialMasterBar({
           <span className="master-volume-db">{masterDbLabel}</span>
           <span
             className={`master-peak-led ${peakLedClass}`}
-            title={`Ausgangs-Peak: ${peakDb <= -90 ? '-∞' : peakDb.toFixed(1)} dBFS`}
-            aria-label={`Pegel-LED ${peakLedClass}`}
+            title={uiEdition === 'minimal' ? `Output Peak: ${peakDb <= -90 ? '-∞' : peakDb.toFixed(1)} dBFS` : `Ausgangs-Peak: ${peakDb <= -90 ? '-∞' : peakDb.toFixed(1)} dBFS`}
+            aria-label={`Peak LED ${peakLedClass}`}
           />
         </div>
       </div>
@@ -429,7 +430,7 @@ export function EssentialMasterBar({
                 void (position.playing ? engine.stop() : engine.start());
               }
             }}
-            title={position.playing ? 'Jam stoppen (Leertaste)' : 'Jam starten (Leertaste)'}
+            title={uiEdition === 'minimal' ? (position.playing ? 'Stop Jam (Space)' : 'Start Jam (Space)') : (position.playing ? 'Jam stoppen (Leertaste)' : 'Jam starten (Leertaste)')}
           >
             {position.playing ? <Square size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
             <span>{position.playing ? 'Stop' : (uiEdition === 'minimal' ? 'Play' : 'Start')}</span>
@@ -441,7 +442,7 @@ export function EssentialMasterBar({
                 type="button"
                 className="icon-button bpm-step-btn"
                 onClick={() => applyBpm(session.bpm - 1)}
-                aria-label="1 BPM langsamer"
+                aria-label={uiEdition === 'minimal' ? 'Decrease BPM by 1' : '1 BPM langsamer'}
               >
                 −
               </button>
@@ -475,17 +476,17 @@ export function EssentialMasterBar({
                 type="button"
                 className="icon-button bpm-step-btn"
                 onClick={() => applyBpm(session.bpm + 1)}
-                aria-label="1 BPM schneller"
+                aria-label={uiEdition === 'minimal' ? 'Increase BPM by 1' : '1 BPM schneller'}
               >
                 +
               </button>
             </div>
 
             <div className="tempo-sub-row">
-              <button type="button" className="tap-pill-btn" onClick={tap} title="Drei- bis sechsmal im Takt tippen">
+              <button type="button" className="tap-pill-btn" onClick={tap} title={uiEdition === 'minimal' ? 'Tap 3-6 times to set tempo' : 'Drei- bis sechsmal im Takt tippen'}>
                 TAP
               </button>
-              <div className="master-beat-dots" role="img" aria-label={`Schlag ${beatIndex + 1} von 4`}>
+              <div className="master-beat-dots" role="img" aria-label={uiEdition === 'minimal' ? `Beat ${beatIndex + 1} of 4` : `Schlag ${beatIndex + 1} von 4`}>
                 {[0, 1, 2, 3].map(i => (
                   <span key={i} className={`beat-dot ${position.playing && beatIndex === i ? 'active-beat' : ''}`} />
                 ))}
@@ -496,13 +497,13 @@ export function EssentialMasterBar({
 
         {/* Unit 2: Harmonic Center & Dual-Chord Quick Access */}
         <div className="essential-cell harmony-cell">
-          <div className="root-stepper-cluster" title="Grundton anpassen (− / + Halbton) oder anspielen">
+          <div className="root-stepper-cluster" title={uiEdition === 'minimal' ? 'Transpose root (− / + semitone) or audition' : 'Grundton anpassen (− / + Halbton) oder anspielen'}>
             <button
               type="button"
               className="icon-button note-step-btn"
               onClick={() => engine.transposeRoot(-1)}
-              title="Grundton 1 Halbton tiefer (−1)"
-              aria-label="Grundton tiefer"
+              title={uiEdition === 'minimal' ? 'Transpose root down (−1 semitone)' : 'Grundton 1 Halbton tiefer (−1)'}
+              aria-label={uiEdition === 'minimal' ? 'Transpose root down' : 'Grundton tiefer'}
             >
               −
             </button>
@@ -512,21 +513,21 @@ export function EssentialMasterBar({
                 type="button"
                 className="master-root-orb"
                 onClick={() => void engine.auditionNote(session.root + 12)}
-                title="Klicken: Grundton anspielen"
+                title={uiEdition === 'minimal' ? 'Click to audition root note' : 'Klicken: Grundton anspielen'}
               >
                 <small>ROOT</small>
                 <strong>{pitch(root)}</strong>
               </button>
               <select
                 className="root-inline-picker"
-                aria-label="Grundton direkt auswählen"
+                aria-label={uiEdition === 'minimal' ? 'Select root note' : 'Grundton direkt auswählen'}
                 value={((session.root % 12) + 12) % 12}
                 onChange={e => {
                   const pc = Number(e.target.value);
                   const oct = Math.floor(session.root / 12);
                   engine.setRoot(oct * 12 + pc);
                 }}
-                title="Grundton direkt auswählen"
+                title={uiEdition === 'minimal' ? 'Select root note' : 'Grundton direkt auswählen'}
               >
                 {['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'].map((pName, pIdx) => (
                   <option key={pIdx} value={pIdx}>
@@ -540,8 +541,8 @@ export function EssentialMasterBar({
               type="button"
               className="icon-button note-step-btn"
               onClick={() => engine.transposeRoot(1)}
-              title="Grundton 1 Halbton höher (+1)"
-              aria-label="Grundton höher"
+              title={uiEdition === 'minimal' ? 'Transpose root up (+1 semitone)' : 'Grundton 1 Halbton höher (+1)'}
+              aria-label={uiEdition === 'minimal' ? 'Transpose root up' : 'Grundton höher'}
             >
               +
             </button>
@@ -554,8 +555,8 @@ export function EssentialMasterBar({
                   type="button"
                   className="icon-button chord-nav-btn"
                   onClick={() => engine.cycleChord(-1)}
-                  title="Vorherige Akkordstufe (◀)"
-                  aria-label="Vorherige Akkordstufe"
+                  title={uiEdition === 'minimal' ? 'Previous chord step (◀)' : 'Vorherige Akkordstufe (◀)'}
+                  aria-label={uiEdition === 'minimal' ? 'Previous chord' : 'Vorherige Akkordstufe'}
                 >
                   <ChevronLeft size={13} />
                 </button>
@@ -564,8 +565,8 @@ export function EssentialMasterBar({
                   type="button"
                   className="icon-button chord-nav-btn"
                   onClick={() => engine.cycleChord(1)}
-                  title="Nächste Akkordstufe (▶)"
-                  aria-label="Nächste Akkordstufe"
+                  title={uiEdition === 'minimal' ? 'Next chord step (▶)' : 'Nächste Akkordstufe (▶)'}
+                  aria-label={uiEdition === 'minimal' ? 'Next chord' : 'Nächste Akkordstufe'}
                 >
                   <ChevronRight size={13} />
                 </button>
@@ -575,8 +576,8 @@ export function EssentialMasterBar({
                 className="key-tag-select"
                 value={session.scale}
                 onChange={e => engine.updateSession({ scale: e.target.value as MusicalScale })}
-                title={`Tonleiter: ${pitch(session.root)} ${scaleName}`}
-                aria-label="Skala wechseln"
+                title={uiEdition === 'minimal' ? `Scale: ${pitch(session.root)} ${scaleName}` : `Tonleiter: ${pitch(session.root)} ${scaleName}`}
+                aria-label={uiEdition === 'minimal' ? 'Change scale' : 'Skala wechseln'}
               >
                 {SCALES.map(([val, label]) => (
                   <option key={val} value={val}>
@@ -594,8 +595,8 @@ export function EssentialMasterBar({
                     type="button"
                     className="mini-note-nudge down"
                     onClick={() => engine.nudgeChordNote(i, -1)}
-                    title={`${pitch(n)}: 1 Halbton tiefer (−)`}
-                    aria-label={`${pitch(n)} tiefer`}
+                    title={uiEdition === 'minimal' ? `${pitch(n)}: −1 semitone` : `${pitch(n)}: 1 Halbton tiefer (−)`}
+                    aria-label={uiEdition === 'minimal' ? `${pitch(n)} down` : `${pitch(n)} tiefer`}
                   >
                     −
                   </button>
@@ -603,7 +604,7 @@ export function EssentialMasterBar({
                     type="button"
                     className={`mini-tone-btn ${((n % 12) + 12) % 12 === ((root % 12) + 12) % 12 ? 'is-root' : ''}`}
                     onClick={() => void engine.auditionNote(n)}
-                    title={`${pitch(n)} (${n}) anspielen`}
+                    title={uiEdition === 'minimal' ? `Audition ${pitch(n)} (${n})` : `${pitch(n)} (${n}) anspielen`}
                   >
                     {pitch(n)}
                   </button>
@@ -611,8 +612,8 @@ export function EssentialMasterBar({
                     type="button"
                     className="mini-note-nudge up"
                     onClick={() => engine.nudgeChordNote(i, 1)}
-                    title={`${pitch(n)}: 1 Halbton höher (+)`}
-                    aria-label={`${pitch(n)} höher`}
+                    title={uiEdition === 'minimal' ? `${pitch(n)}: +1 semitone` : `${pitch(n)}: 1 Halbton höher (+)`}
+                    aria-label={uiEdition === 'minimal' ? `${pitch(n)} up` : `${pitch(n)} höher`}
                   >
                     +
                   </button>
@@ -682,7 +683,7 @@ export function EssentialMasterBar({
         <div className={`essential-cell sequence-cell ${!isSeqActive ? 'is-seq-off' : ''}`}>
           <div className="seq-cell-header">
             <span className="cell-eyebrow">
-              ARRANGEMENT · {isSeqActive ? `#${activeBlockIdx + 1} ${(seq?.currentBlockLabel || currentSection).toUpperCase()}` : (uiEdition === 'minimal' ? 'MANUAL / OFF' : 'MANUELL / AUS')}
+              ARRANGEMENT · {isSeqActive ? `#${activeBlockIdx + 1} ${currentBlockDisplayLabel.toUpperCase()}` : (uiEdition === 'minimal' ? 'MANUAL / OFF' : 'MANUELL / AUS')}
             </span>
 
             <div className="seq-header-right">
@@ -710,8 +711,8 @@ export function EssentialMasterBar({
                   onClick={() => {
                     if (activeBlock) engine.stepBlockBars(activeBlock.id, 1);
                   }}
-                  title="Takte verlängern (+)"
-                  aria-label="Takte verlängern"
+                  title={uiEdition === 'minimal' ? 'Longer (+)' : 'Takte verlängern (+)'}
+                  aria-label={uiEdition === 'minimal' ? 'Longer' : 'Takte verlängern'}
                 >
                   +
                 </button>
@@ -724,7 +725,9 @@ export function EssentialMasterBar({
                 aria-checked={isSeqActive}
                 className={`hardware-switch-pill ${isSeqActive ? 'is-on' : 'is-off'}`}
                 onClick={() => engine.toggleSequencer(!isSeqActive)}
-                title={isSeqActive ? 'Arrangement-Sequenzer ausschalten' : 'Arrangement-Sequenzer einschalten'}
+                title={uiEdition === 'minimal'
+                  ? (isSeqActive ? 'Turn arrangement sequencer off' : 'Turn arrangement sequencer on')
+                  : (isSeqActive ? 'Arrangement-Sequenzer ausschalten' : 'Arrangement-Sequenzer einschalten')}
               >
                 <span className="switch-dot" />
                 <span>{isSeqActive ? 'ON' : 'OFF'}</span>
@@ -734,7 +737,7 @@ export function EssentialMasterBar({
 
           <div className="seq-block-callout">
             {/* Always-editable scene/section buttons: clicking any button activates the sequencer ASAP */}
-            <div className="seq-energy-arrow-row" role="group" aria-label="Abschnitt sofort aktivieren">
+            <div className="seq-energy-arrow-row" role="group" aria-label={uiEdition === 'minimal' ? 'Activate section immediately' : 'Abschnitt sofort aktivieren'}>
               <button
                 type="button"
                 className={`seq-mini-arrow-btn high ${isSeqActive && currentSection === 'chorus' ? 'is-selected' : ''}`}
@@ -742,7 +745,7 @@ export function EssentialMasterBar({
                   if (activeBlock) engine.setBlockSectionByEnergy(activeBlock.id, 'high');
                   else engine.applyArrangement('chorus');
                 }}
-                title="Sofort aktivieren: High (↑) · Chorus / Peak"
+                title={uiEdition === 'minimal' ? 'Activate now: High (↑) · Chorus / Peak' : 'Sofort aktivieren: High (↑) · Chorus / Peak'}
               >
                 <span className="arrow-icon">↑</span>
                 <span>High</span>
@@ -754,7 +757,7 @@ export function EssentialMasterBar({
                   if (activeBlock) engine.setBlockSectionByEnergy(activeBlock.id, 'up');
                   else engine.applyArrangement('buildup');
                 }}
-                title="Sofort aktivieren: Up (↗) · Buildup / Steigerung"
+                title={uiEdition === 'minimal' ? 'Activate now: Up (↗) · Buildup' : 'Sofort aktivieren: Up (↗) · Buildup / Steigerung'}
               >
                 <span className="arrow-icon">↗</span>
                 <span>Up</span>
@@ -766,7 +769,7 @@ export function EssentialMasterBar({
                   if (activeBlock) engine.setBlockSectionByEnergy(activeBlock.id, 'groove');
                   else engine.applyArrangement('groove');
                 }}
-                title="Sofort aktivieren: Flow (➔) · Voller Groove"
+                title={uiEdition === 'minimal' ? 'Activate now: Flow (➔) · Full Groove' : 'Sofort aktivieren: Flow (➔) · Voller Groove'}
               >
                 <span className="arrow-icon">➔</span>
                 <span>Flow</span>
@@ -778,7 +781,7 @@ export function EssentialMasterBar({
                   if (activeBlock) engine.setBlockSectionByEnergy(activeBlock.id, 'down');
                   else engine.applyArrangement('breakdown');
                 }}
-                title="Sofort aktivieren: Down (↘) · Breakdown (Drums aus)"
+                title={uiEdition === 'minimal' ? 'Activate now: Down (↘) · Breakdown (Drums Off)' : 'Sofort aktivieren: Down (↘) · Breakdown (Drums aus)'}
               >
                 <span className="arrow-icon">↘</span>
                 <span>Down</span>
@@ -790,7 +793,7 @@ export function EssentialMasterBar({
                   if (activeBlock) engine.setBlockSectionByEnergy(activeBlock.id, 'low');
                   else engine.applyArrangement('silent');
                 }}
-                title="Sofort aktivieren: Low (↓) · Stille / Intimer Raum"
+                title={uiEdition === 'minimal' ? 'Activate now: Low (↓) · Quiet Space' : 'Sofort aktivieren: Low (↓) · Stille / Intimer Raum'}
               >
                 <span className="arrow-icon">↓</span>
                 <span>Low</span>

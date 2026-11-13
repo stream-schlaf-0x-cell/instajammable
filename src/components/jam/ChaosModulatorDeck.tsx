@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Sparkles, Zap, Compass, RefreshCw } from 'lucide-react';
 import { JamEngine } from '../../engine/jam/JamEngine';
+import { useUiEdition } from '../../contexts/UiEditionContext';
 import type { JamSession } from '../../types/jam';
 
 const engine = JamEngine.getInstance();
@@ -16,6 +17,8 @@ export function ChaosModulatorDeck({
   enabled?: boolean;
   onToggleEnabled?: (next: boolean) => void;
 }) {
+  const uiEdition = useUiEdition();
+  const isMinimal = uiEdition === 'minimal';
   const [driftMode, setDriftMode] = useState<DriftMode>('calm');
   const [isDragging, setIsDragging] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -166,12 +169,12 @@ export function ChaosModulatorDeck({
   };
 
   return (
-    <section className={`chaos-modulator-deck ${!enabled ? 'is-disabled' : ''}`} aria-label="Chaos- und Drift-Modulator">
+    <section className={`chaos-modulator-deck ${!enabled ? 'is-disabled' : ''}`} aria-label={isMinimal ? 'Chaos & Drift Modulator' : 'Chaos- und Drift-Modulator'}>
       <header className="chaos-deck-header">
         <div>
-          <span className="eyebrow">ORGANISCHER ATTRACTOR</span>
-          <h2>Chaos & lebendige Bewegung.</h2>
-          <p className="helper">Gegen die starre Kälte: Ein mathematisch schwebender Attraktor wandert durch den 2D-Klangraum und moduliert Bewegung und Hall organisch.</p>
+          <span className="eyebrow">{isMinimal ? 'ATTRACTOR' : 'ORGANISCHER ATTRACTOR'}</span>
+          <h2>{isMinimal ? 'Chaos & Drift' : 'Chaos & lebendige Bewegung.'}</h2>
+          {!isMinimal && <p className="helper">Gegen die starre Kälte: Ein mathematisch schwebender Attraktor wandert durch den 2D-Klangraum und moduliert Bewegung und Hall organisch.</p>}
         </div>
         <div className="chaos-deck-actions">
           {onToggleEnabled && (
@@ -181,7 +184,9 @@ export function ChaosModulatorDeck({
               aria-checked={enabled}
               className={`hardware-switch-pill ${enabled ? 'is-on' : 'is-off'}`}
               onClick={() => onToggleEnabled(!enabled)}
-              title={enabled ? 'Attraktor ausschalten' : 'Attraktor einschalten'}
+              title={isMinimal
+                ? (enabled ? 'Turn attractor off' : 'Turn attractor on')
+                : (enabled ? 'Attraktor ausschalten' : 'Attraktor einschalten')}
             >
               <span className="switch-dot" />
               <span>{enabled ? 'ON' : 'OFF'}</span>
@@ -191,9 +196,9 @@ export function ChaosModulatorDeck({
             type="button"
             className="button impulse-btn"
             onClick={handleSpontaneousPulse}
-            title="Löst einen spontanen organischen Klangimpuls aus"
+            title={isMinimal ? 'Trigger organic sound pulse' : 'Löst einen spontanen organischen Klangimpuls aus'}
           >
-            <Zap size={15} /> ⚡ Spontaner Impuls
+            <Zap size={15} /> {isMinimal ? 'Pulse' : '⚡ Spontaner Impuls'}
           </button>
         </div>
       </header>
@@ -210,60 +215,60 @@ export function ChaosModulatorDeck({
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
-            title="Klicke und ziehe, um den Klangpunkt in 2D zu steuern"
+            title={isMinimal ? 'Drag to steer X/Y timbre coordinates' : 'Klicke und ziehe, um den Klangpunkt in 2D zu steuern'}
           />
           <div className="pad-axis-labels">
-            <span className="axis-label x-axis">X: Bewegung / Motive ({Math.round(session.macros.movement * 100)}%)</span>
-            <span className="axis-label y-axis">Y: Raum & Hall ({Math.round(session.macros.space * 100)}%)</span>
+            <span className="axis-label x-axis">{isMinimal ? `X: Movement (${Math.round(session.macros.movement * 100)}%)` : `X: Bewegung / Motive (${Math.round(session.macros.movement * 100)}%)`}</span>
+            <span className="axis-label y-axis">{isMinimal ? `Y: Space & Reverb (${Math.round(session.macros.space * 100)}%)` : `Y: Raum & Hall (${Math.round(session.macros.space * 100)}%)`}</span>
           </div>
         </div>
 
         {/* Controls & Mode selection */}
         <div className="chaos-controls-side">
           <div className="drift-mode-picker">
-            <span className="picker-title">Drift-Modus:</span>
+            <span className="picker-title">{isMinimal ? 'Drift Mode:' : 'Drift-Modus:'}</span>
             <div className="mode-btn-group">
               <button
                 type="button"
                 className={'button mode-btn ' + (enabled && driftMode === 'manual' ? 'active' : '')}
                 onClick={() => selectMode('manual')}
               >
-                Manuell (Halten)
+                {isMinimal ? 'Manual' : 'Manuell (Halten)'}
               </button>
               <button
                 type="button"
                 className={'button mode-btn ' + (enabled && driftMode === 'calm' ? 'active' : '')}
                 onClick={() => selectMode('calm')}
               >
-                <Compass size={14} /> Sanft schwebend (CBL)
+                <Compass size={14} /> {isMinimal ? 'Calm Glide' : 'Sanft schwebend (CBL)'}
               </button>
               <button
                 type="button"
                 className={'button mode-btn ' + (enabled && driftMode === 'pulse' ? 'active' : '')}
                 onClick={() => selectMode('pulse')}
               >
-                <RefreshCw size={14} /> Pulsierend
+                <RefreshCw size={14} /> {isMinimal ? 'Pulse' : 'Pulsierend'}
               </button>
               <button
                 type="button"
                 className={'button mode-btn ' + (enabled && driftMode === 'wild' ? 'active' : '')}
                 onClick={() => selectMode('wild')}
               >
-                <Sparkles size={14} /> Wild & Chaotisch
+                <Sparkles size={14} /> {isMinimal ? 'Wild' : 'Wild & Chaotisch'}
               </button>
             </div>
           </div>
 
           <div className="chaos-live-readout">
             <div className="readout-card">
-              <span className="readout-label">Aktuelle X-Koordinate</span>
-              <strong>Bewegung: {Math.round(session.macros.movement * 100)}%</strong>
-              <small>Variiert Melodiemotive und Phrasen</small>
+              <span className="readout-label">{isMinimal ? 'X Coordinate' : 'Aktuelle X-Koordinate'}</span>
+              <strong>{isMinimal ? `Movement: ${Math.round(session.macros.movement * 100)}%` : `Bewegung: ${Math.round(session.macros.movement * 100)}%`}</strong>
+              {!isMinimal && <small>Variiert Melodiemotive und Phrasen</small>}
             </div>
             <div className="readout-card">
-              <span className="readout-label">Aktuelle Y-Koordinate</span>
-              <strong>Raum / Hall: {Math.round(session.macros.space * 100)}%</strong>
-              <small>Steuert Kathedral-Hall & Space-Delay</small>
+              <span className="readout-label">{isMinimal ? 'Y Coordinate' : 'Aktuelle Y-Koordinate'}</span>
+              <strong>{isMinimal ? `Space / Reverb: ${Math.round(session.macros.space * 100)}%` : `Raum / Hall: ${Math.round(session.macros.space * 100)}%`}</strong>
+              {!isMinimal && <small>Steuert Kathedral-Hall & Space-Delay</small>}
             </div>
           </div>
         </div>

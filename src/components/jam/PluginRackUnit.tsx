@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { Power, LucideIcon, Maximize2, Minimize2 } from 'lucide-react';
+import { useUiEdition } from '../../contexts/UiEditionContext';
 
 interface PluginRackUnitProps {
   id: string;
@@ -32,6 +33,7 @@ export function PluginRackUnit({
   children,
   className = '',
 }: PluginRackUnitProps) {
+  const isMinimal = useUiEdition() === 'minimal';
   return (
     <article
       id={`plugin-${id}`}
@@ -48,8 +50,10 @@ export function PluginRackUnit({
                 e.stopPropagation();
                 onToggleBypass();
               }}
-              title={isBypassed ? `${title} aktivieren` : `${title} bypassen`}
-              aria-label={`${title} Ein/Aus`}
+              title={isMinimal
+                ? (isBypassed ? `Enable ${title}` : `Bypass ${title}`)
+                : (isBypassed ? `${title} aktivieren` : `${title} bypassen`)}
+              aria-label={isMinimal ? `${title} On/Off` : `${title} Ein/Aus`}
             >
               <Power size={13} />
             </button>
@@ -64,7 +68,7 @@ export function PluginRackUnit({
               <strong className="plugin-title">{title}</strong>
               {badge && <span className="plugin-badge">{badge}</span>}
             </div>
-            {subtitle && !isCollapsed && <span className="plugin-subtitle">{subtitle}</span>}
+            {subtitle && !isCollapsed && !isMinimal && <span className="plugin-subtitle">{subtitle}</span>}
           </div>
         </div>
 
@@ -80,18 +84,22 @@ export function PluginRackUnit({
             type="button"
             className="plugin-toggle-btn"
             onClick={onToggleCollapse}
-            title={isCollapsed ? `${title} ausklappen` : `${title} minimieren`}
-            aria-label={isCollapsed ? `${title} ausklappen` : `${title} minimieren`}
+            title={isMinimal
+              ? (isCollapsed ? `Expand ${title}` : `Minimize ${title}`)
+              : (isCollapsed ? `${title} ausklappen` : `${title} minimieren`)}
+            aria-label={isMinimal
+              ? (isCollapsed ? `Expand ${title}` : `Minimize ${title}`)
+              : (isCollapsed ? `${title} ausklappen` : `${title} minimieren`)}
           >
             {isCollapsed ? (
               <>
                 <Maximize2 size={13} />
-                <span className="btn-txt">Erweitern</span>
+                <span className="btn-txt">{isMinimal ? 'Expand' : 'Erweitern'}</span>
               </>
             ) : (
               <>
                 <Minimize2 size={13} />
-                <span className="btn-txt">Minimieren</span>
+                <span className="btn-txt">{isMinimal ? 'Minimize' : 'Minimieren'}</span>
               </>
             )}
           </button>

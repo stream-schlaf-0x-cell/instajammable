@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Shuffle, ChevronRight, LockKeyhole, Snowflake } from 'lucide-react';
 import { JamEngine } from '../../engine/jam/JamEngine';
 import { getInstrumentPresets, detectActiveInstrumentPreset } from '../../engine/jam/instrumentPresets';
-import { stripArtistRefs } from '../../engine/jam/minimalCatalog';
+import { getInstrumentPresetDisplay } from '../../engine/jam/minimalCatalog';
 import { DRUM_MODELS, TIMBRES, type DrumModel, type JamPosition, type JamSession, type Timbre } from '../../types/jam';
 import type { UiEdition } from '../../types/ui';
 import { HarmonyHeroCard, MacroDeckCard } from './LayoutShared';
@@ -211,7 +211,7 @@ export function GrooveboxLayout({ session, position, edition }: GrooveboxLayoutP
               <option value="">{min ? '— Custom —' : '— Benutzerdefiniert —'}</option>
               {presets.map(p => (
                 <option key={p.id} value={p.id}>
-                  {min ? stripArtistRefs(p.name) : p.name}
+                  {getInstrumentPresetDisplay(p, edition).name}
                 </option>
               ))}
             </select>

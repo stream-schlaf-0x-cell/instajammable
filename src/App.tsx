@@ -22,7 +22,12 @@ import { SplitLayout } from './components/layouts/SplitLayout';
 import { FocusStageLayout } from './components/layouts/FocusStageLayout';
 import { CommandGridLayout } from './components/layouts/CommandGridLayout';
 import { GrooveboxLayout } from './components/layouts/GrooveboxLayout';
-import { MINIMAL_MACROS, getSceneDisplay } from './engine/jam/minimalCatalog';
+import {
+  MINIMAL_MACROS,
+  getSceneDisplay,
+  getCustomMacroDisplayName,
+  getParamOptionDisplay,
+} from './engine/jam/minimalCatalog';
 import { UiEditionContext, useUiEdition } from './contexts/UiEditionContext';
 import type { LayoutVariant, UiEdition } from './types/ui';
 import { findParamOption } from './engine/jam/customMacros';
@@ -110,11 +115,11 @@ export default function App() {
     window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
   }, [toggle, editor, routing]);
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 6500); return () => clearTimeout(timer); }, [toast]);
-  const keepClip = (clip: MidiClip) => { try { const valid = validateClip(clip); const next = [valid, ...library.filter(c => c.id !== valid.id)].slice(0, 128); const error = saveLibrary(next); if (error) { message(error); return; } setLibrary(next); message('Clip in deiner Sammlung gespeichert.'); } catch(e) { message(String(e)); } };
-  const exportClip = (clip: MidiClip, layerId?: string) => { void act(() => { downloadBytes(clipToMidi(clip, layerId), fileName(clip.name + (layerId ? '-' + layerId : '')) + '.mid', 'audio/midi'); message('MIDI exportiert · gemeinsame Zeitachse für alle Spuren.'); }); };
-  const capture = () => { void act(() => { const clip = engine.createClip(captureBars); if (!clip.notes.length) { message('Noch keine gespielten Noten. Starte den Jam und halte einen Moment fest.'); return; } keepClip(clip); setEditor(clip); }); };
-  const importMidi = async (file?: File) => { if (!file) return; await act(async () => { if (file.size > 10_000_000) throw new Error('MIDI-Datei ist zu groß (max. 10 MB).'); const clip = validateClip(midiToClip(new Uint8Array(await file.arrayBuffer()), file.name.replace(/\.mid[i]?$/i, ''))); setEditor(clip); message('MIDI geöffnet. Speichern übernimmt den Clip in die Sammlung.'); }); };
-  const record = async () => { if (!recording.isRecording && session.outputMode === 'midi') { message('WAV nimmt die internen Klänge auf. Wähle Audio intern oder Audio + MIDI; externe Instrumente nimmst du in Ableton auf. Für Noten nutze Capture.'); return; } if (recording.isRecording) { await act(async () => { const result = await engine.recorder.stop(); if (result.wavBytes) { downloadBytes(result.wavBytes, 'instajammable-take.wav', 'audio/wav'); message('WAV-Aufnahme gespeichert.'); } else if (result.webmBlob) { const blob = result.webmBlob; const ext = blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'm4a' : 'webm'; downloadBytes(new Uint8Array(await blob.arrayBuffer()), 'instajammable-take.' + ext, blob.type); message('Komprimierte Aufnahme gespeichert; PCM war nicht verfügbar.'); } else message(engine.recorder.getState().lastError || 'Keine Audiodaten aufgezeichnet.'); }); } else { await act(async () => { if (!engine.getPosition().playing) await engine.start(); if (!engine.recorder.start()) throw new Error(engine.recorder.getState().lastError || 'Aufnahme konnte nicht starten.'); }); } };
+  const keepClip = (clip: MidiClip) => { try { const valid = validateClip(clip); const next = [valid, ...library.filter(c => c.id !== valid.id)].slice(0, 128); const error = saveLibrary(next); if (error) { message(error); return; } setLibrary(next); message(uiEdition === 'minimal' ? 'Clip saved to library.' : 'Clip in deiner Sammlung gespeichert.'); } catch(e) { message(String(e)); } };
+  const exportClip = (clip: MidiClip, layerId?: string) => { void act(() => { downloadBytes(clipToMidi(clip, layerId), fileName(clip.name + (layerId ? '-' + layerId : '')) + '.mid', 'audio/midi'); message(uiEdition === 'minimal' ? 'MIDI exported.' : 'MIDI exportiert · gemeinsame Zeitachse für alle Spuren.'); }); };
+  const capture = () => { void act(() => { const clip = engine.createClip(captureBars); if (!clip.notes.length) { message(uiEdition === 'minimal' ? 'No played notes yet. Start the jam first.' : 'Noch keine gespielten Noten. Starte den Jam und halte einen Moment fest.'); return; } keepClip(clip); setEditor(clip); }); };
+  const importMidi = async (file?: File) => { if (!file) return; await act(async () => { if (file.size > 10_000_000) throw new Error(uiEdition === 'minimal' ? 'MIDI file too large (max 10 MB).' : 'MIDI-Datei ist zu groß (max. 10 MB).'); const clip = validateClip(midiToClip(new Uint8Array(await file.arrayBuffer()), file.name.replace(/\.mid[i]?$/i, ''))); setEditor(clip); message(uiEdition === 'minimal' ? 'MIDI opened. Save to add to library.' : 'MIDI geöffnet. Speichern übernimmt den Clip in die Sammlung.'); }); };
+  const record = async () => { if (!recording.isRecording && session.outputMode === 'midi') { message(uiEdition === 'minimal' ? 'WAV records internal audio. Switch to Internal Audio or Audio + MIDI.' : 'WAV nimmt die internen Klänge auf. Wähle Audio intern oder Audio + MIDI; externe Instrumente nimmst du in Ableton auf. Für Noten nutze Capture.'); return; } if (recording.isRecording) { await act(async () => { const result = await engine.recorder.stop(); if (result.wavBytes) { downloadBytes(result.wavBytes, 'instajammable-take.wav', 'audio/wav'); message(uiEdition === 'minimal' ? 'WAV recording saved.' : 'WAV-Aufnahme gespeichert.'); } else if (result.webmBlob) { const blob = result.webmBlob; const ext = blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'm4a' : 'webm'; downloadBytes(new Uint8Array(await blob.arrayBuffer()), 'instajammable-take.' + ext, blob.type); message(uiEdition === 'minimal' ? 'Recording saved.' : 'Komprimierte Aufnahme gespeichert; PCM war nicht verfügbar.'); } else message(engine.recorder.getState().lastError || (uiEdition === 'minimal' ? 'No audio recorded.' : 'Keine Audiodaten aufgezeichnet.')); }); } else { await act(async () => { if (!engine.getPosition().playing) await engine.start(); if (!engine.recorder.start()) throw new Error(engine.recorder.getState().lastError || (uiEdition === 'minimal' ? 'Could not start recording.' : 'Aufnahme konnte nicht starten.')); }); } };
   const connectMidi = async () => { await act(async () => { const ok = await engine.midi.init(); if (ok) { setOutputs(engine.midi.getAvailableOutputs()); const saved = engine.getState().globalOutputId; const preserve = new Set(engine.getState().layers.filter(l=>l.outputId!==null).map(l=>l.id)); if(saved === null) engine.midi.selectOff(preserve); else if(typeof saved === 'string') engine.midi.selectOutput(saved,preserve); else engine.updateSession({globalOutputId:engine.midi.getSelectedOutputId()}); setOutputId(engine.midi.getSelectedOutputId() || ''); } }); };
   const pinned = MACROS.filter(m => session.pinned.includes(m.id));
   const isMinimal = uiEdition === 'minimal';
@@ -216,15 +221,18 @@ export default function App() {
             }) : <p className="helper">{uiEdition === 'minimal' ? 'Pin macros in Details.' : 'Deine Makros kannst du unter Details anheften.'}</p>}
 
             {/* User Custom Macros on Main Strip */}
-            {session.customMacros && session.customMacros.map(cm => (
+            {session.customMacros && session.customMacros.map(cm => {
+              const cmName = getCustomMacroDisplayName(cm.name, uiEdition);
+              const targetLabels = cm.targets.map(t => getParamOptionDisplay(findParamOption(t.param), uiEdition).label);
+              return (
               <label className="macro custom-strip-macro" key={cm.id} style={{ '--macro-theme': cm.color } as React.CSSProperties}>
                 <span className="macro-label-top">
-                  <span className="user-macro-tag" style={{ background: cm.color }}>Eigen</span>
-                  <strong>{cm.name}</strong>
+                  <span className="user-macro-tag" style={{ background: cm.color }}>{isMinimal ? 'Custom' : 'Eigen'}</span>
+                  <strong>{cmName}</strong>
                   <output>{Math.round(cm.value * 100)}</output>
                 </span>
                 <input
-                  aria-label={`Eigenes Makro: ${cm.name}`}
+                  aria-label={`${isMinimal ? 'Custom Macro' : 'Eigenes Makro'}: ${cmName}`}
                   type="range"
                   min={0}
                   max={1}
@@ -232,11 +240,12 @@ export default function App() {
                   value={cm.value}
                   onChange={e => engine.setCustomMacro(cm.id, Number(e.target.value))}
                 />
-                <small title={cm.targets.map(t => findParamOption(t.param).label).join(', ')}>
-                  {cm.targets.length} {cm.targets.length === 1 ? 'Ziel' : 'Ziele'}: {cm.targets.map(t => findParamOption(t.param).label).slice(0, 2).join(', ')}{cm.targets.length > 2 ? ' ...' : ''}
+                <small title={targetLabels.join(', ')}>
+                  {cm.targets.length} {isMinimal ? (cm.targets.length === 1 ? 'target' : 'targets') : (cm.targets.length === 1 ? 'Ziel' : 'Ziele')}: {targetLabels.slice(0, 2).join(', ')}{cm.targets.length > 2 ? ' ...' : ''}
                 </small>
               </label>
-            ))}
+              );
+            })}
           </section>
 
           {/* Central 8-Channel Studio Mixing Desk */}
@@ -507,9 +516,9 @@ export default function App() {
           {/* 24 Ausgangspunkte / Szenen */}
           <section className="scene-section">
             <div className="section-intro">
-              <span className="eyebrow">{isMinimal ? 'WHERE TO GO?' : 'WO SOLL ES HINGEHEN?'}</span>
-              <h2>{isMinimal ? <>Twenty-four starting points.<br/>Countless paths.</> : <>Sechzehn Ausgangspunkte.<br/>Unzählige Abzweigungen.</>}</h2>
-              <p>{isMinimal ? 'A scene gives the jam its character. Evolve explores it further.' : 'Eine Szene gibt dem Jam einen Charakter. Evolve erkundet ihn weiter.'}</p>
+              <span className="eyebrow">{isMinimal ? 'SCENES' : 'WO SOLL ES HINGEHEN?'}</span>
+              <h2>{isMinimal ? '24 Sound Presets' : <>Sechzehn Ausgangspunkte.<br/>Unzählige Abzweigungen.</>}</h2>
+              {!isMinimal && <p>Eine Szene gibt dem Jam einen Charakter. Evolve erkundet ihn weiter.</p>}
             </div>
             <div className="scene-list">
               {SCENES.map((s, i) => {

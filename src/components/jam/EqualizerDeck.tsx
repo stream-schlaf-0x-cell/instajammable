@@ -2,6 +2,8 @@ import { useId, useMemo } from 'react';
 import { Sliders, X, Sparkles, Power } from 'lucide-react';
 import { JamEngine } from '../../engine/jam/JamEngine';
 import { EQ_PRESETS, type EqPreset } from '../../engine/jam/customMacros';
+import { useUiEdition } from '../../contexts/UiEditionContext';
+import { getEqPresetDisplay } from '../../engine/jam/minimalCatalog';
 import type { JamSession } from '../../types/jam';
 
 interface EqualizerDeckProps {
@@ -12,6 +14,8 @@ interface EqualizerDeckProps {
 const engine = JamEngine.getInstance();
 
 export function EqualizerDeck({ session, onClose }: EqualizerDeckProps) {
+  const uiEdition = useUiEdition();
+  const isMinimal = uiEdition === 'minimal';
   const patch = session.effectsPatch || {};
   const isBypassed = engine.getEffectChain().modules.find(m => m.id === 'eq')?.bypassed ?? false;
 
@@ -102,7 +106,7 @@ export function EqualizerDeck({ session, onClose }: EqualizerDeckProps) {
           </div>
           <div>
             <div className="deck-eyebrow">MASTER OUT · ANALOG CURVE</div>
-            <h2 className="deck-title">Studio 3-Band Parametric EQ & Filter</h2>
+            <h2 className="deck-title">{isMinimal ? '3-Band Parametric EQ & Filter' : 'Studio 3-Band Parametric EQ & Filter'}</h2>
           </div>
         </div>
 
@@ -111,17 +115,19 @@ export function EqualizerDeck({ session, onClose }: EqualizerDeckProps) {
             type="button"
             className={'button eq-bypass-btn ' + (!isBypassed ? 'active-power' : 'bypassed-power')}
             onClick={toggleBypass}
-            title={isBypassed ? 'EQ aktivieren' : 'EQ Bypass (Linear 0 dB)'}
+            title={isMinimal
+              ? (isBypassed ? 'Enable EQ' : 'Bypass EQ (Flat 0 dB)')
+              : (isBypassed ? 'EQ aktivieren' : 'EQ Bypass (Linear 0 dB)')}
           >
             <Power size={14} />
-            <span>{isBypassed ? 'Bypass' : 'Aktiv'}</span>
+            <span>{isBypassed ? 'Bypass' : (isMinimal ? 'Active' : 'Aktiv')}</span>
           </button>
           {onClose && (
             <button
               type="button"
               className="icon-button close-deck-btn"
               onClick={onClose}
-              title="Deck schließen"
+              title={isMinimal ? 'Close deck' : 'Deck schließen'}
             >
               <X size={16} />
             </button>
@@ -177,20 +183,23 @@ export function EqualizerDeck({ session, onClose }: EqualizerDeckProps) {
       {/* Preset Chips */}
       <div className="eq-presets-strip">
         <span className="eq-preset-label">
-          <Sparkles size={12} /> Vorlagen:
+          <Sparkles size={12} /> {isMinimal ? 'Presets:' : 'Vorlagen:'}
         </span>
         <div className="eq-preset-pills">
-          {EQ_PRESETS.map(p => (
-            <button
-              key={p.id}
-              type="button"
-              className="eq-preset-pill"
-              onClick={() => applyPreset(p)}
-              title={p.subtitle}
-            >
-              <strong>{p.name}</strong>
-            </button>
-          ))}
+          {EQ_PRESETS.map(p => {
+            const disp = getEqPresetDisplay(p, uiEdition);
+            return (
+              <button
+                key={p.id}
+                type="button"
+                className="eq-preset-pill"
+                onClick={() => applyPreset(p)}
+                title={disp.subtitle}
+              >
+                <strong>{disp.name}</strong>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -199,7 +208,7 @@ export function EqualizerDeck({ session, onClose }: EqualizerDeckProps) {
         {/* Band 1: Low-Cut (Highpass) */}
         <div className="eq-band-card">
           <div className="band-header">
-            <span className="band-name">Low-Cut / Sub-Filter</span>
+            <span className="band-name">{isMinimal ? 'Low-Cut / Highpass' : 'Low-Cut / Sub-Filter'}</span>
             <span className="band-val">{lowCut > 20 ? `${Math.round(lowCut)} Hz` : 'Flat (20 Hz)'}</span>
           </div>
           <div className="band-slider-row">
@@ -209,12 +218,12 @@ export function EqualizerDeck({ session, onClose }: EqualizerDeckProps) {
               max={350}
               step={5}
               value={lowCut}
-              aria-label="Low-Cut Highpass Frequenz"
+              aria-label={isMinimal ? 'Low-Cut Highpass Frequency' : 'Low-Cut Highpass Frequenz'}
               onChange={e => engine.setEq({ highpass: Number(e.target.value) })}
               disabled={isBypassed}
             />
           </div>
-          <small className="band-helper">Räumt Sub-Rumpeln auf oder kreiert Radio-Sound</small>
+          {!isMinimal && <small className="band-helper">Räumt Sub-Rumpeln auf oder kreiert Radio-Sound</small>}
         </div>
 
         {/* Band 2: Low Shelf */}
@@ -235,13 +244,13 @@ export function EqualizerDeck({ session, onClose }: EqualizerDeckProps) {
               disabled={isBypassed}
             />
           </div>
-          <small className="band-helper">Wärme, Fundament und Kick-Druck</small>
+          {!isMinimal && <small className="band-helper">Wärme, Fundament und Kick-Druck</small>}
         </div>
 
         {/* Band 3: Parametric Mid (Gain + Freq + Q) */}
         <div className="eq-band-card eq-mid-band">
           <div className="band-header">
-            <span className="band-name">Mitten / Parametrischer Peak</span>
+            <span className="band-name">{isMinimal ? 'Mid / Parametric Peak' : 'Mitten / Parametrischer Peak'}</span>
             <span className="band-val">{midGain > 0 ? `+${midGain.toFixed(1)} dB` : `${midGain.toFixed(1)} dB`}</span>
           </div>
           <div className="band-slider-row">
@@ -251,7 +260,7 @@ export function EqualizerDeck({ session, onClose }: EqualizerDeckProps) {
               max={12}
               step={0.5}
               value={midGain}
-              aria-label="Mitten Gain"
+              aria-label={isMinimal ? 'Mid Gain' : 'Mitten Gain'}
               onChange={e => engine.setEq({ mid: Number(e.target.value) })}
               disabled={isBypassed}
             />
@@ -265,20 +274,20 @@ export function EqualizerDeck({ session, onClose }: EqualizerDeckProps) {
                 max={5000}
                 step={25}
                 value={midFreq}
-                aria-label="Mitten-Frequenz"
+                aria-label={isMinimal ? 'Mid Frequency' : 'Mitten-Frequenz'}
                 onChange={e => engine.setEq({ midFreq: Number(e.target.value) })}
                 disabled={isBypassed}
               />
             </label>
             <label className="mid-sub-param">
-              <span>Q / Güte: <strong>{midQ.toFixed(1)}</strong></span>
+              <span>{isMinimal ? 'Q / Bandwidth:' : 'Q / Güte:'} <strong>{midQ.toFixed(1)}</strong></span>
               <input
                 type="range"
                 min={0.4}
                 max={3.0}
                 step={0.1}
                 value={midQ}
-                aria-label="Mitten Q-Faktor"
+                aria-label={isMinimal ? 'Mid Q Factor' : 'Mitten Q-Faktor'}
                 onChange={e => engine.setEq({ midQ: Number(e.target.value) })}
                 disabled={isBypassed}
               />
@@ -289,7 +298,7 @@ export function EqualizerDeck({ session, onClose }: EqualizerDeckProps) {
         {/* Band 4: High Shelf */}
         <div className="eq-band-card">
           <div className="band-header">
-            <span className="band-name">Höhen / Air Shelf (7.5 kHz)</span>
+            <span className="band-name">{isMinimal ? 'High / Air Shelf (7.5 kHz)' : 'Höhen / Air Shelf (7.5 kHz)'}</span>
             <span className="band-val">{highGain > 0 ? `+${highGain.toFixed(1)} dB` : `${highGain.toFixed(1)} dB`}</span>
           </div>
           <div className="band-slider-row">
@@ -299,12 +308,12 @@ export function EqualizerDeck({ session, onClose }: EqualizerDeckProps) {
               max={12}
               step={0.5}
               value={highGain}
-              aria-label="Höhen High Shelf Gain"
+              aria-label={isMinimal ? 'High Shelf Gain' : 'Höhen High Shelf Gain'}
               onChange={e => engine.setEq({ high: Number(e.target.value) })}
               disabled={isBypassed}
             />
           </div>
-          <small className="band-helper">Glanz, Seidigkeit oder samtiges Vintage-Tape</small>
+          {!isMinimal && <small className="band-helper">Glanz, Seidigkeit oder samtiges Vintage-Tape</small>}
         </div>
       </div>
     </section>

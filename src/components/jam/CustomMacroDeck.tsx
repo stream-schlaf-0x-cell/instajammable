@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { SlidersHorizontal, Plus, Trash2, ChevronDown, ChevronUp, Sparkles, Check, X } from 'lucide-react';
 import { JamEngine } from '../../engine/jam/JamEngine';
 import { TARGET_PARAM_OPTIONS, findParamOption, INITIAL_CUSTOM_MACROS } from '../../engine/jam/customMacros';
+import { useUiEdition } from '../../contexts/UiEditionContext';
+import { getCustomMacroDisplayName, getParamOptionDisplay } from '../../engine/jam/minimalCatalog';
 import type { CustomMacro, CustomMacroTarget, JamSession, MacroTargetParam } from '../../types/jam';
 
 const engine = JamEngine.getInstance();
@@ -17,6 +19,8 @@ const COLOR_PALETTE = [
 ];
 
 export function CustomMacroDeck({ session }: { session: JamSession }) {
+  const uiEdition = useUiEdition();
+  const isMinimal = uiEdition === 'minimal';
   const customMacros = session.customMacros || [];
   const [expandedMacroId, setExpandedMacroId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -41,8 +45,9 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
 
   const handleCreateMacro = (e: React.FormEvent) => {
     e.preventDefault();
-    const name = newName.trim() || 'Mein Makro';
+    const name = newName.trim() || (isMinimal ? 'My Macro' : 'Mein Makro');
     const opt = findParamOption(newTargetParam);
+    const optDisp = getParamOptionDisplay(opt, uiEdition);
     const newMacro: CustomMacro = {
       id: `custom-macro-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       name,
@@ -52,7 +57,7 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
         {
           id: `target-${Date.now()}-1`,
           param: newTargetParam,
-          label: opt.label,
+          label: optDisp.label,
           min: newTargetMin,
           max: newTargetMax,
           inverted: newTargetInverted,
@@ -68,10 +73,11 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
   const handleAddTemplate = (templateIndex: number) => {
     const tmpl = INITIAL_CUSTOM_MACROS[templateIndex];
     if (!tmpl) return;
+    const baseName = isMinimal ? getCustomMacroDisplayName(tmpl.name, uiEdition) : tmpl.name;
     const newMacro: CustomMacro = {
       ...tmpl,
       id: `custom-macro-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      name: `${tmpl.name} (Kopie)`,
+      name: `${baseName} ${isMinimal ? '(Copy)' : '(Kopie)'}`,
     };
     engine.addCustomMacro(newMacro);
   };
@@ -80,10 +86,11 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
     const macro = customMacros.find(m => m.id === macroId);
     if (!macro) return;
     const opt = findParamOption(targetParamToAdd);
+    const optDisp = getParamOptionDisplay(opt, uiEdition);
     const newTarget: CustomMacroTarget = {
       id: `target-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       param: targetParamToAdd,
-      label: opt.label,
+      label: optDisp.label,
       min: targetMinToAdd,
       max: targetMaxToAdd,
       inverted: targetInvertToAdd,
@@ -105,13 +112,17 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
     engine.deleteCustomMacro(macroId);
   };
 
+  const rawCategories = ['Effekte', 'Makros', 'Atmosphäre', 'Spuren'] as const;
+  const catLabel = (cat: (typeof rawCategories)[number]) =>
+    isMinimal ? ({ Effekte: 'Effects', Makros: 'Macros', Atmosphäre: 'Atmosphere', Spuren: 'Tracks' }[cat]) : cat;
+
   return (
-    <section className="custom-macro-deck" aria-label="Eigene Makros">
+    <section className="custom-macro-deck" aria-label={isMinimal ? 'Custom Macros' : 'Eigene Makros'}>
       <header className="custom-macro-header">
         <div>
-          <span className="eyebrow">DEINE EIGENEN MAKROS</span>
-          <h2>Verbinde mehrere Parameter mit einem einzigen Dreh.</h2>
-          <p className="helper">Erstelle deine eigenen Makro-Regler. Ein Regler kann gleichzeitig Hall öffnen, die Kick leiser drehen und Tape-Drive hinzufügen.</p>
+          <span className="eyebrow">{isMinimal ? 'CUSTOM MACROS' : 'DEINE EIGENEN MAKROS'}</span>
+          <h2>{isMinimal ? 'Map Multiple Parameters to One Slider' : 'Verbinde mehrere Parameter mit einem einzigen Dreh.'}</h2>
+          {!isMinimal && <p className="helper">Erstelle deine eigenen Makro-Regler. Ein Regler kann gleichzeitig Hall öffnen, die Kick leiser drehen und Tape-Drive hinzufügen.</p>}
         </div>
         <div className="macro-deck-actions">
           <button
@@ -119,7 +130,9 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
             className="button primary-btn"
             onClick={() => setIsCreating(!isCreating)}
           >
-            {isCreating ? <><X size={15} /> Abbrechen</> : <><Plus size={15} /> Neues Makro erstellen</>}
+            {isCreating
+              ? <><X size={15} /> {isMinimal ? 'Cancel' : 'Abbrechen'}</>
+              : <><Plus size={15} /> {isMinimal ? 'New Macro' : 'Neues Makro erstellen'}</>}
           </button>
         </div>
       </header>
@@ -129,10 +142,10 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
         <form className="new-macro-drawer" onSubmit={handleCreateMacro}>
           <div className="new-macro-grid">
             <label className="field-group">
-              <span>Makro-Name</span>
+              <span>{isMinimal ? 'Macro Name' : 'Makro-Name'}</span>
               <input
                 type="text"
-                placeholder="z. B. Space & Schimmer, Dreck-Drop ..."
+                placeholder={isMinimal ? 'e.g. Space & Shimmer, Warm Drop...' : 'z. B. Space & Schimmer, Dreck-Drop ...'}
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
                 autoFocus
@@ -141,7 +154,7 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
             </label>
 
             <div className="field-group">
-              <span>Signatur-Farbe</span>
+              <span>{isMinimal ? 'Color' : 'Signatur-Farbe'}</span>
               <div className="color-swatches">
                 {COLOR_PALETTE.map(c => (
                   <button
@@ -150,7 +163,7 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
                     className={'color-swatch ' + (newColor === c ? 'selected' : '')}
                     style={{ backgroundColor: c }}
                     onClick={() => setNewColor(c)}
-                    aria-label={`Farbe ${c}`}
+                    aria-label={`${isMinimal ? 'Color' : 'Farbe'} ${c}`}
                   >
                     {newColor === c && <Check size={12} color="#000" />}
                   </button>
@@ -159,7 +172,7 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
             </div>
 
             <label className="field-group">
-              <span>Erstes Ziel-Parameter</span>
+              <span>{isMinimal ? 'Initial Target Parameter' : 'Erstes Ziel-Parameter'}</span>
               <select
                 value={newTargetParam}
                 onChange={e => {
@@ -170,10 +183,10 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
                   setNewTargetMax(opt.defaultMax);
                 }}
               >
-                {['Effekte', 'Makros', 'Atmosphäre', 'Spuren'].map(cat => (
-                  <optgroup key={cat} label={cat}>
+                {rawCategories.map(cat => (
+                  <optgroup key={cat} label={catLabel(cat)}>
                     {TARGET_PARAM_OPTIONS.filter(o => o.category === cat).map(o => (
-                      <option key={o.param} value={o.param}>{o.label}</option>
+                      <option key={o.param} value={o.param}>{getParamOptionDisplay(o, uiEdition).label}</option>
                     ))}
                   </optgroup>
                 ))}
@@ -182,7 +195,7 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
 
             <div className="field-row-range">
               <label>
-                <span>Min-Wert</span>
+                <span>{isMinimal ? 'Min' : 'Min-Wert'}</span>
                 <input
                   type="number"
                   step="0.01"
@@ -191,7 +204,7 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
                 />
               </label>
               <label>
-                <span>Max-Wert</span>
+                <span>{isMinimal ? 'Max' : 'Max-Wert'}</span>
                 <input
                   type="number"
                   step="0.01"
@@ -205,20 +218,20 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
                   checked={newTargetInverted}
                   onChange={e => setNewTargetInverted(e.target.checked)}
                 />
-                <span>Gegenläufig (Invertiert)</span>
+                <span>{isMinimal ? 'Inverted' : 'Gegenläufig (Invertiert)'}</span>
               </label>
             </div>
           </div>
 
           <div className="new-macro-footer">
             <div className="macro-starter-chips">
-              <span className="helper">Oder Vorlage übernehmen:</span>
-              <button type="button" className="starter-chip" onClick={() => handleAddTemplate(0)}>+ Psybient Shimmer</button>
-              <button type="button" className="starter-chip" onClick={() => handleAddTemplate(1)}>+ Dreck & Space</button>
+              <span className="helper">{isMinimal ? 'Or add preset:' : 'Oder Vorlage übernehmen:'}</span>
+              <button type="button" className="starter-chip" onClick={() => handleAddTemplate(0)}>+ {isMinimal ? 'Ambient Shimmer' : 'Psybient Shimmer'}</button>
+              <button type="button" className="starter-chip" onClick={() => handleAddTemplate(1)}>+ {isMinimal ? 'Grit & Space' : 'Dreck & Space'}</button>
               <button type="button" className="starter-chip" onClick={() => handleAddTemplate(2)}>+ Breakdown Drop</button>
             </div>
             <button type="submit" className="button finish-create-btn">
-              <Sparkles size={15} /> Makro anlegen
+              <Sparkles size={15} /> {isMinimal ? 'Create Macro' : 'Makro anlegen'}
             </button>
           </div>
         </form>
@@ -229,16 +242,17 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
         {customMacros.length === 0 ? (
           <div className="empty-macro-notice">
             <SlidersHorizontal size={24} />
-            <p>Du hast noch keine eigenen Makros angelegt. Erstelle dein erstes oder wähle eine Vorlage!</p>
+            <p>{isMinimal ? 'No custom macros yet. Create one or load a preset.' : 'Du hast noch keine eigenen Makros angelegt. Erstelle dein erstes oder wähle eine Vorlage!'}</p>
             <div className="macro-template-btns">
-              <button type="button" className="button" onClick={() => handleAddTemplate(0)}>+ Vorlage: Psybient Shimmer</button>
-              <button type="button" className="button" onClick={() => handleAddTemplate(1)}>+ Vorlage: Dreck & Space</button>
-              <button type="button" className="button" onClick={() => handleAddTemplate(2)}>+ Vorlage: Breakdown Drop</button>
+              <button type="button" className="button" onClick={() => handleAddTemplate(0)}>+ {isMinimal ? 'Preset: Ambient Shimmer' : 'Vorlage: Psybient Shimmer'}</button>
+              <button type="button" className="button" onClick={() => handleAddTemplate(1)}>+ {isMinimal ? 'Preset: Grit & Space' : 'Vorlage: Dreck & Space'}</button>
+              <button type="button" className="button" onClick={() => handleAddTemplate(2)}>+ {isMinimal ? 'Preset: Breakdown Drop' : 'Vorlage: Breakdown Drop'}</button>
             </div>
           </div>
         ) : (
           customMacros.map(macro => {
             const isExpanded = expandedMacroId === macro.id;
+            const macroDisplayName = getCustomMacroDisplayName(macro.name, uiEdition);
             return (
               <article
                 key={macro.id}
@@ -248,15 +262,17 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
                 <div className="macro-card-top">
                   <div className="macro-title-group">
                     <span className="macro-color-pill" />
-                    <strong>{macro.name}</strong>
-                    <span className="macro-targets-count">{macro.targets.length} {macro.targets.length === 1 ? 'Ziel' : 'Ziele'}</span>
+                    <strong>{macroDisplayName}</strong>
+                    <span className="macro-targets-count">
+                      {macro.targets.length} {isMinimal ? (macro.targets.length === 1 ? 'target' : 'targets') : (macro.targets.length === 1 ? 'Ziel' : 'Ziele')}
+                    </span>
                   </div>
                   <div className="macro-card-buttons">
                     <button
                       type="button"
                       className="icon-button"
                       onClick={() => setExpandedMacroId(isExpanded ? null : macro.id)}
-                      title={isExpanded ? 'Ziele einklappen' : 'Ziele bearbeiten'}
+                      title={isMinimal ? (isExpanded ? 'Collapse targets' : 'Edit targets') : (isExpanded ? 'Ziele einklappen' : 'Ziele bearbeiten')}
                     >
                       {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </button>
@@ -264,7 +280,7 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
                       type="button"
                       className="icon-button delete-btn"
                       onClick={() => handleDeleteMacro(macro.id)}
-                      title="Makro löschen"
+                      title={isMinimal ? 'Delete macro' : 'Makro löschen'}
                     >
                       <Trash2 size={15} />
                     </button>
@@ -274,7 +290,7 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
                 {/* Big Live Slider */}
                 <div className="macro-slider-wrapper">
                   <div className="slider-header-info">
-                    <span className="macro-intensity">Intensität</span>
+                    <span className="macro-intensity">{isMinimal ? 'Amount' : 'Intensität'}</span>
                     <output className="macro-output">{Math.round(macro.value * 100)}%</output>
                   </div>
                   <input
@@ -283,7 +299,7 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
                     max={1}
                     step={0.01}
                     value={macro.value}
-                    aria-label={`Eigenes Makro: ${macro.name}`}
+                    aria-label={`${isMinimal ? 'Custom macro' : 'Eigenes Makro'}: ${macroDisplayName}`}
                     onChange={e => handleSliderChange(macro.id, Number(e.target.value))}
                     className="macro-custom-slider"
                   />
@@ -293,9 +309,10 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
                 <div className="macro-targets-preview">
                   {macro.targets.map(t => {
                     const opt = findParamOption(t.param);
+                    const optDisp = getParamOptionDisplay(opt, uiEdition);
                     return (
                       <span key={t.id} className={'target-pill ' + (t.inverted ? 'inverted' : '')}>
-                        {opt.label}: {t.min} ➔ {t.max} {t.inverted && '(gegenläufig)'}
+                        {optDisp.label}: {t.min} ➔ {t.max} {t.inverted && (isMinimal ? '(inv)' : '(gegenläufig)')}
                       </span>
                     );
                   })}
@@ -304,21 +321,22 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
                 {/* Expanded Target Editor Drawer */}
                 {isExpanded && (
                   <div className="macro-targets-editor">
-                    <h4>Zuweisungen für "{macro.name}":</h4>
+                    <h4>{isMinimal ? `Mappings for "${macroDisplayName}":` : `Zuweisungen für "${macroDisplayName}":`}</h4>
                     <div className="targets-list">
                       {macro.targets.map(t => {
                         const opt = findParamOption(t.param);
+                        const optDisp = getParamOptionDisplay(opt, uiEdition);
                         return (
                           <div key={t.id} className="target-item-row">
-                            <span className="target-name">{opt.label}</span>
+                            <span className="target-name">{optDisp.label}</span>
                             <span className="target-range">
-                              {t.min} bis {t.max} {t.inverted ? '(Invertiert)' : ''}
+                              {t.min} {isMinimal ? 'to' : 'bis'} {t.max} {t.inverted ? (isMinimal ? '(Inverted)' : '(Invertiert)') : ''}
                             </span>
                             <button
                               type="button"
                               className="icon-button"
                               onClick={() => handleRemoveTarget(macro.id, t.id)}
-                              title="Ziel entfernen"
+                              title={isMinimal ? 'Remove target' : 'Ziel entfernen'}
                             >
                               <Trash2 size={13} />
                             </button>
@@ -329,7 +347,7 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
 
                     {/* Add another target form */}
                     <div className="add-target-form">
-                      <span className="helper">Weiteres Ziel hinzufügen:</span>
+                      <span className="helper">{isMinimal ? 'Add target parameter:' : 'Weiteres Ziel hinzufügen:'}</span>
                       <div className="add-target-controls">
                         <select
                           value={targetParamToAdd}
@@ -341,10 +359,10 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
                             setTargetMaxToAdd(opt.defaultMax);
                           }}
                         >
-                          {['Effekte', 'Makros', 'Atmosphäre', 'Spuren'].map(cat => (
-                            <optgroup key={cat} label={cat}>
+                          {rawCategories.map(cat => (
+                            <optgroup key={cat} label={catLabel(cat)}>
                               {TARGET_PARAM_OPTIONS.filter(o => o.category === cat).map(o => (
-                                <option key={o.param} value={o.param}>{o.label}</option>
+                                <option key={o.param} value={o.param}>{getParamOptionDisplay(o, uiEdition).label}</option>
                               ))}
                             </optgroup>
                           ))}
@@ -378,7 +396,7 @@ export function CustomMacroDeck({ session }: { session: JamSession }) {
                           className="button"
                           onClick={() => handleAddTargetToMacro(macro.id)}
                         >
-                          <Plus size={14} /> Ziel addieren
+                          <Plus size={14} /> {isMinimal ? 'Add Target' : 'Ziel addieren'}
                         </button>
                       </div>
                     </div>

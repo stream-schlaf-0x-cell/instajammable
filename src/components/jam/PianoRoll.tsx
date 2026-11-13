@@ -1,4 +1,5 @@
 import { useRef, useMemo, useState, useEffect } from 'react';
+import { useUiEdition } from '../../contexts/UiEditionContext';
 import type { ClipNote } from '../../types/jam';
 
 export const noteName = (n: number) => ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'][((Math.round(n) % 12) + 12) % 12] + (Math.floor(n / 12) - 2);
@@ -24,6 +25,7 @@ export interface PianoRollProps {
 }
 
 export function PianoRoll({ notes, tracks, startBeat = 0, span = 32, cursor, drums = false, selectedId, onSelect, onChange, onAdd, onAudition, grid = 0.25, height = 330, focusedTrack, rootPitchClass, chordTones }: PianoRollProps) {
+  const isMinimal = useUiEdition() === 'minimal';
   const svg = useRef<SVGSVGElement>(null);
   const holder = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(760);
@@ -66,7 +68,7 @@ export function PianoRoll({ notes, tracks, startBeat = 0, span = 32, cursor, dru
   };
   const drag = useRef<{ note: ClipNote; x: number; y: number; resize: boolean } | null>(null);
   return <div className="piano-holder" ref={holder}>
-    <svg ref={svg} viewBox={'0 0 ' + width + ' ' + height} role={onSelect ? 'group' : 'img'} aria-label={drums ? 'Drumspuren mit Velocity' : 'Piano Roll: Tonhöhe, Notenlänge und Velocity'}
+    <svg ref={svg} viewBox={'0 0 ' + width + ' ' + height} role={onSelect ? 'group' : 'img'} aria-label={isMinimal ? (drums ? 'Drum tracks with velocity' : 'Piano roll: pitch, duration and velocity') : (drums ? 'Drumspuren mit Velocity' : 'Piano Roll: Tonhöhe, Notenlänge und Velocity')}
       onDoubleClick={e => { if (onAdd && e.clientX > svg.current!.getBoundingClientRect().left + labelW) { const p = location(e.clientX, e.clientY); onAdd(p.beat, p.note); } }}
       onPointerMove={e => {
         if (!drag.current || !onChange) return;
@@ -112,8 +114,8 @@ export function PianoRoll({ notes, tracks, startBeat = 0, span = 32, cursor, dru
         <line x1={x(cursor)} x2={x(cursor)} y1={top - 4} y2={height - 3} stroke="#f3e5c9" strokeWidth={1.5} />
         <path d={'M ' + (x(cursor) - 4) + ' 21 L ' + (x(cursor) + 4) + ' 21 L ' + x(cursor) + ' 27 Z'} fill="#f3e5c9" />
       </g>}
-      {!visible.length && <text x={width / 2} y={height / 2} textAnchor="middle" className="roll-empty">{drums ? 'Raum für Rhythmus.' : 'Deine nächsten Noten beginnen hier.'}</text>}
+      {!visible.length && <text x={width / 2} y={height / 2} textAnchor="middle" className="roll-empty">{isMinimal ? (drums ? 'Space for rhythm.' : 'Your next notes begin here.') : (drums ? 'Raum für Rhythmus.' : 'Deine nächsten Noten beginnen hier.')}</text>}
     </svg>
-    <div className="roll-readout"><span>{hover ? noteName(hover.note) + ' · MIDI ' + hover.note + ' · Vel ' + hover.velocity + ' · Ch ' + hover.channel : 'Tonhöhe ↑   ·   Zeit →'}</span><span>Velocity</span></div>
+    <div className="roll-readout"><span>{hover ? noteName(hover.note) + ' · MIDI ' + hover.note + ' · Vel ' + hover.velocity + ' · Ch ' + hover.channel : (isMinimal ? 'Pitch ↑   ·   Time →' : 'Tonhöhe ↑   ·   Zeit →')}</span><span>Velocity</span></div>
   </div>;
 }
