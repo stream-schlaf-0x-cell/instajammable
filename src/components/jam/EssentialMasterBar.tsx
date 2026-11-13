@@ -17,8 +17,10 @@ import {
   FolderDown,
   Tv,
   LayoutGrid,
+  Volume2,
 } from 'lucide-react';
 import { JamEngine, SCENES } from '../../engine/jam/JamEngine';
+import { MasterAudio } from '../../engine/audio/audioContext';
 import { noteName } from './PianoRoll';
 import type { JamPosition, JamSession, ChordPattern, ChordPace } from '../../types/jam';
 import type { MusicalScale } from '../../types';
@@ -78,10 +80,43 @@ export function EssentialMasterBar({
   const [bpmDraft, setBpmDraft] = useState(String(session.bpm));
   const tempoFocused = useRef(false);
   const taps = useRef<number[]>([]);
+  const [peakDb, setPeakDb] = useState(-96);
+  const lastTapRef = useRef(0);
 
   useEffect(() => {
     if (!tempoFocused.current) setBpmDraft(String(session.bpm));
   }, [session.bpm]);
+
+  useEffect(() => {
+    if (!position.playing) {
+      setPeakDb(-96);
+      return;
+    }
+    let raf = 0;
+    const tick = () => {
+      setPeakDb(engine.getPeakDb());
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [position.playing]);
+
+  const masterGainLinear = MasterAudio.volumeToGain(session.volume);
+  const masterDbLabel =
+    masterGainLinear <= 0.0001
+      ? '-∞ dB'
+      : `${masterGainLinear >= 1 ? '+' : ''}${(20 * Math.log10(masterGainLinear)).toFixed(1)} dB`;
+  const peakLedClass = !position.playing || peakDb < -40
+    ? 'is-idle'
+    : peakDb > -1
+      ? 'is-red'
+      : peakDb >= -6
+        ? 'is-yellow'
+        : 'is-green';
+
+  const resetMasterVolume = () => {
+    engine.updateSession({ volume: 0.9 });
+  };
 
   const applyBpm = (n: number) => {
     engine.updateSession({ bpm: clampBpm(n) });
@@ -291,6 +326,40 @@ export function EssentialMasterBar({
               {position.playing ? `Takt ${String(position.bar + 1).padStart(3, '0')}` : 'Bereit'}
             </span>
           </div>
+        </div>
+      </div>
+
+      {/* Prominent Master Volume Bar (Touch-ready 44px target, dB display & Peak LED) */}
+      <div className="master-volume-strip" aria-label="Master Lautstärke">
+        <div className="master-volume-label">
+          <Volume2 size={15} />
+          <span>Lautstärke</span>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.01}
+          value={session.volume}
+          aria-label="Master Lautstärke"
+          title="Master-Lautstärke (Doppelklick/Doppeltap = 90 % Reset)"
+          className="master-volume-slider"
+          onChange={e => engine.updateSession({ volume: Number(e.target.value) })}
+          onDoubleClick={resetMasterVolume}
+          onTouchEnd={() => {
+            const now = Date.now();
+            if (now - lastTapRef.current < 320) resetMasterVolume();
+            lastTapRef.current = now;
+          }}
+        />
+        <div className="master-volume-readout">
+          <span className="master-volume-pct">{Math.round(session.volume * 100)}%</span>
+          <span className="master-volume-db">{masterDbLabel}</span>
+          <span
+            className={`master-peak-led ${peakLedClass}`}
+            title={`Ausgangs-Peak: ${peakDb <= -90 ? '-∞' : peakDb.toFixed(1)} dBFS`}
+            aria-label={`Pegel-LED ${peakLedClass}`}
+          />
         </div>
       </div>
 

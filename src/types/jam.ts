@@ -21,10 +21,40 @@ export const CHORD_PACES: readonly ChordPace[] = ['1-bar', '2-bars', '4-bars', '
 export type ChordTexture = 'off' | 'shimmer' | 'octave' | 'sub5th';
 export const CHORD_TEXTURES: readonly ChordTexture[] = ['off', 'shimmer', 'octave', 'sub5th'] as const;
 
+export const DRUM_MODELS = [
+  'woodblock',
+  'shaker',
+  'rim',
+  'conga',
+  'clave',
+  'glassDrop',
+  'tablaTick',
+  'vinylTick',
+  'clap',
+  'brush',
+  'closedHat',
+  'shakerHat',
+  'tick808',
+] as const;
+export type DrumModel = typeof DRUM_MODELS[number];
+
+export const VOICING_FAMILIES = ['triad', 'sus', 'open9', 'quartal', 'power', 'jazz'] as const;
+export type VoicingFamily = typeof VOICING_FAMILIES[number];
+export const DRONE_STYLES = ['rootFifth', 'rootOctave', 'pedalTonic', 'shiftingFifth', 'cluster'] as const;
+export type DroneStyle = typeof DRONE_STYLES[number];
+export const MELODY_STYLES = ['motif', 'ostinato', 'bellDrops', 'neoclassical', 'lofiHook', 'off'] as const;
+export type MelodyStyle = typeof MELODY_STYLES[number];
+export const BASS_STYLES = ['pedal', 'pulse8', 'psyRoll', 'dubOffbeat', 'jazzWalk'] as const;
+export type BassStyle = typeof BASS_STYLES[number];
+
 export interface LayerSettings {
   density: number;
   audioPatch?: LayerAudioPatch;
   drumPatch?: Partial<DrumVoiceParams>;
+  drumModel?: DrumModel;
+  droneStyle?: DroneStyle;
+  melodyStyle?: MelodyStyle;
+  bassStyle?: BassStyle;
   ambientAlgorithm?: 'harmonicDrone' | 'granularDrift';
   rhythmAlgorithm?: 'composed' | 'euclidean' | 'probabilistic' | 'polymetric' | 'markov' | 'densityBurst';
   chordPattern?: ChordPattern;
@@ -117,6 +147,12 @@ export interface JamSession {
   atmosphere?: AtmosphereSettings;
   /** Kick-triggered ducking of pads and atmosphere, 0..1. */
   pump?: number;
+  /** Solina/BBD stereo ensemble chorus amount for pads & drone, 0..1. */
+  ensemble?: number;
+  /** Per-scene harmonic progressions (0-based scale degrees, 4 or 8 chords). */
+  progressions?: number[][];
+  /** Per-scene chord voicing family. */
+  voicingFamily?: VoicingFamily;
   flow?: FlowSettings;
   macros: Record<MacroName, number>;
   layers: JamLayer[];

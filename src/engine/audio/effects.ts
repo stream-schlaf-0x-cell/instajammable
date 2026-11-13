@@ -193,8 +193,8 @@ export class EffectsRack {
     const eqBypassed = this.bypassedEffects.has('eq');
 
     // Delay time glides like a tape head: a slow time constant means a tempo change slides instead of clicking.
-    this.delayLeft.delayTime.setTargetAtTime(bounded(params.delayTime * 0.75, 0.04, 2), now, 0.3);
-    this.delayRight.delayTime.setTargetAtTime(bounded(params.delayTime, 0.04, 2), now, 0.3);
+    this.delayLeft.delayTime.setTargetAtTime(bounded(params.delayTime * 0.75, 0.04, 2), now, 0.2);
+    this.delayRight.delayTime.setTargetAtTime(bounded(params.delayTime, 0.04, 2), now, 0.2);
     this.delayFeedbackLeft.gain.setTargetAtTime(bounded(params.delayFeedback, 0, 0.9), now, SMOOTH);
     this.delayFeedbackRight.gain.setTargetAtTime(bounded(params.delayFeedback, 0, 0.9), now, SMOOTH);
     this.delayWet.gain.setTargetAtTime(delayBypassed ? 0 : bounded(params.delayMix, 0, 0.8), now, SMOOTH);

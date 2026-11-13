@@ -97,7 +97,7 @@ export class AmbientSynth {
     }
     const gain = this.ctx.createGain(); nodes.push(gain); filter2.connect(gain);
     const voiceNorm = Math.min(7, Math.max(1, this.maxSoundingVoices));
-    const peak = Math.max(0.0001, velNorm * 0.56 / Math.sqrt(voiceNorm));
+    const peak = Math.max(0.0001, velNorm * 0.82 / Math.sqrt(voiceNorm));
     const sustain = Math.max(0.0001, duration < requestedAttack ? peak * attackFraction : peak * params.sustain); const release = Math.max(0.08, Math.min(12, params.release));
     const end = time + duration + release;
     gain.gain.setValueAtTime(0.0001, time); gain.gain.linearRampToValueAtTime(peak * attackFraction, time + attack);

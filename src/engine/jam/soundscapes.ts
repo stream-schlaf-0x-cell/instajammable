@@ -1,4 +1,4 @@
-import type { AtmosphereSettings, ChordPattern, MacroName, Timbre } from '../../types/jam';
+import type { AtmosphereSettings, ChordPattern, MacroName, Timbre, VoicingFamily } from '../../types/jam';
 import type { EffectsParams, MusicalScale } from '../../types';
 
 export interface SoundscapePreset {
@@ -11,6 +11,9 @@ export interface SoundscapePreset {
   secondaryVolume?: number;
   secondaryPattern?: ChordPattern;
   scale?: MusicalScale;
+  progressions?: number[][];
+  voicingFamily?: VoicingFamily;
+  ensemble?: number;
   hallAmount: number; // 0..1 (boosts space, reverbDecay and reverbMix)
   atmosphere: AtmosphereSettings;
   effects?: Partial<EffectsParams>;
@@ -29,6 +32,9 @@ export const SOUNDSCAPE_PRESETS: SoundscapePreset[] = [
     secondaryVolume: 0.56,
     secondaryPattern: 'wave',
     scale: 'aeolian',
+    progressions: [[0, 2, 5, 6], [0, 6, 5, 4]],
+    voicingFamily: 'triad',
+    ensemble: 0.65,
     hallAmount: 0.90,
     atmosphere: { kind: 'air', level: 0, tone: 0.58, movement: 0.48 },
     macros: { space: 0.88, warmth: 0.68, density: 0.44, movement: 0.36 },
@@ -45,6 +51,9 @@ export const SOUNDSCAPE_PRESETS: SoundscapePreset[] = [
     secondaryVolume: 0.58,
     secondaryPattern: 'broken',
     scale: 'aeolian',
+    progressions: [[0, 5, 6, 4], [0, 3, 5, 6]],
+    voicingFamily: 'sus',
+    ensemble: 0.60,
     hallAmount: 0.82,
     atmosphere: { kind: 'tape', level: 0, tone: 0.50, movement: 0.45 },
     macros: { space: 0.82, warmth: 0.68, density: 0.48, movement: 0.45 },
@@ -61,6 +70,9 @@ export const SOUNDSCAPE_PRESETS: SoundscapePreset[] = [
     secondaryVolume: 0.62,
     secondaryPattern: 'wave',
     scale: 'lydian',
+    progressions: [[0, 1, 4, 1], [0, 2, 1, 4]],
+    voicingFamily: 'open9',
+    ensemble: 0.75,
     hallAmount: 0.94,
     atmosphere: { kind: 'air', level: 0, tone: 0.64, movement: 0.46 },
     macros: { space: 0.92, warmth: 0.58, density: 0.40, movement: 0.42 },
@@ -77,6 +89,9 @@ export const SOUNDSCAPE_PRESETS: SoundscapePreset[] = [
     secondaryVolume: 0.65,
     secondaryPattern: 'pad',
     scale: 'phrygian',
+    progressions: [[0, 1, 0, 6]],
+    voicingFamily: 'power',
+    ensemble: 0.55,
     hallAmount: 0.86,
     atmosphere: { kind: 'tape', level: 0, tone: 0.44, movement: 0.40 },
     macros: { space: 0.85, warmth: 0.76, density: 0.52, movement: 0.34 },
@@ -93,6 +108,9 @@ export const SOUNDSCAPE_PRESETS: SoundscapePreset[] = [
     secondaryVolume: 0.52,
     secondaryPattern: 'broken',
     scale: 'lydian',
+    progressions: [[0, 1, 0, 4], [0, 4, 1, 5]],
+    voicingFamily: 'sus',
+    ensemble: 0.70,
     hallAmount: 0.86,
     atmosphere: { kind: 'air', level: 0, tone: 0.66, movement: 0.40 },
     macros: { space: 0.86, warmth: 0.50, density: 0.38, movement: 0.40 },
@@ -109,6 +127,9 @@ export const SOUNDSCAPE_PRESETS: SoundscapePreset[] = [
     secondaryVolume: 0.55,
     secondaryPattern: 'wave',
     scale: 'aeolian',
+    progressions: [[0, 2, 5, 4], [0, 5, 2, 6]],
+    voicingFamily: 'open9',
+    ensemble: 0.60,
     hallAmount: 0.74,
     atmosphere: { kind: 'vinyl', level: 0, tone: 0.45, movement: 0.35 },
     macros: { space: 0.74, warmth: 0.80, density: 0.50, movement: 0.34 },
@@ -125,6 +146,9 @@ export const SOUNDSCAPE_PRESETS: SoundscapePreset[] = [
     secondaryVolume: 0.50,
     secondaryPattern: 'wave',
     scale: 'aeolian',
+    progressions: [[0, 3, 4, 5], [0, 5, 6, 4]],
+    voicingFamily: 'jazz',
+    ensemble: 0.35,
     hallAmount: 0.56,
     atmosphere: { kind: 'rain', level: 0, tone: 0.52, movement: 0.35 },
     macros: { space: 0.56, warmth: 0.76, density: 0.52, movement: 0.38 },
@@ -141,6 +165,9 @@ export const SOUNDSCAPE_PRESETS: SoundscapePreset[] = [
     secondaryVolume: 0.54,
     secondaryPattern: 'pad',
     scale: 'aeolian',
+    progressions: [[0, 0, 5, 3], [0, 3, 0, 5]],
+    voicingFamily: 'quartal',
+    ensemble: 0.45,
     hallAmount: 0.78,
     atmosphere: { kind: 'tape', level: 0, tone: 0.40, movement: 0.42 },
     macros: { space: 0.78, warmth: 0.68, density: 0.56, movement: 0.42 },
@@ -157,6 +184,9 @@ export const SOUNDSCAPE_PRESETS: SoundscapePreset[] = [
     secondaryVolume: 0.58,
     secondaryPattern: 'cluster',
     scale: 'lydian',
+    progressions: [[0, 1, 4, 1], [0, 2, 1, 4]],
+    voicingFamily: 'open9',
+    ensemble: 0.75,
     hallAmount: 0.94,
     atmosphere: { kind: 'air', level: 0, tone: 0.60, movement: 0.48 },
     macros: { space: 0.92, warmth: 0.64, density: 0.36, movement: 0.42 },

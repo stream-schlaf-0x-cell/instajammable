@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EffectsRack } from '../engine/audio/effects';
+import { MasterAudio } from '../engine/audio/audioContext';
 import { AtmosphereBed, ATMOSPHERE_SOURCES } from '../engine/audio/atmosphere';
 import { AmbientSynth } from '../engine/audio/ambientSynth';
 import { JamEngine, TIMBRE_PALETTES, effectiveEffects, validateSession, voiceBudget } from '../engine/jam/JamEngine';
@@ -286,4 +287,15 @@ test('Evolve rotates chord and melody timbres within style palettes and respects
   const custom = new JamEngine(createSession('ultimae-drift', 2)); custom.setLayerSettings('chords', { timbre: 'strings' }); for (let i = 0; i < 10; i++) custom.mutate();
   assert.equal(custom.getState().layers.find(l => l.id === 'chords')!.settings.timbre, 'strings', 'a timbre outside the palette is the user\'s choice and stays');
   const techno = new JamEngine(createSession('deep-dub', 2)); for (let i = 0; i < 20; i++) { techno.mutate(); assert.ok(TIMBRE_PALETTES.chords.techno.includes(techno.getState().layers.find(l => l.id === 'chords')!.settings.timbre)); }
+});
+
+test('MasterAudio.volumeToGain maps perceptually, monotonically from 0 to 1.25', () => {
+  assert.equal(MasterAudio.volumeToGain(0), 0);
+  assert.ok(Math.abs(MasterAudio.volumeToGain(1) - 1.25) < 1e-6);
+  let prev = 0;
+  for (let i = 1; i <= 20; i++) {
+    const v = MasterAudio.volumeToGain(i / 20);
+    assert.ok(v > prev, `volumeToGain(${i / 20}) should be strictly increasing`);
+    prev = v;
+  }
 });

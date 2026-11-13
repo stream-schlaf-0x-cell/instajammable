@@ -1,9 +1,10 @@
 import type { AmbientSynthParams, DrumVoiceParams, EffectsParams, StepContext, MusicalScale } from '../../types';
-import { TIMBRES, CHORD_PATTERNS, CHORD_PACES, CHORD_TEXTURES, type ChordPattern, type ChordPace, type ChordTexture, type JamEvent, type JamLayer, type JamPosition, type JamSession, type LayerSettings, type MacroName, type MidiClip, type ClipTempo, type ClipRawEvent, type ArrangementSection, type DrumVoice, type SequenceBlock, type SequencerPosition, type Timbre, type CustomMacro, type CustomMacroTarget, type EffectChainMode, type EffectChainSettings, type EffectModuleId, type EffectModuleConfig, type AtmosphereKind, type JamStyle } from '../../types/jam';
+import { TIMBRES, CHORD_PATTERNS, CHORD_PACES, CHORD_TEXTURES, DRUM_MODELS, DRONE_STYLES, MELODY_STYLES, BASS_STYLES, VOICING_FAMILIES, type DrumModel, type DroneStyle, type MelodyStyle, type BassStyle, type VoicingFamily, type ChordPattern, type ChordPace, type ChordTexture, type JamEvent, type JamLayer, type JamPosition, type JamSession, type LayerSettings, type MacroName, type MidiClip, type ClipTempo, type ClipRawEvent, type ArrangementSection, type DrumVoice, type SequenceBlock, type SequencerPosition, type Timbre, type CustomMacro, type CustomMacroTarget, type EffectChainMode, type EffectChainSettings, type EffectModuleId, type EffectModuleConfig, type AtmosphereKind, type JamStyle } from '../../types/jam';
 import { MasterAudio } from '../audio/audioContext';
 import { AmbientSynth } from '../audio/ambientSynth';
 import { DrumSynth } from '../audio/drumSynth';
 import { EffectsRack } from '../audio/effects';
+import { StereoEnsemble } from '../audio/ensemble';
 import { AtmosphereBed } from '../audio/atmosphere';
 import { AudioRecorder } from '../audio/recorder';
 import { MusicalClock } from '../clock';
@@ -11,7 +12,7 @@ import { WebMidiManager } from '../midi/webMidi';
 import { PRNG } from '../prng';
 import { ModulationMatrix, type ModulationOffsets, type ModulationSources } from '../modulation/modMatrix';
 import { mergeAudioPatch, sanitizeAtmosphere, sanitizeAudioPatch, sanitizeDrumPatch, sanitizeEffectsPatch, sanitizeFlow, sanitizeModRoutes, sanitizePinnedParams, EFFECT_PATCH_RANGES } from './sound';
-import { createSession } from './scenes';
+import { createSession, getSceneEffects } from './scenes';
 import { validateClip } from './storage';
 import { JamComposer, captureNotes, clamp, clipEventsAtStep, holdBarsFor, SCALE_INTERVALS, streamSeed, type Harmony, type PlannedNote } from './music';
 import { findRhythmPreset } from './rhythms';
@@ -227,7 +228,7 @@ export function effectiveEffects(session: JamSession, offsets?: Partial<Modulati
   const space = session.macros.space, warmth = session.macros.warmth; const techno = session.style === 'techno', ambient = session.style === 'ambient';
   const chordsLayer = session.layers?.find(l => l.role === 'chords');
   const isStrings = chordsLayer?.settings.timbre === 'strings' || chordsLayer?.settings.timbre === 'solina';
-  const base: EffectsParams = { delayTime: (60 / session.bpm) * 0.75,
+  const base: EffectsParams = { delayTime: clamp(60 / session.bpm, 0.04, 2),
     delayFeedback: techno ? 0.34 + space * 0.34 : ambient ? 0.26 + space * 0.32 : 0.2 + space * 0.3,
     delayMix: space * (techno ? 0.36 : ambient ? 0.24 : 0.14), delayFlutter: warmth * 0.12 + (session.style === 'lofi' ? 0.06 : 0),
     reverbSize: isStrings ? 0.55 + space * 0.42 : 0.4 + space * 0.5,
@@ -236,7 +237,9 @@ export function effectiveEffects(session: JamSession, offsets?: Partial<Modulati
     masterDrive: warmth * 0.12 + (session.style === 'lofi' ? 0.04 : 0),
     reverbDamping: isStrings ? 0.45 : (techno ? 0.66 : ambient ? 0.55 : 0.5),
     delayTone: techno ? 0.34 : session.style === 'lofi' ? 0.42 : 0.45 };
-  const patch = session.effectsPatch ? { ...base, ...sanitizeEffectsPatch(session.effectsPatch) } : base;
+  const sceneEffects = getSceneEffects(session.sceneId);
+  const withScene = sceneEffects ? { ...base, ...sanitizeEffectsPatch(sceneEffects) } : base;
+  const patch = session.effectsPatch ? { ...withScene, ...sanitizeEffectsPatch(session.effectsPatch) } : withScene;
   patch.delayFeedback = clamp(patch.delayFeedback + (offsets?.delayFeedbackOffset || 0), ...EFFECT_PATCH_RANGES.delayFeedback);
   patch.reverbMix = clamp(patch.reverbMix + (offsets?.reverbMixOffset || 0), ...EFFECT_PATCH_RANGES.reverbMix);
   return patch;
@@ -254,6 +257,18 @@ export function modulationAt(session: JamSession, recent: JamEvent[], beat: numb
     globalChaos: clamp(Math.max(session.evolving ? session.macros.movement : 0, lastMutation ? Math.exp(-Math.max(0, beat - lastMutation.beat) / 4) : 0), 0, 1) };
   return new ModulationMatrix(session.modRoutes || []).process(sources);
 }
+
+export const ROLE_GAIN = {
+  drone: 1.0,
+  chords: 1.15,
+  chords_b: 0.9,
+  bass: 1.35,
+  melody: 1.2,
+  kick: 1.25,
+  snare: 1.0,
+  hihat: 0.85,
+  perc: 0.9,
+} as const;
 
 /** Sounding / releasing voice limits. Releasing is generous for pads: cutting a long tail early is audible. */
 export function voiceBudget(layer: JamLayer, lowResource: boolean): [number, number] {
@@ -273,7 +288,7 @@ export class JamEngine {
   private clock: MusicalClock | null = null;
   private rack: EffectsRack | null = null;
   private drums: DrumSynth | null = null;
-  private padBus: GainNode | null = null; private bed: AtmosphereBed | null = null; private lastAtmosphereKey = '';
+  private padBus: GainNode | null = null; private ensemble: StereoEnsemble | null = null; private bed: AtmosphereBed | null = null; private lastAtmosphereKey = '';
   private pendingEvolve = false; private primeLayers: Set<string> | null = null; private primeSoft = false;
   private nextChordCache: { key: string; name: string } | null = null;
   // Flow: runtime-only, never persisted. Offsets are added on top of whatever the user set, then relaxed back.
@@ -416,7 +431,10 @@ export class JamEngine {
     this.initialized = (async () => {
       const ctx = await this.audio.init();
       this.rack = new EffectsRack(ctx, this.audio.masterGain!);
-      this.padBus = ctx.createGain(); this.padBus.connect(this.rack.inputNode);
+      this.padBus = ctx.createGain();
+      this.ensemble = new StereoEnsemble(ctx);
+      this.padBus.connect(this.ensemble.input);
+      this.ensemble.output.connect(this.rack.inputNode);
       if (AtmosphereBed.supported(ctx)) this.bed = new AtmosphereBed(ctx, this.padBus);
       this.drums = new DrumSynth(ctx, this.rack.inputNode, new PRNG(streamSeed(this.state.seed, 'drum-audio')));
       this.clock = new MusicalClock(ctx); this.clock.setCallbacks(c => this.processStep(c)); this.clock.setBpm(this.state.bpm); this.clock.setSwing(this.state.swing);
@@ -496,22 +514,26 @@ export class JamEngine {
       }
     }
     this.rack?.updateParams(effectiveEffects(this.state, offsets));
+    this.ensemble?.setAmount(this.state.ensemble ?? (this.state.style === 'lofi' ? 0.35 : this.state.style === 'techno' ? 0.45 : 0.6));
     const beat = this.getPosition().beat;
     for (const layer of this.state.layers) {
-      this.pads.get(layer.id)?.updateParams(ambientPatch(layer, this.state, beat, offsets.ambientCutoffOffset), layer.volume);
+      const roleMult = ROLE_GAIN[layer.role === 'drum' ? (layer.drumVoice || 'perc') : layer.role] ?? 1;
+      this.pads.get(layer.id)?.updateParams(ambientPatch(layer, this.state, beat, offsets.ambientCutoffOffset), layer.volume * roleMult);
       if (layer.role === 'chords') {
         const secTimbre = layer.settings.secondaryTimbre || 'shimmer';
-        const secVol = layer.volume * clamp(layer.settings.secondaryVolume ?? 0.55, 0, 1);
+        const secVol = layer.volume * clamp(layer.settings.secondaryVolume ?? 0.55, 0, 1) * ROLE_GAIN.chords_b;
         this.secondaryPads.get(layer.id)?.updateParams(ambientPatch(layer, this.state, beat, offsets.ambientCutoffOffset, secTimbre), secVol);
       }
     }
   }
+  getPeakDb(): number { return this.audio.getPeakDb(); }
   private synthFor(layer: JamLayer, preview = false): AmbientSynth {
     const map = preview ? this.previewPads : this.pads;
     let synth = map.get(layer.id);
     if (!synth) {
       const [sounding, releasing] = voiceBudget(layer, this.state.lowResource);
-      synth = new AmbientSynth(this.audio.ctx!, this.padBus || this.rack!.inputNode, sounding, releasing,
+      const targetNode = (layer.role === 'chords' || layer.role === 'drone') ? (this.padBus || this.rack!.inputNode) : this.rack!.inputNode;
+      synth = new AmbientSynth(this.audio.ctx!, targetNode, sounding, releasing,
         new PRNG(streamSeed(this.state.seed, `${preview ? 'preview-' : ''}${layer.id}-audio`)));
       map.set(layer.id, synth);
     }
@@ -536,20 +558,22 @@ export class JamEngine {
         const voice = layer.drumVoice || 'perc'; const params = drumPatch(voice, session, layer); if (!preview && voice === 'kick') this.duck(time);
         if (preview && !this.previewDrums) this.previewDrums = new DrumSynth(this.audio.ctx!, this.rack!.inputNode, new PRNG(streamSeed(session.seed, 'preview-drums')));
         const drums = preview ? this.previewDrums : this.drums;
-        if (voice === 'kick') drums?.triggerKick(time, note.velocity, params, layer.volume);
-        else if (voice === 'snare') drums?.triggerSnare(time, note.velocity, params, layer.volume);
-        else if (voice === 'hihat') drums?.triggerHiHat(time, note.velocity, params, layer.volume);
-        else drums?.triggerPerc(time, note.velocity, params, layer.volume);
+        const drumVol = layer.volume * (ROLE_GAIN[voice] ?? 1);
+        if (voice === 'kick') drums?.triggerKick(time, note.velocity, params, drumVol);
+        else if (voice === 'snare') drums?.triggerSnare(time, note.velocity, params, drumVol, layer.settings.drumModel);
+        else if (voice === 'hihat') drums?.triggerHiHat(time, note.velocity, params, drumVol, layer.settings.drumModel);
+        else drums?.triggerPerc(time, note.velocity, params, drumVol, layer.settings.drumModel);
       } else if (note.subLayer === 'chords_b') {
         const secTimbre = layer.settings.secondaryTimbre || 'shimmer';
-        const secVol = layer.volume * clamp(layer.settings.secondaryVolume ?? 0.55, 0, 1);
+        const secVol = layer.volume * clamp(layer.settings.secondaryVolume ?? 0.55, 0, 1) * ROLE_GAIN.chords_b;
         const patch = ambientPatch(layer, session, this.getPosition().beat, preview ? 0 : this.modulation().ambientCutoffOffset, secTimbre);
         if (note.soft) patch.attack = Math.min(patch.attack, 0.45);
         this.secondarySynthFor(layer, preview).triggerNote(time, note.note, note.velocity, duration, patch, secVol);
       } else {
         const patch = ambientPatch(layer, session, this.getPosition().beat, preview ? 0 : this.modulation().ambientCutoffOffset);
         if (note.soft) patch.attack = Math.min(patch.attack, 0.4);
-        this.synthFor(layer, preview).triggerNote(time, note.note, note.velocity, duration, patch, layer.volume);
+        const roleMult = ROLE_GAIN[layer.role] ?? 1;
+        this.synthFor(layer, preview).triggerNote(time, note.note, note.velocity, duration, patch, layer.volume * roleMult);
       }
     }
     if (!preview && (session.outputMode === 'midi' || session.outputMode === 'both')) this.midi.scheduleNote(note.channel ?? layer.channel, note.note, note.velocity, perfTime, duration * 1000, layer.id, layer.outputId ?? undefined);
@@ -1885,6 +1909,10 @@ function normalizeLayer(raw: JamLayer, fallback: JamLayer): JamLayer {
     muted: !!raw.muted, solo: !!raw.solo, locked: !!raw.locked, frozen: !!raw.frozen,
     settings: { ...s, density: clamp(s.density, densityMin, densityMax), mutationDensityMin: densityMin, mutationDensityMax: densityMax,
       ...(s.audioPatch !== undefined ? { audioPatch: sanitizeAudioPatch(s.audioPatch) } : {}), ...(s.drumPatch !== undefined ? { drumPatch: sanitizeDrumPatch(s.drumPatch, fallback.drumVoice || 'perc') } : {}),
+      ...(s.drumModel !== undefined && (DRUM_MODELS as readonly string[]).includes(s.drumModel) ? { drumModel: s.drumModel as DrumModel } : {}),
+      ...(s.droneStyle !== undefined && (DRONE_STYLES as readonly string[]).includes(s.droneStyle) ? { droneStyle: s.droneStyle as DroneStyle } : {}),
+      ...(s.melodyStyle !== undefined && (MELODY_STYLES as readonly string[]).includes(s.melodyStyle) ? { melodyStyle: s.melodyStyle as MelodyStyle } : {}),
+      ...(s.bassStyle !== undefined && (BASS_STYLES as readonly string[]).includes(s.bassStyle) ? { bassStyle: s.bassStyle as BassStyle } : {}),
       ...(s.ambientAlgorithm !== undefined ? { ambientAlgorithm: s.ambientAlgorithm === 'granularDrift' ? 'granularDrift' : 'harmonicDrone' } : {}),
       rhythmAlgorithm: ['composed', 'euclidean', 'probabilistic', 'polymetric', 'markov', 'densityBurst'].includes(s.rhythmAlgorithm || '') ? s.rhythmAlgorithm : 'composed', minNote: min, maxNote: max, phraseBars: Math.round(clamp(s.phraseBars, 1, 16)),
       humanizeMs: clamp(s.humanizeMs, 0, 30), velocityMin, velocityMax,
@@ -1922,6 +1950,16 @@ export function validateSession(raw: JamSession): JamSession {
     ...(raw.atmosphere !== undefined ? { atmosphere: sanitizeAtmosphere(raw.atmosphere) } : base.atmosphere ? { atmosphere: base.atmosphere } : {}),
     ...(raw.flow !== undefined ? { flow: sanitizeFlow(raw.flow) } : base.flow ? { flow: base.flow } : {}),
     ...(raw.pump !== undefined ? { pump: clamp(Number(raw.pump), 0, 1) } : base.pump !== undefined ? { pump: base.pump } : {}),
+    ...(raw.ensemble !== undefined ? { ensemble: clamp(Number(raw.ensemble), 0, 1) } : base.ensemble !== undefined ? { ensemble: base.ensemble } : {}),
+    ...(Array.isArray(raw.progressions) ? {
+      progressions: raw.progressions
+        .filter((p): p is number[] => Array.isArray(p) && p.length > 0)
+        .slice(0, 8)
+        .map(p => p.slice(0, 8).map(d => Math.round(clamp(Number(d) || 0, 0, 6))))
+    } : base.progressions ? { progressions: base.progressions } : {}),
+    ...(typeof raw.voicingFamily === 'string' && (VOICING_FAMILIES as readonly string[]).includes(raw.voicingFamily)
+      ? { voicingFamily: raw.voicingFamily as VoicingFamily }
+      : base.voicingFamily ? { voicingFamily: base.voicingFamily } : {}),
     ...(raw.effectsPatch !== undefined ? { effectsPatch: sanitizeEffectsPatch(raw.effectsPatch) } : {}),
     ...(raw.modRoutes !== undefined ? { modRoutes: sanitizeModRoutes(raw.modRoutes) } : {}),
     ...(raw.pinnedParams !== undefined ? { pinnedParams: sanitizePinnedParams(raw.pinnedParams, base) } : {}),

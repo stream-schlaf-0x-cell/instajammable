@@ -2125,6 +2125,88 @@
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
 }
 
+.master-volume-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 12px;
+  margin-bottom: 12px;
+  background: #192021;
+  border: 1px solid #2a3535;
+  border-radius: 6px;
+  min-height: 44px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.master-volume-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #b7c6c3;
+  white-space: nowrap;
+}
+
+.master-volume-slider {
+  flex: 1 1 120px;
+  min-width: 80px;
+  height: 44px;
+  margin: 0;
+  accent-color: var(--amber);
+  cursor: pointer;
+}
+
+.master-volume-readout {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.master-volume-pct {
+  color: #ede8dd;
+  font-weight: 600;
+  min-width: 34px;
+  text-align: right;
+}
+
+.master-volume-db {
+  color: #8fa09d;
+  min-width: 56px;
+  text-align: right;
+}
+
+.master-peak-led {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  background: #2f3b3a;
+  border: 1px solid #445352;
+  transition: background-color 0.06s ease, box-shadow 0.06s ease;
+}
+
+.master-peak-led.is-green {
+  background: #4ade80;
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.7);
+}
+
+.master-peak-led.is-yellow {
+  background: #fbbf24;
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.75);
+}
+
+.master-peak-led.is-red {
+  background: #f87171;
+  box-shadow: 0 0 10px rgba(248, 113, 113, 0.85);
+}
+
 .master-bar-top-row {
   display: flex;
   align-items: center;

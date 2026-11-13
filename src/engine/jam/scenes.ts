@@ -1,12 +1,13 @@
-import type { AtmosphereSettings, FlowSettings, JamLayer, JamSession, MacroName, SceneDefinition } from '../../types/jam';
+import type { AtmosphereSettings, BassStyle, DroneStyle, DrumModel, FlowSettings, JamLayer, JamSession, MacroName, MelodyStyle, SceneDefinition, VoicingFamily } from '../../types/jam';
+import type { EffectsParams } from '../../types';
 /**
  * Scene catalogue. To add a scene: append one entry here and, if it needs its own character,
  * one entry in SCENE_TUNING below. Everything else (UI list, preview, validation) picks it up.
  */
 export const SCENES: SceneDefinition[] = [
-  { id: 'dorian-dawn', name: 'Dorian Dawn', description: 'Warm, open chords with an ethereal shimmer halo. Quiet motifs. Room for your keys.', style: 'ambient', bpm: 78, root: 50, scale: 'aeolian', mood: 'Ambient · S1gns Of L1fe' },
+  { id: 'dorian-dawn', name: 'Dorian Dawn', description: 'Warm, open chords with an ethereal shimmer halo. Quiet motifs. Room for your keys.', style: 'ambient', bpm: 76, root: 50, scale: 'aeolian', mood: 'Ambient · S1gns Of L1fe' },
   { id: 'tidal-glass', name: 'Tidal Glass', description: 'Luminous suspended harmony, crystalline glass pads and bell-like fragments.', style: 'ambient', bpm: 72, root: 48, scale: 'lydian', mood: 'Ambient · Spotify' },
-  { id: 'night-orbit', name: 'Night Orbit', description: 'Deep cathedral fifth-drones, minor dual-pads and a slow cosmic pulse.', style: 'ambient', bpm: 66, root: 45, scale: 'aeolian', mood: 'Ambient · Asura' },
+  { id: 'night-orbit', name: 'Night Orbit', description: 'Deep cathedral fifth-drones, minor dual-pads and a slow cosmic pulse.', style: 'ambient', bpm: 64, root: 45, scale: 'aeolian', mood: 'Ambient · Asura' },
   { id: 'moss-pulse', name: 'Moss Pulse', description: 'A repeating organic groove underneath interwoven CBL pads.', style: 'ambient', bpm: 92, root: 55, scale: 'aeolian', mood: 'Groove · CBL' },
   { id: 'ultimae-drift', name: 'Ultimae Drift', description: 'Deep, wide Solina & Shimmer dual-pads over a slow half-time pulse. Bells drift on top.', style: 'ambient', bpm: 84, root: 45, scale: 'aeolian', mood: 'Ultimae · Aes Dana' },
   { id: 'still-water', name: 'Still Water', description: 'No drums. A held root, slow breathing dual-pads and long silences.', style: 'ambient', bpm: 56, root: 48, scale: 'lydian', mood: 'Calm · Spotify' },
@@ -19,7 +20,7 @@ export const SCENES: SceneDefinition[] = [
   { id: 'streamlight', name: 'Streamlight', description: 'Rainy lo-fi made for long improvised sessions. Felt celeste & warm shimmer pads.', style: 'lofi', bpm: 70, root: 46, scale: 'aeolian', mood: 'Lo-Fi · Chillhop' },
   { id: 'cbl-hydroponic', name: 'Hydroponic Drift', description: 'Carbon Based Lifeforms vibes. Rolling sub, 7/8 polymetric shakers and lush dual-pads.', style: 'ambient', bpm: 86, root: 50, scale: 'aeolian', mood: 'Psybient · CBL' },
   { id: 'cbl-interloper', name: 'Interloper Sky', description: 'Deep psybient downtempo. Resonant warm bass, Solina + Shimmer pads and wide tape delays.', style: 'ambient', bpm: 90, root: 45, scale: 'aeolian', mood: 'Psybient · CBL' },
-  { id: 'symphonic-dawn', name: 'Symphonic Strings', description: 'Großes Streichorchester mit Solina-Ensemble, Kathedralen-Hall und sanft atmender Atmosphäre.', style: 'ambient', bpm: 72, root: 50, scale: 'aeolian', mood: 'Orchestral' },
+  { id: 'symphonic-dawn', name: 'Symphonic Strings', description: 'Großes Streichorchester mit Solina-Ensemble, Kathedralen-Hall und sanft atmender Atmosphäre.', style: 'ambient', bpm: 70, root: 50, scale: 'aeolian', mood: 'Orchestral' },
   { id: 'cbl-carbon-oasis', name: 'Carbon Oasis', description: 'CBL Psybient: polymetrische Shaker, warmer Subbass und Solina/Shimmer Dual-Pads in endlosen Delays.', style: 'ambient', bpm: 88, root: 50, scale: 'lydian', mood: 'Psybient · CBL' },
   { id: 'nils-felt-hall', name: 'Nordic Felt Hall', description: 'Gefilzte Klaviertöne mit ätherischem Air-Teppich, weiter Kathedralen-Raum und warmer Kontrabass.', style: 'ambient', bpm: 68, root: 48, scale: 'aeolian', mood: 'Neo-Classical' },
   { id: 'solar-fields-orbit', name: 'Solar Fields Orbit', description: 'Ultimae Downtempo: 16tel Sub-Arpeggio, luminöse Glas- & Shimmer-Flächen und weite Stereo-Echos.', style: 'ambient', bpm: 94, root: 45, scale: 'lydian', mood: 'Psybient · Ultimae' },
@@ -27,7 +28,7 @@ export const SCENES: SceneDefinition[] = [
   { id: 'jon-hopkins-pulse', name: 'Singularity Pulse', description: 'Organische IDM: Lebendige Glockenmuster, Shimmer/Solina Dual-Flächen und warmer Bass-Puls.', style: 'ambient', bpm: 84, root: 46, scale: 'aeolian', mood: 'Organic IDM' },
   { id: 'eno-apollo-zero', name: 'Apollo Zero Gravity', description: 'S1gns Of L1fe & Eno Space Ambient: Unendlicher Hall, schwebende Lydische Dual-Flächen, Schwerelosigkeit.', style: 'ambient', bpm: 52, root: 52, scale: 'lydian', mood: 'Deep Space' },
   { id: 'tokyo-midnight-rain', name: 'Tokyo Midnight Rain', description: 'Kupla & Chillhop Flow: Warme Rhodes mit Celeste/Shimmer-Pad, Fensterregen, dicke Drums und Jazz-Bass.', style: 'lofi', bpm: 72, root: 50, scale: 'aeolian', mood: 'Lo-Fi Chill' },
-  { id: 'cathedral-adagio', name: 'Cathedral Adagio', description: 'Großes Streicher-Adagio: butterweicher Bogenstrich (Solina + Strings), sakrale Weite und mächtige Drones.', style: 'ambient', bpm: 62, root: 45, scale: 'aeolian', mood: 'Orchestral · Asura' },
+  { id: 'cathedral-adagio', name: 'Cathedral Adagio', description: 'Großes Streicher-Adagio: butterweicher Bogenstrich (Solina + Strings), sakrale Weite und mächtige Drones.', style: 'ambient', bpm: 60, root: 45, scale: 'aeolian', mood: 'Orchestral · Asura' },
 ];
 const COLORS = ['#9bbba7', '#e4be76', '#9dadd5', '#d39cac', '#db9d76', '#c8be93', '#93c2c6', '#b2a5cf'];
 
@@ -40,6 +41,10 @@ interface LayerTuning {
   humanizeMs?: number;
   audioPatch?: JamLayer['settings']['audioPatch'];
   drumPatch?: JamLayer['settings']['drumPatch'];
+  drumModel?: DrumModel;
+  droneStyle?: DroneStyle;
+  melodyStyle?: MelodyStyle;
+  bassStyle?: BassStyle;
   rhythmAlgorithm?: JamLayer['settings']['rhythmAlgorithm'];
   chordPattern?: JamLayer['settings']['chordPattern'];
   chordPace?: JamLayer['settings']['chordPace'];
@@ -50,7 +55,10 @@ interface LayerTuning {
   secondaryPattern?: JamLayer['settings']['chordPattern'];
 }
 interface Tuning {
-  macros?: Partial<Record<MacroName, number>>; swing?: number; atmosphere?: AtmosphereSettings; pump?: number; flow?: FlowSettings;
+  macros?: Partial<Record<MacroName, number>>; swing?: number; atmosphere?: AtmosphereSettings; pump?: number; ensemble?: number; flow?: FlowSettings;
+  progressions?: number[][];
+  voicingFamily?: VoicingFamily;
+  effectsPatch?: JamSession['effectsPatch'];
   layers?: Partial<Record<string, LayerTuning>>;
 }
 const NO_DRUMS: Tuning['layers'] = { kick: { muted: true }, snare: { muted: true }, hihat: { muted: true }, perc: { muted: true } };
@@ -59,412 +67,563 @@ const bed = (kind: AtmosphereSettings['kind'], _level: number, tone = 0.5, movem
 };
 const SCENE_TUNING: Record<string, Tuning> = {
   'symphonic-dawn': {
-    atmosphere: bed('air', 0.06, 0.58, 0.45),
+    atmosphere: bed('air', 0, 0.58, 0.45),
+    ensemble: 0.6,
+    progressions: [[0, 2, 5, 6], [0, 6, 5, 4]],
+    voicingFamily: 'triad',
+    effectsPatch: { reverbSize: 0.92, reverbDecay: 7.4, reverbMix: 0.48, delayFeedback: 0.42 },
     macros: { space: 0.88, warmth: 0.68, movement: 0.36, density: 0.44 },
     layers: {
-      drone: { timbre: 'root', volume: 0.50 },
+      drone: { timbre: 'root', volume: 0.50, droneStyle: 'rootFifth' },
       chords: {
         timbre: 'strings', volume: 0.58, density: 0.82, chordPattern: 'wave', chordPace: '4-bars', chordTexture: 'octave',
+        audioPatch: { filterCutoff: 2950 },
         secondaryEnabled: true, secondaryTimbre: 'solina', secondaryVolume: 0.58, secondaryPattern: 'pad'
       },
-      melody: { timbre: 'glass', volume: 0.35, density: 0.28 },
-      kick: { volume: 0.30, density: 0.38 },
-      snare: { volume: 0.18, density: 0.35 },
-      hihat: { volume: 0.22, density: 0.42 },
-      perc: { volume: 0.28, density: 0.36 },
+      bass: { bassStyle: 'pedal', volume: 0.42 },
+      melody: { timbre: 'glass', volume: 0.35, density: 0.30, melodyStyle: 'neoclassical' },
+      kick: { muted: true, volume: 0.20, density: 0.30 },
+      snare: { volume: 0.18, density: 0.30, drumModel: 'brush' },
+      hihat: { muted: true, volume: 0.18, density: 0.30, drumModel: 'shakerHat' },
+      perc: { volume: 0.22, density: 0.28, drumModel: 'glassDrop' },
     }
   },
   'dorian-dawn': {
-    atmosphere: bed('tape', 0.05, 0.46),
+    atmosphere: bed('tape', 0, 0.46),
+    ensemble: 0.65,
+    progressions: [[0, 5, 2, 6], [0, 5, 3, 4]],
+    voicingFamily: 'open9',
+    effectsPatch: { reverbSize: 0.88, reverbDecay: 7.2, reverbMix: 0.46, delayFeedback: 0.45 },
     macros: { space: 0.78, warmth: 0.66, movement: 0.38, density: 0.44 },
     layers: {
-      drone: { timbre: 'root', volume: 0.54 },
+      drone: { timbre: 'root', volume: 0.54, droneStyle: 'rootFifth' },
       chords: {
         timbre: 'solina', volume: 0.54, chordPattern: 'pad', chordPace: '4-bars', chordTexture: 'shimmer',
+        audioPatch: { filterCutoff: 2700 },
         secondaryEnabled: true, secondaryTimbre: 'shimmer', secondaryVolume: 0.55, secondaryPattern: 'wave'
-      }
+      },
+      bass: { bassStyle: 'pedal', volume: 0.44 },
+      melody: { timbre: 'glass', density: 0.36, melodyStyle: 'motif' },
+      kick: { volume: 0.18, density: 0.25 },
+      snare: { muted: true, volume: 0.14, drumModel: 'brush' },
+      hihat: { muted: true, volume: 0.14, drumModel: 'closedHat' },
+      perc: { volume: 0.18, density: 0.26, drumModel: 'glassDrop' },
     }
   },
   'tidal-glass': {
-    atmosphere: bed('air', 0.05, 0.60, 0.52),
+    atmosphere: bed('air', 0, 0.60, 0.52),
+    ensemble: 0.7,
+    progressions: [[0, 1, 0, 4], [0, 4, 1, 5]],
+    voicingFamily: 'sus',
+    effectsPatch: { reverbSize: 0.92, reverbDecay: 8.2, reverbMix: 0.50, delayFeedback: 0.48 },
     macros: { space: 0.84, warmth: 0.48, movement: 0.40, density: 0.40 },
     layers: {
-      drone: { timbre: 'air', volume: 0.54 },
+      drone: { timbre: 'air', volume: 0.54, droneStyle: 'rootOctave' },
       chords: {
         timbre: 'shimmer', volume: 0.54, chordPattern: 'wave', chordPace: '4-bars', chordTexture: 'shimmer',
+        audioPatch: { filterCutoff: 4200 },
         secondaryEnabled: true, secondaryTimbre: 'celeste', secondaryVolume: 0.52, secondaryPattern: 'broken'
       },
-      melody: { timbre: 'bell', density: 0.28 }
+      bass: { bassStyle: 'pedal', volume: 0.40 },
+      melody: { timbre: 'bell', density: 0.32, melodyStyle: 'bellDrops' },
+      snare: { muted: true, volume: 0.14, drumModel: 'rim' },
+      hihat: { volume: 0.18, density: 0.35, drumModel: 'shakerHat' },
+      perc: { volume: 0.24, density: 0.32, drumModel: 'glassDrop' },
     }
   },
   'night-orbit': {
-    atmosphere: bed('air', 0.05, 0.38, 0.32),
+    atmosphere: bed('air', 0, 0.38, 0.32),
+    ensemble: 0.6,
+    progressions: [[0, 0, 5, 5, 3, 3, 6, 6]],
+    voicingFamily: 'power',
+    effectsPatch: { reverbSize: 0.94, reverbDecay: 8.6, reverbMix: 0.50, delayFeedback: 0.50 },
     macros: { space: 0.86, warmth: 0.72, movement: 0.34, density: 0.42 },
     layers: {
-      drone: { timbre: 'root', volume: 0.62 },
+      ...NO_DRUMS,
+      drone: { timbre: 'root', volume: 0.62, droneStyle: 'pedalTonic' },
       chords: {
         timbre: 'wash', volume: 0.54, chordPattern: 'pad', chordPace: '4-bars', chordTexture: 'sub5th',
+        audioPatch: { filterCutoff: 900 },
         secondaryEnabled: true, secondaryTimbre: 'solina', secondaryVolume: 0.60, secondaryPattern: 'wave'
-      }
+      },
+      bass: { bassStyle: 'pedal', volume: 0.46 },
+      melody: { timbre: 'bell', density: 0.28, melodyStyle: 'bellDrops' },
+      perc: { muted: true, drumModel: 'clave' },
     }
   },
   'moss-pulse': {
-    atmosphere: bed('tape', 0.05, 0.50),
+    atmosphere: bed('tape', 0, 0.50),
     pump: 0.20,
+    ensemble: 0.55,
+    progressions: [[0, 5, 3, 6]],
+    voicingFamily: 'sus',
+    effectsPatch: { reverbSize: 0.82, reverbDecay: 5.2, reverbMix: 0.36, delayFeedback: 0.52 },
     flow: { enabled: true, bars: 16, depth: 0.5 },
     layers: {
-      drone: { timbre: 'root', volume: 0.52 },
+      drone: { timbre: 'root', volume: 0.52, droneStyle: 'shiftingFifth' },
       chords: {
         timbre: 'wash', volume: 0.54, chordPattern: 'pulse', chordPace: '4-bars', chordTexture: 'sub5th',
+        audioPatch: { filterCutoff: 2050 },
         secondaryEnabled: true, secondaryTimbre: 'shimmer', secondaryVolume: 0.52, secondaryPattern: 'wave'
-      }
+      },
+      bass: { bassStyle: 'psyRoll', volume: 0.62, density: 0.82 },
+      melody: { timbre: 'bell', density: 0.48, melodyStyle: 'ostinato' },
+      snare: { drumModel: 'rim' },
+      hihat: { drumModel: 'closedHat' },
+      perc: { drumModel: 'shaker' },
     }
   },
   'ultimae-drift': {
-    atmosphere: bed('air', 0.05, 0.52, 0.50),
+    atmosphere: bed('air', 0, 0.52, 0.50),
     pump: 0.22,
+    ensemble: 0.6,
+    progressions: [[0, 2, 5, 4], [0, 5, 2, 6]],
+    voicingFamily: 'open9',
+    effectsPatch: { reverbSize: 0.86, reverbDecay: 5.8, reverbMix: 0.38, delayFeedback: 0.54 },
     macros: { space: 0.84, warmth: 0.68, movement: 0.46, density: 0.48 },
     flow: { enabled: true, bars: 16, depth: 0.55 },
     layers: {
-      drone: { timbre: 'root', volume: 0.60 },
+      drone: { timbre: 'root', volume: 0.60, droneStyle: 'rootFifth' },
       chords: {
         timbre: 'solina', volume: 0.56, density: 0.82, chordPattern: 'pulse', chordPace: '4-bars', chordTexture: 'shimmer',
+        audioPatch: { filterCutoff: 2450 },
         secondaryEnabled: true, secondaryTimbre: 'shimmer', secondaryVolume: 0.56, secondaryPattern: 'wave'
       },
-      bass: { volume: 0.62, density: 0.58 },
-      melody: { timbre: 'bell', density: 0.42 },
+      bass: { bassStyle: 'pulse8', volume: 0.62, density: 0.72 },
+      melody: { timbre: 'bell', density: 0.42, melodyStyle: 'motif' },
       kick: { volume: 0.42, density: 0.55 },
-      snare: { volume: 0.24, density: 0.50 },
-      hihat: { volume: 0.24, density: 0.45 },
-      perc: { volume: 0.36, density: 0.45 }
+      snare: { volume: 0.24, density: 0.50, drumModel: 'rim' },
+      hihat: { volume: 0.24, density: 0.45, drumModel: 'shakerHat' },
+      perc: { volume: 0.36, density: 0.45, drumModel: 'tablaTick' }
     }
   },
   'still-water': {
-    atmosphere: bed('air', 0.05, 0.42, 0.35),
+    atmosphere: bed('air', 0, 0.42, 0.35),
+    ensemble: 0.7,
+    progressions: [[0, 4, 0, 1]],
+    voicingFamily: 'sus',
+    effectsPatch: { reverbSize: 0.94, reverbDecay: 9.2, reverbMix: 0.52, delayFeedback: 0.40 },
     macros: { space: 0.88, warmth: 0.56, movement: 0.26, density: 0.30 },
     layers: {
       ...NO_DRUMS,
-      drone: { timbre: 'root', volume: 0.62 },
+      drone: { timbre: 'root', volume: 0.56, droneStyle: 'cluster' },
       chords: {
         timbre: 'wash', volume: 0.52, chordPattern: 'wave', chordPace: '4-bars', chordTexture: 'shimmer',
+        audioPatch: { filterCutoff: 1950 },
         secondaryEnabled: true, secondaryTimbre: 'air', secondaryVolume: 0.58, secondaryPattern: 'pad'
       },
-      bass: { volume: 0.32, density: 0.30 },
-      melody: { timbre: 'celeste', density: 0.22 }
+      bass: { bassStyle: 'pedal', volume: 0.30, density: 0.30 },
+      melody: { timbre: 'celeste', density: 0.28, melodyStyle: 'bellDrops' },
+      perc: { muted: true, drumModel: 'vinylTick' },
     }
   },
   'rain-window': {
-    atmosphere: bed('rain', 0.06, 0.54, 0.30),
+    atmosphere: bed('rain', 0, 0.54, 0.30),
+    ensemble: 0.4,
+    progressions: [[0, 3, 5, 4]],
+    voicingFamily: 'triad',
+    effectsPatch: { reverbSize: 0.80, reverbDecay: 4.8, reverbMix: 0.36, delayFeedback: 0.36 },
     macros: { space: 0.80, warmth: 0.68, movement: 0.28, density: 0.32 },
     layers: {
       ...NO_DRUMS,
-      drone: { timbre: 'root', volume: 0.50 },
+      drone: { timbre: 'root', volume: 0.50, droneStyle: 'rootFifth' },
       chords: {
         timbre: 'keys', volume: 0.54, chordPattern: 'broken', chordPace: '4-bars', chordTexture: 'octave',
+        audioPatch: { filterCutoff: 2150 },
         secondaryEnabled: true, secondaryTimbre: 'shimmer', secondaryVolume: 0.50, secondaryPattern: 'wave'
       },
-      bass: { volume: 0.32, density: 0.30 },
-      melody: { timbre: 'celeste', density: 0.28, velocityMax: 70 }
+      bass: { bassStyle: 'pedal', volume: 0.30, density: 0.30 },
+      melody: { timbre: 'celeste', density: 0.32, velocityMax: 70, melodyStyle: 'motif' },
+      perc: { muted: true, drumModel: 'shaker' },
     }
   },
   'deep-dub': {
     swing: 0.10,
-    atmosphere: bed('tape', 0.05, 0.48, 0.35),
+    atmosphere: bed('tape', 0, 0.48, 0.35),
     pump: 0.42,
+    ensemble: 0.45,
+    progressions: [[0, 0, 5, 3]],
+    voicingFamily: 'open9',
+    effectsPatch: { reverbSize: 0.78, reverbDecay: 4.2, reverbMix: 0.34, delayFeedback: 0.58 },
     macros: { space: 0.72, warmth: 0.64, movement: 0.42, density: 0.60 },
     flow: { enabled: true, bars: 16, depth: 0.6 },
     layers: {
-      drone: { timbre: 'root', volume: 0.40, density: 0.82 },
+      drone: { timbre: 'root', volume: 0.40, density: 0.82, droneStyle: 'rootFifth' },
       chords: {
         timbre: 'dub', volume: 0.60, density: 0.85, chordPattern: 'syncopated', chordPace: '4-bars',
+        audioPatch: { filterCutoff: 950 },
         secondaryEnabled: true, secondaryTimbre: 'air', secondaryVolume: 0.48, secondaryPattern: 'pad'
       },
-      bass: { timbre: 'warm', volume: 0.72, density: 0.90 },
-      melody: { timbre: 'bell', volume: 0.38, density: 0.26 },
+      bass: { timbre: 'warm', volume: 0.72, density: 0.90, bassStyle: 'dubOffbeat' },
+      melody: { timbre: 'bell', volume: 0.34, density: 0.26, melodyStyle: 'bellDrops' },
       kick: { volume: 0.90, density: 0.95, drumPatch: { pitch: 46, decay: 0.55, tone: 0.10, drive: 0.12 } },
-      snare: { volume: 0.40, density: 0.55, drumPatch: { decay: 0.20, tone: 0.18 } },
-      hihat: { volume: 0.34, density: 0.70, drumPatch: { tone: 0.0, decay: 0.05 } },
-      perc: { volume: 0.44, density: 0.55, drumPatch: { pitch: 48, decay: 0.16 } }
+      snare: { volume: 0.40, density: 0.55, drumModel: 'clap', drumPatch: { decay: 0.20, tone: 0.18 } },
+      hihat: { volume: 0.34, density: 0.70, drumModel: 'closedHat', drumPatch: { tone: 0.0, decay: 0.05 } },
+      perc: { volume: 0.44, density: 0.55, drumModel: 'rim', drumPatch: { pitch: 48, decay: 0.16 } }
     }
   },
   'night-rumble': {
     swing: 0.06,
-    atmosphere: bed('air', 0.05, 0.32, 0.40),
+    atmosphere: bed('air', 0, 0.32, 0.40),
     pump: 0.50,
+    ensemble: 0.4,
+    progressions: [[0, 1, 0, 6]],
+    voicingFamily: 'power',
+    effectsPatch: { reverbSize: 0.76, reverbDecay: 3.6, reverbMix: 0.32, delayFeedback: 0.55, masterDrive: 0.14 },
     macros: { space: 0.78, warmth: 0.72, movement: 0.35, density: 0.50 },
     flow: { enabled: true, bars: 32, depth: 0.6 },
     layers: {
-      drone: { timbre: 'root', volume: 0.54, density: 0.90 },
+      drone: { timbre: 'root', volume: 0.54, density: 0.90, droneStyle: 'pedalTonic' },
       chords: {
         timbre: 'dub', volume: 0.50, density: 0.52, chordPattern: 'syncopated', chordPace: '4-bars',
+        audioPatch: { filterCutoff: 760 },
         secondaryEnabled: true, secondaryTimbre: 'solina', secondaryVolume: 0.52, secondaryPattern: 'wave'
       },
-      bass: { timbre: 'warm', volume: 0.75, density: 0.95 },
-      melody: { muted: true },
+      bass: { timbre: 'warm', volume: 0.75, density: 0.95, bassStyle: 'dubOffbeat' },
+      melody: { muted: true, melodyStyle: 'off' },
       kick: { volume: 0.95, density: 1, drumPatch: { pitch: 42, decay: 0.70, tone: 0.06, drive: 0.18 } },
-      snare: { volume: 0.30, density: 0.30, drumPatch: { decay: 0.24, tone: 0.12 } },
-      hihat: { volume: 0.26, density: 0.45, drumPatch: { tone: 0.0, decay: 0.05 } },
-      perc: { volume: 0.32, density: 0.40, drumPatch: { pitch: 44, decay: 0.20 } }
+      snare: { volume: 0.30, density: 0.30, drumModel: 'rim', drumPatch: { decay: 0.24, tone: 0.12 } },
+      hihat: { volume: 0.26, density: 0.45, drumModel: 'closedHat', drumPatch: { tone: 0.0, decay: 0.05 } },
+      perc: { volume: 0.32, density: 0.40, drumModel: 'tick808', drumPatch: { pitch: 44, decay: 0.20 } }
     }
   },
   'dusty-keys': {
-    atmosphere: bed('vinyl', 0.04, 0.52, 0.30),
+    atmosphere: bed('vinyl', 0, 0.52, 0.30),
     pump: 0.28,
     swing: 0.38,
+    ensemble: 0.35,
+    voicingFamily: 'jazz',
+    effectsPatch: { reverbSize: 0.56, reverbDecay: 2.2, reverbMix: 0.22, masterDrive: 0.15 },
     macros: { space: 0.56, warmth: 0.78, movement: 0.42, density: 0.62 },
     flow: { enabled: true, bars: 8, depth: 0.55 },
     layers: {
-      drone: { timbre: 'warm', volume: 0.26 },
+      drone: { timbre: 'warm', volume: 0.22, droneStyle: 'rootFifth' },
       chords: {
         timbre: 'keys', volume: 0.64, density: 0.85, chordPattern: 'broken', chordPace: '2-bars',
+        audioPatch: { filterCutoff: 2300 },
         secondaryEnabled: true, secondaryTimbre: 'celeste', secondaryVolume: 0.48, secondaryPattern: 'wave'
       },
-      bass: { timbre: 'warm', volume: 0.82, density: 0.88 },
+      bass: { timbre: 'warm', volume: 0.82, density: 0.88, bassStyle: 'jazzWalk' },
+      melody: { timbre: 'keys', density: 0.42, melodyStyle: 'lofiHook' },
       kick: { volume: 0.88, density: 0.75 },
-      snare: { volume: 0.68, density: 0.55 },
-      hihat: { volume: 0.34, density: 0.65 },
-      perc: { volume: 0.32, density: 0.45 }
+      snare: { volume: 0.68, density: 0.55, drumModel: 'brush' },
+      hihat: { volume: 0.34, density: 0.65, drumModel: 'closedHat' },
+      perc: { volume: 0.28, density: 0.45, drumModel: 'vinylTick' }
     }
   },
   'late-train': {
-    atmosphere: bed('vinyl', 0.04, 0.48, 0.30),
+    atmosphere: bed('vinyl', 0, 0.48, 0.30),
     pump: 0.26,
     swing: 0.36,
+    ensemble: 0.35,
+    progressions: [[0, 5, 3, 4], [0, 3, 6, 2]],
+    voicingFamily: 'jazz',
+    effectsPatch: { reverbSize: 0.58, reverbDecay: 2.4, reverbMix: 0.24, masterDrive: 0.14 },
     macros: { space: 0.58, warmth: 0.76, movement: 0.45, density: 0.60 },
     flow: { enabled: true, bars: 8, depth: 0.55 },
     layers: {
-      drone: { timbre: 'warm', volume: 0.28 },
+      drone: { timbre: 'warm', volume: 0.22, droneStyle: 'rootFifth' },
       chords: {
         timbre: 'keys', volume: 0.62, density: 0.82, chordPattern: 'syncopated', chordPace: '2-bars',
+        audioPatch: { filterCutoff: 2100 },
         secondaryEnabled: true, secondaryTimbre: 'solina', secondaryVolume: 0.46, secondaryPattern: 'pad'
       },
-      bass: { timbre: 'warm', volume: 0.80, density: 0.85 },
+      bass: { timbre: 'warm', volume: 0.80, density: 0.85, bassStyle: 'jazzWalk' },
+      melody: { timbre: 'celeste', density: 0.40, melodyStyle: 'lofiHook' },
       kick: { volume: 0.86, density: 0.72 },
-      snare: { volume: 0.66, density: 0.54 },
-      hihat: { volume: 0.34, density: 0.62 }
+      snare: { volume: 0.66, density: 0.54, drumModel: 'clap' },
+      hihat: { volume: 0.34, density: 0.62, drumModel: 'closedHat' },
+      perc: { volume: 0.26, density: 0.42, drumModel: 'shaker' }
     }
   },
   'blue-hour': {
     swing: 0.40,
-    atmosphere: bed('vinyl', 0.05, 0.50, 0.45),
+    atmosphere: bed('vinyl', 0, 0.50, 0.45),
     pump: 0.28,
+    ensemble: 0.35,
+    progressions: [[0, 2, 5, 4]],
+    voicingFamily: 'jazz',
+    effectsPatch: { reverbSize: 0.60, reverbDecay: 2.6, reverbMix: 0.24, masterDrive: 0.12 },
     macros: { space: 0.60, warmth: 0.76, movement: 0.50, density: 0.58 },
     flow: { enabled: true, bars: 8, depth: 0.6 },
     layers: {
-      drone: { timbre: 'root', volume: 0.32, density: 0.90 },
+      drone: { timbre: 'root', volume: 0.24, density: 0.80, droneStyle: 'rootFifth' },
       chords: {
         timbre: 'keys', volume: 0.64, chordPattern: 'wave', chordPace: '2-bars', chordTexture: 'octave',
+        audioPatch: { filterCutoff: 2450 },
         secondaryEnabled: true, secondaryTimbre: 'shimmer', secondaryVolume: 0.48, secondaryPattern: 'broken'
       },
-      bass: { timbre: 'warm', volume: 0.82, density: 0.88 },
-      melody: { timbre: 'celeste', density: 0.38 },
+      bass: { timbre: 'warm', volume: 0.82, density: 0.88, bassStyle: 'jazzWalk' },
+      melody: { timbre: 'celeste', density: 0.40, melodyStyle: 'lofiHook' },
       kick: { volume: 0.88, density: 0.74 },
-      snare: { volume: 0.66, density: 0.52 },
-      hihat: { volume: 0.34 }
+      snare: { volume: 0.66, density: 0.52, drumModel: 'brush' },
+      hihat: { volume: 0.34, drumModel: 'closedHat' },
+      perc: { volume: 0.28, density: 0.42, drumModel: 'conga' }
     }
   },
   'streamlight': {
     swing: 0.34,
-    atmosphere: bed('rain', 0.06, 0.50, 0.40),
+    atmosphere: bed('rain', 0, 0.50, 0.40),
     pump: 0.24,
+    ensemble: 0.35,
+    progressions: [[0, 6, 5, 4]],
+    voicingFamily: 'jazz',
+    effectsPatch: { reverbSize: 0.56, reverbDecay: 2.0, reverbMix: 0.22, masterDrive: 0.13 },
     macros: { space: 0.64, warmth: 0.76, movement: 0.45, density: 0.54 },
     flow: { enabled: true, bars: 8, depth: 0.55 },
     layers: {
-      drone: { timbre: 'root', volume: 0.30, density: 0.90 },
+      drone: { timbre: 'root', volume: 0.22, density: 0.80, droneStyle: 'rootFifth' },
       chords: {
         timbre: 'celeste', volume: 0.60, chordPattern: 'wave', chordPace: '2-bars', chordTexture: 'shimmer',
+        audioPatch: { filterCutoff: 2750 },
         secondaryEnabled: true, secondaryTimbre: 'warm', secondaryVolume: 0.52, secondaryPattern: 'pad'
       },
-      bass: { timbre: 'warm', volume: 0.78, density: 0.82 },
-      melody: { timbre: 'keys', density: 0.36 },
+      bass: { timbre: 'warm', volume: 0.78, density: 0.82, bassStyle: 'jazzWalk' },
+      melody: { timbre: 'keys', density: 0.38, melodyStyle: 'motif' },
       kick: { volume: 0.84, density: 0.70 },
-      snare: { volume: 0.64, density: 0.50 },
-      perc: { volume: 0.26 }
+      snare: { volume: 0.64, density: 0.50, drumModel: 'brush' },
+      hihat: { volume: 0.30, density: 0.55, drumModel: 'shakerHat' },
+      perc: { volume: 0.26, drumModel: 'woodblock' }
     }
   },
   'cbl-hydroponic': {
     swing: 0.14,
-    atmosphere: bed('air', 0.05, 0.52, 0.45),
+    atmosphere: bed('air', 0, 0.52, 0.45),
     pump: 0.24,
+    ensemble: 0.6,
+    progressions: [[0, 5, 6, 4], [0, 3, 5, 6]],
+    voicingFamily: 'sus',
+    effectsPatch: { reverbSize: 0.84, reverbDecay: 5.5, reverbMix: 0.38, delayFeedback: 0.54 },
     macros: { space: 0.80, warmth: 0.68, movement: 0.48, density: 0.50 },
     flow: { enabled: true, bars: 16, depth: 0.5 },
     layers: {
-      drone: { timbre: 'root', volume: 0.54 },
+      drone: { timbre: 'root', volume: 0.54, droneStyle: 'shiftingFifth' },
       chords: {
         timbre: 'shimmer', volume: 0.56, density: 0.82, chordPattern: 'pulse', chordPace: '4-bars', chordTexture: 'shimmer',
+        audioPatch: { filterCutoff: 3100 },
         secondaryEnabled: true, secondaryTimbre: 'solina', secondaryVolume: 0.58, secondaryPattern: 'wave'
       },
-      bass: { timbre: 'warm', volume: 0.70, density: 0.88 },
-      melody: { timbre: 'bell', density: 0.38 },
-      hihat: { volume: 0.34, density: 0.58 },
-      perc: { volume: 0.35, density: 0.52 }
+      bass: { timbre: 'warm', volume: 0.70, density: 0.88, bassStyle: 'psyRoll' },
+      melody: { timbre: 'bell', density: 0.48, melodyStyle: 'ostinato' },
+      snare: { volume: 0.28, density: 0.40, drumModel: 'rim' },
+      hihat: { volume: 0.34, density: 0.58, rhythmAlgorithm: 'polymetric', drumModel: 'shakerHat' },
+      perc: { volume: 0.35, density: 0.52, rhythmAlgorithm: 'densityBurst', drumModel: 'shaker' }
     }
   },
   'cbl-interloper': {
     swing: 0.12,
-    atmosphere: bed('tape', 0.05, 0.48, 0.50),
+    atmosphere: bed('tape', 0, 0.48, 0.50),
     pump: 0.22,
+    ensemble: 0.55,
+    progressions: [[0, 6, 5, 3]],
+    voicingFamily: 'power',
+    effectsPatch: { reverbSize: 0.84, reverbDecay: 5.2, reverbMix: 0.36, delayFeedback: 0.52 },
     macros: { space: 0.80, warmth: 0.70, movement: 0.52, density: 0.54 },
     flow: { enabled: true, bars: 16, depth: 0.55 },
     layers: {
-      drone: { timbre: 'root', volume: 0.52 },
+      drone: { timbre: 'root', volume: 0.52, droneStyle: 'rootFifth' },
       chords: {
         timbre: 'solina', volume: 0.56, density: 0.78, chordPattern: 'pulse', chordPace: '4-bars', chordTexture: 'sub5th',
+        audioPatch: { filterCutoff: 2200 },
         secondaryEnabled: true, secondaryTimbre: 'shimmer', secondaryVolume: 0.55, secondaryPattern: 'broken'
       },
-      bass: { timbre: 'warm', volume: 0.72, density: 0.90 },
-      melody: { timbre: 'glass', density: 0.40 },
+      bass: { timbre: 'warm', volume: 0.72, density: 0.90, bassStyle: 'psyRoll' },
+      melody: { timbre: 'glass', density: 0.42, melodyStyle: 'motif' },
       kick: { volume: 0.80, density: 0.65 },
-      snare: { volume: 0.34, density: 0.40 },
-      hihat: { volume: 0.34, density: 0.60 },
-      perc: { volume: 0.40, density: 0.52 }
+      snare: { volume: 0.34, density: 0.40, drumModel: 'clap' },
+      hihat: { volume: 0.34, density: 0.60, rhythmAlgorithm: 'euclidean', drumModel: 'closedHat' },
+      perc: { volume: 0.40, density: 0.52, rhythmAlgorithm: 'markov', drumModel: 'conga' }
     }
   },
   'cbl-carbon-oasis': {
     swing: 0.12,
-    atmosphere: bed('tape', 0.05, 0.48, 0.50),
+    atmosphere: bed('tape', 0, 0.48, 0.50),
     pump: 0.22,
+    ensemble: 0.6,
+    progressions: [[0, 1, 4, 5], [0, 4, 5, 1]],
+    voicingFamily: 'open9',
+    effectsPatch: { reverbSize: 0.86, reverbDecay: 5.8, reverbMix: 0.38, delayFeedback: 0.54 },
     flow: { enabled: true, bars: 16, depth: 0.55 },
     macros: { space: 0.82, warmth: 0.72, movement: 0.48, density: 0.52 },
     layers: {
-      drone: { timbre: 'root', volume: 0.52, density: 0.85 },
+      drone: { timbre: 'root', volume: 0.52, density: 0.85, droneStyle: 'rootOctave' },
       chords: {
         timbre: 'solina', volume: 0.56, density: 0.82, chordPattern: 'pulse', chordPace: '4-bars', chordTexture: 'shimmer',
+        audioPatch: { filterCutoff: 2600 },
         secondaryEnabled: true, secondaryTimbre: 'air', secondaryVolume: 0.56, secondaryPattern: 'wave'
       },
-      bass: { timbre: 'warm', volume: 0.70, density: 0.90 },
-      melody: { timbre: 'celeste', volume: 0.40, density: 0.38 },
+      bass: { timbre: 'warm', volume: 0.70, density: 0.90, bassStyle: 'pulse8' },
+      melody: { timbre: 'celeste', volume: 0.40, density: 0.46, melodyStyle: 'ostinato' },
       kick: { volume: 0.78, density: 0.62 },
-      snare: { volume: 0.32, density: 0.40 },
-      hihat: { volume: 0.34, density: 0.62, rhythmAlgorithm: 'polymetric' },
-      perc: { volume: 0.38, density: 0.55, rhythmAlgorithm: 'densityBurst' }
+      snare: { volume: 0.32, density: 0.40, drumModel: 'rim' },
+      hihat: { volume: 0.34, density: 0.62, rhythmAlgorithm: 'polymetric', drumModel: 'closedHat' },
+      perc: { volume: 0.38, density: 0.55, rhythmAlgorithm: 'densityBurst', drumModel: 'tablaTick' }
     }
   },
   'nils-felt-hall': {
-    atmosphere: bed('rain', 0.06, 0.55, 0.35),
+    atmosphere: bed('rain', 0, 0.55, 0.35),
+    ensemble: 0.4,
+    progressions: [[0, 5, 2, 6], [0, 3, 4, 0]],
+    voicingFamily: 'triad',
+    effectsPatch: { reverbSize: 0.90, reverbDecay: 6.4, reverbMix: 0.42, delayFeedback: 0.35 },
     macros: { space: 0.88, warmth: 0.84, movement: 0.32, density: 0.38 },
     layers: {
-      drone: { timbre: 'root', volume: 0.48 },
+      drone: { timbre: 'root', volume: 0.48, droneStyle: 'rootOctave' },
       chords: {
         timbre: 'celeste', volume: 0.62, density: 0.80, chordPattern: 'broken', chordPace: '4-bars', chordTexture: 'octave',
+        audioPatch: { filterCutoff: 2250 },
         secondaryEnabled: true, secondaryTimbre: 'air', secondaryVolume: 0.54, secondaryPattern: 'wave'
       },
-      bass: { timbre: 'warm', volume: 0.50, density: 0.45 },
-      melody: { timbre: 'keys', volume: 0.42, density: 0.32, velocityMax: 78 },
+      bass: { timbre: 'warm', volume: 0.50, density: 0.45, bassStyle: 'pedal' },
+      melody: { timbre: 'keys', volume: 0.42, density: 0.36, velocityMax: 78, melodyStyle: 'neoclassical' },
       kick: { muted: true, volume: 0.1 },
-      snare: { muted: true, volume: 0.1 },
-      hihat: { muted: true, volume: 0.1 },
-      perc: { volume: 0.20, density: 0.25, rhythmAlgorithm: 'probabilistic' }
+      snare: { muted: true, volume: 0.1, drumModel: 'rim' },
+      hihat: { muted: true, volume: 0.1, drumModel: 'shakerHat' },
+      perc: { volume: 0.20, density: 0.25, rhythmAlgorithm: 'probabilistic', drumModel: 'vinylTick' }
     }
   },
   'solar-fields-orbit': {
-    atmosphere: bed('air', 0.05, 0.62, 0.52),
+    atmosphere: bed('air', 0, 0.62, 0.52),
     pump: 0.25,
+    ensemble: 0.65,
+    progressions: [[0, 4, 5, 1]],
+    voicingFamily: 'sus',
+    effectsPatch: { reverbSize: 0.88, reverbDecay: 6.0, reverbMix: 0.40, delayFeedback: 0.56 },
     flow: { enabled: true, bars: 16, depth: 0.5 },
     macros: { space: 0.84, warmth: 0.66, movement: 0.52, density: 0.54 },
     layers: {
-      drone: { timbre: 'air', volume: 0.54 },
+      drone: { timbre: 'air', volume: 0.54, droneStyle: 'shiftingFifth' },
       chords: {
         timbre: 'glass', volume: 0.54, density: 0.78, chordPattern: 'cluster', chordPace: '4-bars', chordTexture: 'shimmer',
+        audioPatch: { filterCutoff: 3400 },
         secondaryEnabled: true, secondaryTimbre: 'shimmer', secondaryVolume: 0.56, secondaryPattern: 'broken'
       },
-      bass: { timbre: 'warm', volume: 0.72, density: 0.92 },
-      melody: { timbre: 'celeste', volume: 0.38, density: 0.44 },
+      bass: { timbre: 'warm', volume: 0.72, density: 0.92, bassStyle: 'psyRoll' },
+      melody: { timbre: 'celeste', volume: 0.38, density: 0.58, melodyStyle: 'ostinato' },
       kick: { volume: 0.82, density: 0.68 },
-      snare: { volume: 0.34, density: 0.45 },
-      hihat: { volume: 0.36, density: 0.68, rhythmAlgorithm: 'euclidean' },
-      perc: { volume: 0.40, density: 0.58, rhythmAlgorithm: 'markov' }
+      snare: { volume: 0.34, density: 0.45, drumModel: 'rim' },
+      hihat: { volume: 0.36, density: 0.68, rhythmAlgorithm: 'euclidean', drumModel: 'shakerHat' },
+      perc: { volume: 0.40, density: 0.58, rhythmAlgorithm: 'markov', drumModel: 'tick808' }
     }
   },
   'berlin-dub-techno': {
     swing: 0.08,
-    atmosphere: bed('tape', 0.05, 0.42, 0.38),
+    atmosphere: bed('tape', 0, 0.42, 0.38),
     pump: 0.48,
+    ensemble: 0.45,
+    progressions: [[0, 3, 0, 5]],
+    voicingFamily: 'quartal',
+    effectsPatch: { reverbSize: 0.82, reverbDecay: 4.8, reverbMix: 0.38, delayFeedback: 0.62, masterDrive: 0.14 },
     flow: { enabled: true, bars: 16, depth: 0.62 },
-    macros: { space: 0.76, warmth: 0.74, movement: 0.46, density: 0.62 },
     layers: {
-      drone: { timbre: 'root', volume: 0.42, density: 0.85 },
+      drone: { timbre: 'root', volume: 0.42, density: 0.85, droneStyle: 'shiftingFifth' },
       chords: {
         timbre: 'dub', volume: 0.64, density: 0.88, chordPattern: 'syncopated', chordPace: '4-bars',
+        audioPatch: { filterCutoff: 1080 },
         secondaryEnabled: true, secondaryTimbre: 'wash', secondaryVolume: 0.50, secondaryPattern: 'pad'
       },
-      bass: { timbre: 'warm', volume: 0.72, density: 0.94 },
-      melody: { timbre: 'bell', volume: 0.32, density: 0.22 },
+      bass: { timbre: 'warm', volume: 0.72, density: 0.94, bassStyle: 'dubOffbeat' },
+      melody: { timbre: 'glass', volume: 0.30, density: 0.22, melodyStyle: 'bellDrops' },
       kick: { volume: 0.94, density: 0.96, drumPatch: { pitch: 44, decay: 0.65, tone: 0.08, drive: 0.16 } },
-      snare: { volume: 0.36, density: 0.52, drumPatch: { decay: 0.22, tone: 0.15 } },
-      hihat: { volume: 0.34, density: 0.72, drumPatch: { tone: 0.0, decay: 0.06 } },
-      perc: { volume: 0.42, density: 0.58, drumPatch: { pitch: 46, decay: 0.18 } }
+      snare: { volume: 0.36, density: 0.52, drumModel: 'clap', drumPatch: { decay: 0.22, tone: 0.15 } },
+      hihat: { volume: 0.34, density: 0.72, drumModel: 'shakerHat', drumPatch: { tone: 0.0, decay: 0.06 } },
+      perc: { volume: 0.42, density: 0.58, drumModel: 'clave', drumPatch: { pitch: 46, decay: 0.18 } }
     }
   },
   'jon-hopkins-pulse': {
     swing: 0.06,
-    atmosphere: bed('tape', 0.05, 0.50, 0.45),
+    atmosphere: bed('tape', 0, 0.50, 0.45),
     pump: 0.28,
+    ensemble: 0.5,
+    progressions: [[0, 3, 5, 2], [0, 5, 3, 6]],
+    voicingFamily: 'quartal',
+    effectsPatch: { reverbSize: 0.84, reverbDecay: 5.0, reverbMix: 0.36, delayFeedback: 0.50, masterDrive: 0.12 },
     flow: { enabled: true, bars: 16, depth: 0.5 },
     macros: { space: 0.80, warmth: 0.72, movement: 0.55, density: 0.56 },
     layers: {
-      drone: { timbre: 'root', volume: 0.50 },
+      drone: { timbre: 'root', volume: 0.50, droneStyle: 'rootFifth' },
       chords: {
         timbre: 'shimmer', volume: 0.54, density: 0.80, chordPattern: 'cluster', chordPace: '4-bars', chordTexture: 'shimmer',
+        audioPatch: { filterCutoff: 3250 },
         secondaryEnabled: true, secondaryTimbre: 'solina', secondaryVolume: 0.54, secondaryPattern: 'pulse'
       },
-      bass: { timbre: 'warm', volume: 0.68, density: 0.88 },
-      melody: { timbre: 'celeste', volume: 0.44, density: 0.46 },
+      bass: { timbre: 'warm', volume: 0.68, density: 0.88, bassStyle: 'pulse8' },
+      melody: { timbre: 'celeste', volume: 0.44, density: 0.50, melodyStyle: 'ostinato' },
       kick: { volume: 0.84, density: 0.60 },
-      snare: { volume: 0.36, density: 0.45 },
-      hihat: { volume: 0.34, density: 0.64, rhythmAlgorithm: 'probabilistic' },
-      perc: { volume: 0.44, density: 0.62, rhythmAlgorithm: 'densityBurst' }
+      snare: { volume: 0.36, density: 0.45, drumModel: 'clap' },
+      hihat: { volume: 0.34, density: 0.64, rhythmAlgorithm: 'probabilistic', drumModel: 'shakerHat' },
+      perc: { volume: 0.44, density: 0.62, rhythmAlgorithm: 'densityBurst', drumModel: 'conga' }
     }
   },
   'eno-apollo-zero': {
-    atmosphere: bed('air', 0.05, 0.64, 0.40),
+    atmosphere: bed('air', 0, 0.64, 0.40),
+    ensemble: 0.75,
+    progressions: [[0, 1, 4, 1], [0, 2, 1, 4]],
+    voicingFamily: 'open9',
+    effectsPatch: { reverbSize: 0.98, reverbDecay: 9.8, reverbMix: 0.55, delayFeedback: 0.48 },
     macros: { space: 0.95, warmth: 0.60, movement: 0.24, density: 0.28 },
     layers: {
       ...NO_DRUMS,
-      drone: { timbre: 'air', volume: 0.65 },
+      drone: { timbre: 'air', volume: 0.58, droneStyle: 'cluster' },
       chords: {
         timbre: 'strings', volume: 0.62, density: 0.85, chordPattern: 'wave', chordPace: '4-bars', chordTexture: 'shimmer',
+        audioPatch: { filterCutoff: 3800 },
         secondaryEnabled: true, secondaryTimbre: 'shimmer', secondaryVolume: 0.62, secondaryPattern: 'cluster'
       },
-      bass: { volume: 0.35, density: 0.30 },
-      melody: { timbre: 'glass', volume: 0.32, density: 0.20 }
+      bass: { bassStyle: 'pedal', volume: 0.28, density: 0.25 },
+      melody: { timbre: 'glass', volume: 0.32, density: 0.26, melodyStyle: 'bellDrops' },
+      perc: { muted: true, drumModel: 'glassDrop' },
     }
   },
   'tokyo-midnight-rain': {
     swing: 0.38,
-    atmosphere: bed('rain', 0.06, 0.52, 0.38),
+    atmosphere: bed('rain', 0, 0.52, 0.38),
     pump: 0.30,
+    ensemble: 0.35,
+    progressions: [[0, 3, 4, 5], [0, 5, 6, 4]],
+    voicingFamily: 'jazz',
+    effectsPatch: { reverbSize: 0.62, reverbDecay: 2.8, reverbMix: 0.24, masterDrive: 0.14 },
     flow: { enabled: true, bars: 8, depth: 0.55 },
     macros: { space: 0.60, warmth: 0.80, movement: 0.44, density: 0.56 },
     layers: {
-      drone: { timbre: 'root', volume: 0.30, density: 0.85 },
+      drone: { timbre: 'root', volume: 0.24, density: 0.80, droneStyle: 'rootFifth' },
       chords: {
         timbre: 'keys', volume: 0.64, density: 0.84, chordPattern: 'broken', chordPace: '2-bars', chordTexture: 'shimmer',
+        audioPatch: { filterCutoff: 2150 },
         secondaryEnabled: true, secondaryTimbre: 'celeste', secondaryVolume: 0.50, secondaryPattern: 'wave'
       },
-      bass: { timbre: 'warm', volume: 0.82, density: 0.88 },
-      melody: { timbre: 'celeste', volume: 0.40, density: 0.34, velocityMax: 76 },
+      bass: { timbre: 'warm', volume: 0.82, density: 0.88, bassStyle: 'jazzWalk' },
+      melody: { timbre: 'celeste', volume: 0.40, density: 0.38, velocityMax: 76, melodyStyle: 'lofiHook' },
       kick: { volume: 0.88, density: 0.72 },
-      snare: { volume: 0.68, density: 0.55 },
-      hihat: { volume: 0.36, density: 0.60 },
-      perc: { volume: 0.30, density: 0.40 }
+      snare: { volume: 0.68, density: 0.55, drumModel: 'brush' },
+      hihat: { volume: 0.36, density: 0.60, drumModel: 'closedHat' },
+      perc: { volume: 0.30, density: 0.40, drumModel: 'clave' }
     }
   },
   'cathedral-adagio': {
-    atmosphere: bed('air', 0.05, 0.56, 0.42),
+    atmosphere: bed('air', 0, 0.56, 0.42),
+    ensemble: 0.6,
+    progressions: [[0, 5, 3, 4], [0, 3, 6, 2]],
+    voicingFamily: 'triad',
+    effectsPatch: { reverbSize: 0.96, reverbDecay: 9.0, reverbMix: 0.52, delayFeedback: 0.42 },
     macros: { space: 0.94, warmth: 0.75, movement: 0.32, density: 0.46 },
     layers: {
       ...NO_DRUMS,
-      drone: { timbre: 'root', volume: 0.56 },
+      drone: { timbre: 'root', volume: 0.56, droneStyle: 'pedalTonic' },
       chords: {
         timbre: 'solina', volume: 0.66, density: 0.90, chordPattern: 'wave', chordPace: '4-bars', chordTexture: 'octave',
+        audioPatch: { filterCutoff: 2500 },
         secondaryEnabled: true, secondaryTimbre: 'strings', secondaryVolume: 0.64, secondaryPattern: 'pad'
       },
-      bass: { timbre: 'warm', volume: 0.58, density: 0.45 },
-      melody: { timbre: 'strings', volume: 0.40, density: 0.30 }
+      bass: { timbre: 'warm', volume: 0.58, density: 0.45, bassStyle: 'pedal' },
+      melody: { timbre: 'strings', volume: 0.40, density: 0.34, melodyStyle: 'neoclassical' },
+      perc: { muted: true, drumModel: 'tablaTick' },
     }
   },
 };
+export function getSceneEffects(sceneId: string): Partial<EffectsParams> | undefined {
+  return SCENE_TUNING[sceneId]?.effectsPatch;
+}
 export function createSession(sceneId = 'dorian-dawn', seed = 142857): JamSession {
   const scene = SCENES.find(s => s.id === sceneId) || SCENES[0]; const lofi = scene.style === 'lofi'; const root = scene.root; const tuning = SCENE_TUNING[scene.id] || {};
   const definitions: Array<[string, string, JamLayer['role'], number, number, number, number, JamLayer['settings']['timbre']]> = [
@@ -504,6 +663,10 @@ export function createSession(sceneId = 'dorian-dawn', seed = 142857): JamSessio
     if (t.velocityMax !== undefined) layer.settings.velocityMax = t.velocityMax; if (t.humanizeMs !== undefined) layer.settings.humanizeMs = t.humanizeMs;
     if (t.audioPatch) layer.settings.audioPatch = { ...t.audioPatch };
     if (t.drumPatch) layer.settings.drumPatch = { ...t.drumPatch };
+    if (t.drumModel) layer.settings.drumModel = t.drumModel;
+    if (t.droneStyle) layer.settings.droneStyle = t.droneStyle;
+    if (t.melodyStyle) layer.settings.melodyStyle = t.melodyStyle;
+    if (t.bassStyle) layer.settings.bassStyle = t.bassStyle;
     if (t.rhythmAlgorithm) layer.settings.rhythmAlgorithm = t.rhythmAlgorithm;
     if (t.chordPattern) layer.settings.chordPattern = t.chordPattern;
     if (t.chordPace) layer.settings.chordPace = t.chordPace;
@@ -516,10 +679,13 @@ export function createSession(sceneId = 'dorian-dawn', seed = 142857): JamSessio
   const macros = { movement: lofi ? 0.42 : 0.35, density: lofi ? 0.6 : 0.4, warmth: 0.62, space: lofi ? 0.32 : 0.65, ...tuning.macros };
   return {
     version: 2, id: `jam-${scene.id}`, name: scene.name, sceneId: scene.id, style: scene.style, root, scale: scene.scale,
-    bpm: scene.bpm, swing: tuning.swing ?? (lofi ? 0.36 : 0.08), seed: seed >>> 0, evolving: true, outputMode: 'internal', volume: 0.78,
+    bpm: scene.bpm, swing: tuning.swing ?? (lofi ? 0.36 : 0.08), seed: seed >>> 0, evolving: true, outputMode: 'internal', volume: 0.9,
     lowResource: false, deepMindEnabled: false, deepMindChannel: 1, pinned: ['movement', 'density', 'warmth', 'space'],
     macros, layers, changes: [],
     ...(tuning.atmosphere ? { atmosphere: { ...tuning.atmosphere } } : {}), ...(tuning.pump ? { pump: tuning.pump } : {}),
+    ensemble: tuning.ensemble ?? (lofi ? 0.35 : scene.style === 'techno' ? 0.45 : 0.6),
+    ...(tuning.progressions ? { progressions: tuning.progressions.map(p => [...p]) } : {}),
+    ...(tuning.voicingFamily ? { voicingFamily: tuning.voicingFamily } : {}),
     ...(tuning.flow ? { flow: { ...tuning.flow } } : {}),
   };
 }

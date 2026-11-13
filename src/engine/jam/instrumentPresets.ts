@@ -124,7 +124,7 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
         filterCutoff: 650,
         filterResonance: 1.40,
         filterEnvAmount: 0.45,
-        detuneSpread: 12,
+        detuneSpread: 8,
         subLevel: 0.15
       }
     }
@@ -231,7 +231,7 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
         filterCutoff: 480,
         filterResonance: 0.90,
         filterEnvAmount: 0.18,
-        detuneSpread: 24,
+        detuneSpread: 10,
         voiceSpread: 0.90
       }
     }
@@ -400,6 +400,7 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     description: '198Hz trockener Rimshot-Knall mit 0.11s kurzem Decay für schnittige Backbeats.',
     volume: 0.62,
     settings: {
+      drumModel: 'rim',
       drumPatch: { pitch: 198, decay: 0.11, tone: 0.35, drive: 0.08, volume: 0.62 }
     }
   },
@@ -424,6 +425,7 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     description: '175Hz breiter Stereo-Handclap mit 0.28s Ausklang und weitem Bandecho-Charakter.',
     volume: 0.64,
     settings: {
+      drumModel: 'clap',
       drumPatch: { pitch: 175, decay: 0.28, tone: 0.28, drive: 0.10, volume: 0.64 }
     }
   },
@@ -448,6 +450,7 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     description: '142Hz feiner Besen-Wischsound für subtile Jazz- und Ambient-Grooves.',
     volume: 0.54,
     settings: {
+      drumModel: 'brush',
       drumPatch: { pitch: 142, decay: 0.22, tone: 0.12, drive: 0.02, volume: 0.54 }
     }
   },
@@ -476,6 +479,7 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     description: 'Warme analoge Bandsättigung mit samtigen Höhen ohne metallisches Klingeln.',
     volume: 0.36,
     settings: {
+      drumModel: 'closedHat',
       drumPatch: { pitch: 38, decay: 0.040, tone: 0.08, drive: 0.08, volume: 0.36 }
     }
   },
@@ -500,6 +504,7 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     description: 'Weiche Shaker-Korn-Textur mit natürlicher Anschlagsdynamik.',
     volume: 0.34,
     settings: {
+      drumModel: 'shakerHat',
       drumPatch: { pitch: 36, decay: 0.055, tone: 0.06, drive: 0.00, volume: 0.34 }
     }
   },
@@ -550,22 +555,24 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     role: 'drum',
     drumVoice: 'perc',
     category: 'Acoustic & Organic',
-    description: '58Hz hölzerner Plop mit 0.12s Decay: organische organische Percussion-Wärme.',
+    description: '58Hz hölzerner Plop mit 0.12s Decay: organische Percussion-Wärme.',
     volume: 0.44,
     settings: {
+      drumModel: 'woodblock',
       drumPatch: { pitch: 58, decay: 0.12, tone: 0.22, drive: 0.04, volume: 0.44 }
     }
   },
   {
     id: 'perc-modular-glitch',
-    name: 'Modular Glitch',
+    name: '808 Tick & Glitch',
     role: 'drum',
     drumVoice: 'perc',
     category: 'Modern IDM',
-    description: '72Hz FM-Synthesizer-Ping mit 0.08s kurzem Klick für moderne IDM-Farben.',
+    description: '72Hz 808-Pulse-Burst durch Bandpass für moderne IDM- und Techno-Farben.',
     volume: 0.40,
     settings: {
-      drumPatch: { pitch: 72, decay: 0.08, tone: 0.34, drive: 0.14, volume: 0.40 }
+      drumModel: 'tick808',
+      drumPatch: { pitch: 72, decay: 0.05, tone: 0.34, drive: 0.14, volume: 0.40 }
     }
   },
   {
@@ -574,46 +581,50 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     role: 'drum',
     drumVoice: 'perc',
     category: 'Deep Techno',
-    description: '46Hz resonante Handtrommel mit 0.22s Ausklang und weitem Bandecho-Raum.',
+    description: '46Hz resonante Handtrommel mit Pitch-Drop und weitem Bandecho-Raum.',
     volume: 0.46,
     settings: {
+      drumModel: 'conga',
       drumPatch: { pitch: 46, decay: 0.22, tone: 0.18, drive: 0.08, volume: 0.46 }
     }
   },
   {
     id: 'perc-metal-rim-ping',
-    name: 'Metal Rim Ping',
+    name: 'Rimshot & Clave',
     role: 'drum',
     drumVoice: 'perc',
     category: 'Acoustic & Organic',
-    description: '64Hz glockenartiger Kessel-Randanschlag mit strahlendem Ring.',
+    description: 'Trockener Dual-Sinus Rim-Klick mit schnellem Transienten.',
     volume: 0.38,
     settings: {
-      drumPatch: { pitch: 64, decay: 0.16, tone: 0.28, drive: 0.06, volume: 0.38 }
+      drumModel: 'rim',
+      drumPatch: { pitch: 64, decay: 0.04, tone: 0.28, drive: 0.06, volume: 0.38 }
     }
   },
   {
     id: 'perc-foley-raindrop',
-    name: 'Foley Raindrop',
+    name: 'Glass Raindrop',
     role: 'drum',
     drumVoice: 'perc',
     category: 'Cinematic & Space',
-    description: '52Hz zarter Wassertropfen / Zweig-Knack mit Mikro-Decay.',
+    description: 'Kristalliner inharmonischer Glastropfen für Ambient- und Space-Texturen.',
     volume: 0.32,
     settings: {
-      drumPatch: { pitch: 52, decay: 0.09, tone: 0.14, drive: 0.02, volume: 0.32 }
+      drumModel: 'glassDrop',
+      drumPatch: { pitch: 52, decay: 0.35, tone: 0.14, drive: 0.02, volume: 0.32 }
     }
   },
   {
     id: 'perc-analog-cowbell',
-    name: '808 Cowbell',
+    name: 'Tabla & Shaker',
     role: 'drum',
     drumVoice: 'perc',
-    category: 'Retro Electro',
-    description: '60Hz gestimmte Doppel-Transistor-Kuhglocke mit Vintage-Kultcharakter.',
+    category: 'Psybient & Organic',
+    description: 'Organischer Tabla-Tick mit Aufwärts-Pitch-Modulation für Psybient-Grooves.',
     volume: 0.42,
     settings: {
-      drumPatch: { pitch: 60, decay: 0.18, tone: 0.40, drive: 0.12, volume: 0.42 }
+      drumModel: 'tablaTick',
+      drumPatch: { pitch: 50, decay: 0.12, tone: 0.30, drive: 0.06, volume: 0.42 }
     }
   },
 
@@ -641,7 +652,7 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
         osc1Wave: 'sawtooth',
         osc2Wave: 'sawtooth',
         osc3Wave: 'triangle',
-        detuneSpread: 18,
+        detuneSpread: 9,
         subLevel: 0.14,
         filterCutoff: 2350,
         filterResonance: 0.82,
@@ -678,7 +689,7 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
         osc1Wave: 'sine',
         osc2Wave: 'triangle',
         osc3Wave: 'sawtooth',
-        detuneSpread: 16,
+        detuneSpread: 7,
         subLevel: 0.05,
         filterCutoff: 3950,
         filterResonance: 0.76,
@@ -752,7 +763,7 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
         osc1Wave: 'sawtooth',
         osc2Wave: 'triangle',
         osc3Wave: 'sawtooth',
-        detuneSpread: 15,
+        detuneSpread: 6,
         subLevel: 0.14,
         filterCutoff: 2150,
         filterResonance: 0.84,
@@ -900,7 +911,7 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
         osc1Wave: 'sawtooth',
         osc2Wave: 'sawtooth',
         osc3Wave: 'triangle',
-        detuneSpread: 16,
+        detuneSpread: 7,
         subLevel: 0.12,
         filterCutoff: 1850,
         filterResonance: 0.78,
@@ -974,7 +985,7 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
         osc1Wave: 'sine',
         osc2Wave: 'sawtooth',
         osc3Wave: 'sawtooth',
-        detuneSpread: 19,
+        detuneSpread: 10,
         subLevel: 0.06,
         filterCutoff: 4300,
         filterResonance: 0.80,
@@ -1202,7 +1213,7 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
         osc1Wave: 'sine',
         osc2Wave: 'triangle',
         osc3Wave: 'sawtooth',
-        detuneSpread: 14,
+        detuneSpread: 10,
         subLevel: 0.04,
         filterCutoff: 4200,
         filterResonance: 0.76,
@@ -1367,7 +1378,7 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
         decay: 3.0,
         sustain: 0.86,
         release: 7.0,
-        detuneSpread: 16,
+        detuneSpread: 7,
         lfoRate: 0.11,
         lfoDepth: 0.18,
         driftAmount: 0.26,
@@ -1398,7 +1409,7 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
         decay: 2.8,
         sustain: 0.84,
         release: 6.2,
-        detuneSpread: 13,
+        detuneSpread: 9,
         lfoRate: 0.09,
         lfoDepth: 0.15,
         driftAmount: 0.22,
@@ -1429,7 +1440,7 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
         decay: 3.2,
         sustain: 0.90,
         release: 6.4,
-        detuneSpread: 17,
+        detuneSpread: 8,
         lfoRate: 0.15,
         lfoDepth: 0.16,
         driftAmount: 0.24,
@@ -1460,7 +1471,7 @@ export const INSTRUMENT_PRESETS: InstrumentPreset[] = [
         decay: 2.8,
         sustain: 0.88,
         release: 5.8,
-        detuneSpread: 21,
+        detuneSpread: 7,
         lfoRate: 0.19,
         lfoDepth: 0.20,
         driftAmount: 0.28,
