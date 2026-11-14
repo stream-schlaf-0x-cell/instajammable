@@ -10,6 +10,7 @@ import {
 import type { JamPosition, JamSession, LayerRole } from '../../types/jam';
 import { useUiEdition } from '../../contexts/UiEditionContext';
 import { getInstrumentPresetDisplay, getPresetCategoryDisplay } from '../../engine/jam/minimalCatalog';
+import { TrackRhythmControls, TrackMidiControls, isMidiOnlyMode } from '../layouts/LayoutShared';
 
 interface QuickMixerDeckProps {
   session: JamSession;
@@ -30,6 +31,7 @@ const GRID_TICKS = [
 export function QuickMixerDeck({ session }: QuickMixerDeckProps) {
   const edition = useUiEdition();
   const isMinimal = edition === 'minimal';
+  const midiMode = isMidiOnlyMode(session);
   const layers = session.layers;
   const [activeMenuLayerId, setActiveMenuLayerId] = useState<string | null>(null);
   const [popoverCoords, setPopoverCoords] = useState<{ top: number; left: number; isRightAligned: boolean } | null>(null);
@@ -163,8 +165,18 @@ export function QuickMixerDeck({ session }: QuickMixerDeckProps) {
     <div className="quick-mixer-deck">
       <div className="mixer-toolbar">
         <div className="mixer-info">
-          <span className="mixer-label">{isMinimal ? '8-CHANNEL MIXER' : '8-KANAL STUDIO-MISCHPULT'}</span>
-          {!isMinimal && <span className="mixer-sub">Kreative Instrumenten-Presets, kalibrierte Fader mit dB-Skala, Mute, Solo & Locks</span>}
+          <span className="mixer-label">
+            {midiMode
+              ? (isMinimal ? '8-CHANNEL ABLETON MIDI MIXER' : '8-KANAL ABLETON MIDI-MIXER')
+              : (isMinimal ? '8-CHANNEL MIXER' : '8-KANAL STUDIO-MISCHPULT')}
+          </span>
+          {!isMinimal && (
+            <span className="mixer-sub">
+              {midiMode
+                ? 'MIDI-Kanäle (Ch 1–16), Oktave/Note, Rhythmus-Muster & Velocity-Dynamik für Ableton'
+                : 'Kreative Instrumenten-Presets, Rhythmus-Muster, dB-Fader, Mute, Solo & Locks'}
+            </span>
+          )}
         </div>
         <div className="mixer-actions">
           <button type="button" className="button quiet mixer-action-btn" onClick={unmuteAll} title={isMinimal ? 'Clear all mutes and solos' : 'Alle Stummschaltungen und Solos aufheben'}>
@@ -196,58 +208,69 @@ export function QuickMixerDeck({ session }: QuickMixerDeckProps) {
               <div className="strip-header">
                 <span className="strip-color-pip" />
                 <strong className="strip-name">{layer.name}</strong>
-                <span className="strip-role">{layer.role === 'drum' ? layer.drumVoice?.toUpperCase() : layer.settings.timbre.toUpperCase()}</span>
+                <span className="strip-role">
+                  {midiMode
+                    ? `CH ${layer.channel}`
+                    : (layer.role === 'drum' ? layer.drumVoice?.toUpperCase() : layer.settings.timbre.toUpperCase())}
+                </span>
               </div>
 
-              {/* Fast Instrument Preset Selector */}
-              <div className="strip-preset-bar">
-                <button
-                  type="button"
-                  className="strip-preset-nav-btn"
-                  onClick={() => cyclePreset(layer.id, -1)}
-                  title={isMinimal ? 'Previous Preset' : 'Vorheriges Preset'}
-                  aria-label={`${layer.name} ${isMinimal ? 'previous preset' : 'vorheriges Preset'}`}
-                >
-                  <ChevronLeft size={11} />
-                </button>
+              {/* Channel Preset / MIDI Routing Selector */}
+              {midiMode ? (
+                <TrackMidiControls layer={layer} edition={edition} compact />
+              ) : (
+                <div className="strip-preset-bar">
+                  <button
+                    type="button"
+                    className="strip-preset-nav-btn"
+                    onClick={() => cyclePreset(layer.id, -1)}
+                    title={isMinimal ? 'Previous Preset' : 'Vorheriges Preset'}
+                    aria-label={`${layer.name} ${isMinimal ? 'previous preset' : 'vorheriges Preset'}`}
+                  >
+                    <ChevronLeft size={11} />
+                  </button>
 
-                <button
-                  ref={el => { triggerRefs.current[layer.id] = el; }}
-                  data-preset-menu-layer={layer.id}
-                  type="button"
-                  className={`strip-preset-badge ${isMenuOpen ? 'menu-open' : ''}`}
-                  onClick={() => setActiveMenuLayerId(isMenuOpen ? null : layer.id)}
-                  title={`Preset: ${activePreset ? getInstrumentPresetDisplay(activePreset, edition).name : layer.settings.timbre}. ${isMinimal ? 'Click to choose preset.' : 'Klicken für Presetauswahl.'}`}
-                  aria-haspopup="true"
-                  aria-expanded={isMenuOpen}
-                >
-                  <span className="strip-preset-title">{activePreset ? getInstrumentPresetDisplay(activePreset, edition).name : layer.settings.timbre}</span>
-                  <ChevronDown size={9} className="strip-preset-caret" />
-                </button>
+                  <button
+                    ref={el => { triggerRefs.current[layer.id] = el; }}
+                    data-preset-menu-layer={layer.id}
+                    type="button"
+                    className={`strip-preset-badge ${isMenuOpen ? 'menu-open' : ''}`}
+                    onClick={() => setActiveMenuLayerId(isMenuOpen ? null : layer.id)}
+                    title={`Preset: ${activePreset ? getInstrumentPresetDisplay(activePreset, edition).name : layer.settings.timbre}. ${isMinimal ? 'Click to choose preset.' : 'Klicken für Presetauswahl.'}`}
+                    aria-haspopup="true"
+                    aria-expanded={isMenuOpen}
+                  >
+                    <span className="strip-preset-title">{activePreset ? getInstrumentPresetDisplay(activePreset, edition).name : layer.settings.timbre}</span>
+                    <ChevronDown size={9} className="strip-preset-caret" />
+                  </button>
 
-                <button
-                  type="button"
-                  className="strip-preset-nav-btn"
-                  onClick={() => cyclePreset(layer.id, 1)}
-                  title={isMinimal ? 'Next Preset' : 'Nächstes Preset'}
-                  aria-label={`${layer.name} ${isMinimal ? 'next preset' : 'nächstes Preset'}`}
-                >
-                  <ChevronRight size={11} />
-                </button>
+                  <button
+                    type="button"
+                    className="strip-preset-nav-btn"
+                    onClick={() => cyclePreset(layer.id, 1)}
+                    title={isMinimal ? 'Next Preset' : 'Nächstes Preset'}
+                    aria-label={`${layer.name} ${isMinimal ? 'next preset' : 'nächstes Preset'}`}
+                  >
+                    <ChevronRight size={11} />
+                  </button>
 
-                <button
-                  type="button"
-                  className="strip-preset-dice-btn"
-                  onClick={() => randomizePreset(layer.id)}
-                  title={isMinimal ? 'Random preset for this track' : 'Zufälliges Preset für diesen Kanal würfeln'}
-                  aria-label={`${layer.name} ${isMinimal ? 'random preset' : 'Preset würfeln'}`}
-                >
-                  <Dices size={11} />
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    className="strip-preset-dice-btn"
+                    onClick={() => randomizePreset(layer.id)}
+                    title={isMinimal ? 'Random preset for this track' : 'Zufälliges Preset für diesen Kanal würfeln'}
+                    aria-label={`${layer.name} ${isMinimal ? 'random preset' : 'Preset würfeln'}`}
+                  >
+                    <Dices size={11} />
+                  </button>
+                </div>
+              )}
 
-              {/* Dual-Chord Layer B Compact Sub-Mixer (Chords Strip Only) */}
-              {layer.role === 'chords' && (
+              {/* Quick Rhythm Pattern & Dice (Works in both Audio & MIDI modes) */}
+              <TrackRhythmControls layer={layer} edition={edition} compact />
+
+              {/* Dual-Chord Layer B Compact Sub-Mixer (Audio Mode Chords Strip Only) */}
+              {!midiMode && layer.role === 'chords' && (
                 <div className="strip-dual-chord-bar" title={isMinimal ? 'Dual-Chord Track B: Harmonically linked counterpart layer' : 'Dual-Chord Spur B: Harmonisch gekoppelter Konterpart mit eigener Klangfarbe & Gegenbewegung'}>
                   <button
                     type="button"
@@ -288,9 +311,18 @@ export function QuickMixerDeck({ session }: QuickMixerDeckProps) {
                   />
                 </div>
 
-                {/* Calibrated dB Scale / Grid Ruler */}
+                {/* Calibrated dB / Velocity Scale Ruler */}
                 <div className="strip-ruler">
-                  {GRID_TICKS.map(tick => (
+                  {(midiMode
+                    ? [
+                        { label: '120', full: 'Velocity 120%', vol: 1.0, major: true },
+                        { label: '100', full: 'Velocity 100%', vol: 0.76, major: true },
+                        { label: '80', full: 'Velocity 80%', vol: 0.53, major: true },
+                        { label: '55', full: 'Velocity 55%', vol: 0.24, major: true },
+                        { label: '35', full: 'Velocity 35%', vol: 0.0, major: true },
+                      ]
+                    : GRID_TICKS
+                  ).map(tick => (
                     <button
                       key={tick.label}
                       type="button"
@@ -313,7 +345,7 @@ export function QuickMixerDeck({ session }: QuickMixerDeckProps) {
                     max={1}
                     step={0.01}
                     value={layer.volume}
-                    aria-label={`${layer.name} ${isMinimal ? 'volume' : 'Lautstärke'}`}
+                    aria-label={`${layer.name} ${midiMode ? 'MIDI velocity' : (isMinimal ? 'volume' : 'Lautstärke')}`}
                     onChange={e => setVolume(layer.id, Number(e.target.value))}
                     onDoubleClick={() => resetChannelVolume(layer.id, layer.role)}
                     className="strip-fader-slider"
@@ -321,14 +353,23 @@ export function QuickMixerDeck({ session }: QuickMixerDeckProps) {
                 </div>
               </div>
 
-              {/* Readout: % and dB */}
+              {/* Readout: Velocity (MIDI) OR % and dB (Audio) */}
               <div
                 className="strip-readout"
                 onDoubleClick={() => resetChannelVolume(layer.id, layer.role)}
                 title={isMinimal ? 'Double-click to reset level' : 'Doppelklick zum Zurücksetzen auf Standard-Pegel'}
               >
-                <span className="fader-val">{pct}%</span>
-                <span className="fader-db">{formatDb(layer.volume)}</span>
+                {midiMode ? (
+                  <>
+                    <span className="fader-val">Vel {Math.round((0.35 + layer.volume * 0.85) * 100)}%</span>
+                    <span className="fader-db">Ch {layer.channel}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="fader-val">{pct}%</span>
+                    <span className="fader-db">{formatDb(layer.volume)}</span>
+                  </>
+                )}
               </div>
 
               {/* Mute & Solo Tactile Buttons */}

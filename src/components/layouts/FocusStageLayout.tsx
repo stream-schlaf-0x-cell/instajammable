@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { SlidersHorizontal, X, Music2, Compass, Disc, Waves, Activity } from 'lucide-react';
 import { PianoRoll } from '../jam/PianoRoll';
 import { QuickMixerDeck } from '../jam/QuickMixerDeck';
-import { HarmonyHeroCard, MacroDeckCard, CompactTrackMatrix, ToolDrawerContent, type ToolId } from './LayoutShared';
+import { HarmonyHeroCard, MacroDeckCard, CompactTrackMatrix, ToolDrawerContent, isMidiOnlyMode, type ToolId } from './LayoutShared';
 import type { ClipNote, JamEvent, JamPosition, JamSession } from '../../types/jam';
 import type { UiEdition } from '../../types/ui';
 
@@ -30,8 +30,10 @@ export function FocusStageLayout({
   onAudition,
 }: FocusStageLayoutProps) {
   const min = edition === 'minimal';
+  const midiMode = isMidiOnlyMode(session);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('soundscape');
+  const activeInspectorTab: InspectorTab = midiMode && inspectorTab === 'fxchain' ? 'rhythms' : inspectorTab;
 
   return (
     <div className="layout-focus-stage">
@@ -80,13 +82,13 @@ export function FocusStageLayout({
               ['mixer', SlidersHorizontal, min ? 'Full Mixer' : 'Mischpult'],
               ['score', Music2, min ? 'Piano Roll' : 'Pianorolle'],
               ['rhythms', Disc, min ? 'Drums' : 'Rhythmus'],
-              ['fxchain', Waves, min ? 'Effects' : 'Effekte'],
+              ...(!midiMode ? [['fxchain', Waves, min ? 'Effects' : 'Effekte'] as const] : []),
               ['sequencer', Activity, min ? 'Arrangement' : 'Sequenzer'],
             ] as const).map(([id, Icon, label]) => (
               <button
                 key={id}
                 type="button"
-                className={`plugin-chip-btn ${inspectorTab === id ? 'is-accent' : ''}`}
+                className={`plugin-chip-btn ${activeInspectorTab === id ? 'is-accent' : ''}`}
                 onClick={() => setInspectorTab(id)}
               >
                 <Icon size={13} />
@@ -95,9 +97,9 @@ export function FocusStageLayout({
             ))}
           </div>
           <div className="inspector-drawer-body">
-            {inspectorTab === 'mixer' ? (
+            {activeInspectorTab === 'mixer' ? (
               <QuickMixerDeck session={session} position={position} />
-            ) : inspectorTab === 'score' ? (
+            ) : activeInspectorTab === 'score' ? (
               <PianoRoll
                 rootPitchClass={((position.chordRoot % 12) + 12) % 12}
                 chordTones={position.chordNotes}
@@ -110,7 +112,7 @@ export function FocusStageLayout({
                 onAudition={onAudition}
               />
             ) : (
-              <ToolDrawerContent tool={inspectorTab} session={session} position={position} onClose={() => setInspectorOpen(false)} />
+              <ToolDrawerContent tool={activeInspectorTab} session={session} position={position} onClose={() => setInspectorOpen(false)} />
             )}
           </div>
         </aside>

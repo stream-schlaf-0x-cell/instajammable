@@ -42,6 +42,17 @@ const drumLayer = (note: number): string => [35, 36].includes(note) ? 'kick' : [
 const id = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const rootPitchName = (midi: number) => NOTE_NAMES[((Math.round(midi) % 12) + 12) % 12];
+export const DRUM_LAYER_IDS = new Set(['kick', 'snare', 'hihat', 'perc']);
+export const DEFAULT_LAYER_CHANNELS: Record<string, number> = {
+  drone: 1, chords: 2, bass: 3, melody: 4, kick: 5, snare: 6, hihat: 7, perc: 8,
+};
+export const LEGACY_LAYER_CHANNELS: Record<string, number> = {
+  drone: 1, chords: 1, bass: 3, melody: 2, kick: 10, snare: 10, hihat: 10, perc: 10,
+};
+function shouldMigrateLegacyChannels(rawLayers: JamLayer[] | undefined): boolean {
+  if (!Array.isArray(rawLayers) || rawLayers.length !== 8) return false;
+  return Object.entries(LEGACY_LAYER_CHANNELS).every(([layerId, ch]) => rawLayers.find(l => l.id === layerId)?.channel === ch);
+}
 
 export function ambientPatch(layer: JamLayer, session: JamSession, beat = 0, cutoffOffset = 0, timbreOverride?: Timbre): AmbientSynthParams {
   const timbre = timbreOverride || layer.settings.timbre; const bass = layer.role === 'bass'; const pluck = timbre === 'keys' || timbre === 'bell' || timbre === 'celeste';
@@ -485,7 +496,11 @@ export class JamEngine {
       }
       this.stepOffset = Math.ceil(this.stoppedBeat * 4); this.nextStep = this.stepOffset;
       this.anchors = []; this.clock!.reset(); this.clock!.setBpm(this.state.bpm); this.clock!.setSwing(this.state.swing);
-      this.running = true; this.primeAtNextStep = true; this.resetFlow(); this.applySound(); this.clock!.start(); this.notify();
+      this.running = true; this.primeAtNextStep = true; this.resetFlow(); this.applySound(); this.clock!.start();
+      if ((this.state.outputMode === 'midi' || this.state.outputMode === 'both') && this.state.midiClockEnabled) {
+        this.midi.sendRealtime(0xfa, this.state.globalOutputId);
+      }
+      this.notify();
     })().finally(() => { this.startPromise = null; });
     return this.startPromise;
   }
@@ -508,7 +523,9 @@ export class JamEngine {
     const retained = new Set(this.events.map(e => e.id)); for (const eventId of this.eventEnds.keys()) if (!retained.has(eventId)) this.eventEnds.delete(eventId);
   }
   stop(): void {
-    this.transportToken++; if (this.running) this.resumeNotes = this.remainingNotes(); this.stoppedBeat = this.getPosition().beat; this.running = false; this.clock?.stop(); this.midi.panic(); this.bed?.setActive(false);
+    this.transportToken++; if (this.running) this.resumeNotes = this.remainingNotes(); this.stoppedBeat = this.getPosition().beat; this.running = false; this.clock?.stop(); this.midi.panic();
+    if (this.state.midiClockEnabled || this.state.outputMode !== 'internal') this.midi.sendRealtime(0xfc, this.state.globalOutputId);
+    this.bed?.setActive(false);
     for (const synth of this.pads.values()) synth.stopAllVoices(true);
     for (const synth of this.secondaryPads.values()) synth.stopAllVoices(true);
     this.drums?.stopAllVoices();
@@ -592,7 +609,14 @@ export class JamEngine {
         this.synthFor(layer, preview).triggerNote(time, note.note, note.velocity, duration, patch, layer.volume * roleMult);
       }
     }
-    if (!preview && (session.outputMode === 'midi' || session.outputMode === 'both')) this.midi.scheduleNote(note.channel ?? layer.channel, note.note, note.velocity, perfTime, duration * 1000, layer.id, layer.outputId ?? undefined);
+    if (!preview && (session.outputMode === 'midi' || session.outputMode === 'both')) {
+      const midiOnly = session.outputMode === 'midi';
+      const velScale = midiOnly ? (0.35 + layer.volume * 0.85) : 1;
+      const warmthOffset = midiOnly ? (session.macros.warmth - 0.5) * 18 : 0;
+      const midiVelocity = clamp(Math.round(note.velocity * velScale + warmthOffset), 1, 127);
+      const gateMult = midiOnly && layer.role !== 'drum' ? (0.45 + session.macros.space * 1.15) : 1;
+      this.midi.scheduleNote(note.channel ?? layer.channel, note.note, midiVelocity, perfTime, duration * gateMult * 1000, layer.id, layer.outputId ?? undefined);
+    }
   }
   private resetFlow(): void {
     this.flow = { offset: { movement: 0, density: 0, warmth: 0, space: 0 }, target: { movement: 0, density: 0, warmth: 0, space: 0 }, drums: 1, drumsTarget: 1, section: -1 };
@@ -779,6 +803,9 @@ export class JamEngine {
       this.events.push(event); this.eventEnds.set(event.id, audioTime + note.durationBeats * 60 / bpm); this.playNote(note, audioTime, perfTime);
       for (const listener of this.eventListeners) listener(clone(event));
     }
+    if (this.state.midiClockEnabled && (this.state.outputMode === 'midi' || this.state.outputMode === 'both')) {
+      this.midi.scheduleClockStep(context.perfTime, 15000 / bpm, this.state.globalOutputId);
+    }
     const keepFrom = baseBeat - 512;
     if (step % 16 === 0) {
       this.events = this.events.filter(e => { const endTime = this.eventEnds.get(e.id); return (endTime !== undefined ? this.beatAtAudio(endTime) : e.startBeat + e.durationBeats) >= keepFrom; });
@@ -821,7 +848,22 @@ export class JamEngine {
       if (this.state.outputMode === 'midi') this.truncatePerformed(defaults); this.applyRouting();
     }
     if (patch.bpm !== undefined) this.clock?.setBpm(this.state.bpm); if (patch.swing !== undefined) this.clock?.setSwing(this.state.swing);
-    if (patch.outputMode && patch.outputMode !== old.outputMode) { this.midi.panic(); if (patch.outputMode === 'midi') { for (const synth of this.pads.values()) synth.stopAllVoices(); for (const synth of this.secondaryPads.values()) synth.stopAllVoices(); this.drums?.stopAllVoices(); this.rack?.killTail(); } }
+    if (patch.outputMode && patch.outputMode !== old.outputMode) {
+      if (this.state.midiClockEnabled && old.outputMode !== 'internal' && patch.outputMode === 'internal') {
+        this.midi.sendRealtime(0xfc, this.state.globalOutputId);
+      }
+      this.midi.panic();
+      if (patch.outputMode === 'midi') { for (const synth of this.pads.values()) synth.stopAllVoices(); for (const synth of this.secondaryPads.values()) synth.stopAllVoices(); this.drums?.stopAllVoices(); this.rack?.killTail(); }
+      if (this.running && this.state.midiClockEnabled && old.outputMode === 'internal' && (patch.outputMode === 'midi' || patch.outputMode === 'both')) {
+        this.midi.sendRealtime(0xfa, this.state.globalOutputId);
+      }
+    }
+    if (patch.midiClockEnabled === false && old.midiClockEnabled) {
+      this.midi.sendRealtime(0xfc, this.state.globalOutputId);
+      this.midi.stopClock(this.state.globalOutputId);
+    } else if (patch.midiClockEnabled === true && !old.midiClockEnabled && this.running && this.state.outputMode !== 'internal') {
+      this.midi.sendRealtime(0xfa, this.state.globalOutputId);
+    }
     const continuous = ['bpm', 'swing', 'volume', 'macros', 'atmosphere', 'pump', 'flow']; const keys = Object.keys(patch);
     let historyGroup = keys.every(k => continuous.includes(k)) ? `session:${keys.join(',')}` : '';
     if (keys.length === 1 && patch.effectsPatch) { const changed = [...new Set([...Object.keys(old.effectsPatch || {}), ...Object.keys(patch.effectsPatch)])].filter(key => (old.effectsPatch as Record<string, number> | undefined)?.[key] !== (patch.effectsPatch as Record<string, number>)[key]); if (changed.length === 1 && Object.hasOwn(patch.effectsPatch, changed[0])) historyGroup = `fx:${changed[0]}`; }
@@ -894,6 +936,71 @@ export class JamEngine {
     });
     this.addChange(`${layer.name} Zufalls-Sound · ${result.preset.name}`);
     return result.preset;
+  }
+  applyMidiChannelPreset(preset: 'separate-1-8' | 'gm-drums-10'): void {
+    this.midi.panic();
+    this.state.layers = this.state.layers.map(layer => {
+      if (preset === 'gm-drums-10') {
+        const channel = DRUM_LAYER_IDS.has(layer.id) ? 10 : (DEFAULT_LAYER_CHANNELS[layer.id] ?? layer.channel);
+        return { ...layer, channel };
+      }
+      return { ...layer, channel: DEFAULT_LAYER_CHANNELS[layer.id] ?? layer.channel };
+    });
+    this.addChange(preset === 'separate-1-8' ? 'MIDI Channels · Ch 1–8 Getrennt' : 'MIDI Channels · Melodic 1–4 + Drums Ch 10');
+    this.remember();
+    this.notify();
+  }
+  randomizeLayerRhythm(layerId: string): void {
+    const layer = this.state.layers.find(l => l.id === layerId);
+    if (!layer) return;
+    const rng = new PRNG(Math.floor(nowPerf()) ^ this.state.seed ^ layer.id.length * 97);
+    const pickOther = <T extends string>(pool: readonly T[], current: T | undefined): T => {
+      const candidates = pool.filter(item => item !== current);
+      return candidates.length ? rng.pick(candidates) : pool[0];
+    };
+    const s = layer.settings;
+    let label = '';
+    if (layer.role === 'bass') {
+      const next = pickOther(BASS_STYLES, s.bassStyle);
+      this.setLayerSettings(layerId, { bassStyle: next });
+      label = next;
+    } else if (layer.role === 'chords') {
+      const next = pickOther(CHORD_PATTERNS, s.chordPattern);
+      this.setLayerSettings(layerId, { chordPattern: next });
+      label = next;
+    } else if (layer.role === 'melody') {
+      const activeMelodies = MELODY_STYLES.filter(m => m !== 'off');
+      const next = pickOther(activeMelodies, s.melodyStyle);
+      this.setLayerSettings(layerId, { melodyStyle: next, ...(s.density < 0.15 ? { density: 0.42 } : {}) });
+      label = next;
+    } else if (layer.role === 'drone') {
+      const next = pickOther(DRONE_STYLES, s.droneStyle);
+      this.setLayerSettings(layerId, { droneStyle: next });
+      label = next;
+    } else {
+      const drumAlgos = ['composed', 'euclidean', 'probabilistic', 'polymetric', 'markov', 'densityBurst'] as const;
+      const next = pickOther(drumAlgos, s.rhythmAlgorithm);
+      this.setLayerSettings(layerId, { rhythmAlgorithm: next, ...(s.density < 0.18 ? { density: 0.48 } : {}) });
+      label = next;
+    }
+    this.addChange(`${layer.name} Rhythmus · ${label}`);
+  }
+  shiftLayerOctave(layerId: string, delta: -1 | 1): void {
+    const layer = this.state.layers.find(l => l.id === layerId);
+    if (!layer) return;
+    this.midi.releaseNotesForLayer(layerId);
+    if (layer.role === 'drum') {
+      const current = clamp(layer.settings.minNote, 24, 96);
+      const nextNote = clamp(current + delta, 24, 96);
+      this.setLayerSettings(layerId, { minNote: nextNote, maxNote: nextNote });
+      this.addChange(`${layer.name} MIDI Note · ${nextNote}`);
+      return;
+    }
+    const span = Math.max(0, layer.settings.maxNote - layer.settings.minNote);
+    const minNote = clamp(layer.settings.minNote + delta * 12, 12, Math.max(12, 108 - span));
+    const maxNote = clamp(minNote + span, minNote, 108);
+    this.setLayerSettings(layerId, { minNote, maxNote });
+    this.addChange(`${layer.name} Register · ${delta > 0 ? '+1 Oktave' : '-1 Oktave'}`);
   }
   setMacro(name: MacroName, value: number): void {
     this.state.macros[name] = clamp(value, 0, 1); this.applySound(); this.remember(`macro:${name}`); this.notify();
@@ -2131,7 +2238,7 @@ function normalizeLayer(raw: JamLayer, fallback: JamLayer): JamLayer {
 export function validateSession(raw: JamSession): JamSession {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Ungültige Session.');
   for (const key of ['name', 'id', 'sceneId'] as const) if (raw[key] !== undefined && (typeof raw[key] !== 'string' || raw[key].length > 120)) throw new Error('Ungültige Session-Beschriftung.');
-  for (const key of ['evolving', 'lowResource', 'deepMindEnabled'] as const) if (raw[key] !== undefined && typeof raw[key] !== 'boolean') throw new Error('Ungültiger Session-Schalter.');
+  for (const key of ['evolving', 'lowResource', 'deepMindEnabled', 'midiClockEnabled'] as const) if (raw[key] !== undefined && typeof raw[key] !== 'boolean') throw new Error('Ungültiger Session-Schalter.');
   if (raw.layers !== undefined && (!Array.isArray(raw.layers) || raw.layers.length > 32 || !raw.layers.every(l => l && typeof l === 'object' && typeof l.id === 'string' && (!l.settings || (typeof l.settings === 'object' && !Array.isArray(l.settings)))))) throw new Error('Ungültige Layer in Session.');
   if (raw.macros !== undefined && (!raw.macros || typeof raw.macros !== 'object' || Array.isArray(raw.macros))) throw new Error('Ungültige Jam-Regler.');
   if (raw.runtime !== undefined) {
@@ -2167,6 +2274,7 @@ export function validateSession(raw: JamSession): JamSession {
     ...(raw.modRoutes !== undefined ? { modRoutes: sanitizeModRoutes(raw.modRoutes) } : {}),
     ...(raw.pinnedParams !== undefined ? { pinnedParams: sanitizePinnedParams(raw.pinnedParams, base) } : {}),
     ...(raw.globalOutputId !== undefined ? { globalOutputId: raw.globalOutputId === null ? null : typeof raw.globalOutputId === 'string' && raw.globalOutputId.length <= 512 ? raw.globalOutputId : (() => { throw new Error('Ungültiger globaler MIDI-Port.'); })() } : {}),
+    ...(raw.midiClockEnabled !== undefined ? { midiClockEnabled: !!raw.midiClockEnabled } : {}),
     volume: clamp(raw.volume ?? base.volume, 0, 1), outputMode: ['internal', 'midi', 'both'].includes(raw.outputMode) ? raw.outputMode : 'internal',
     pinned: Array.isArray(raw.pinned) ? [...new Set(raw.pinned.filter(p => ['movement', 'density', 'warmth', 'space'].includes(p)))] : base.pinned,
     ...(raw.arrangement !== undefined && ['groove', 'chorus', 'breakdown', 'buildup', 'silent'].includes(raw.arrangement) ? { arrangement: raw.arrangement } : {}),
@@ -2211,7 +2319,14 @@ export function validateSession(raw: JamSession): JamSession {
     ...(Array.isArray(raw.workspaceModules) ? {
       workspaceModules: raw.workspaceModules.map(String)
     } : { workspaceModules: DEFAULT_WORKSPACE_MODULES }),
-    macros, layers: base.layers.map(l => normalizeLayer(raw.layers?.find(r => r.id === l.id) || l, l)),
+    macros, layers: (() => {
+      const migrateChannels = shouldMigrateLegacyChannels(raw.layers);
+      return base.layers.map(l => {
+        const rawLayer = raw.layers?.find(r => r.id === l.id) || l;
+        const normalized = normalizeLayer(rawLayer, l);
+        return migrateChannels ? { ...normalized, channel: DEFAULT_LAYER_CHANNELS[l.id] ?? normalized.channel } : normalized;
+      });
+    })(),
     changes: Array.isArray(raw.changes) ? raw.changes.filter(c => c && typeof c.label === 'string' && typeof c.beat === 'number' && Number.isFinite(c.beat)).slice(-30) : [],
     deepMindChannel: Math.round(clamp(raw.deepMindChannel ?? 1, 1, 16)) };
 }

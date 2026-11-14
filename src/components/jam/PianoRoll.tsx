@@ -36,7 +36,11 @@ export function PianoRoll({ notes, tracks, startBeat = 0, span = 32, cursor, dru
     observer.observe(holder.current);
     return () => observer.disconnect();
   }, []);
-  const isDrum = (n: ClipNote) => { const t = tracks.find(t => t.id === n.layerId); return t?.role ? t.role === 'drum' : n.channel === 10; };
+  const isDrum = (n: ClipNote) => {
+    const t = tracks.find(t => t.id === n.layerId);
+    if (t?.role) return t.role === 'drum';
+    return n.channel === 10 || ['kick', 'snare', 'hihat', 'perc', 'editor-drums'].includes(n.layerId);
+  };
   const displayed = focusedTrack ? notes.filter(n => n.layerId === focusedTrack) : notes;
   const laneNotes = useMemo(() => {
     if (drums) return [...new Set([46, 42, 39, 38, 37, 36, ...displayed.filter(isDrum).map(n => n.note)])].sort((a,b) => b-a);

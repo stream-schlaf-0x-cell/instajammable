@@ -3,7 +3,7 @@ import { Music2, Activity } from 'lucide-react';
 import { PianoRoll } from '../jam/PianoRoll';
 import { QuickMixerDeck } from '../jam/QuickMixerDeck';
 import { SequencerDeck, SoundscapeDeck } from '../jam/ArrangementHub';
-import { HarmonyHeroCard, MacroDeckCard } from './LayoutShared';
+import { HarmonyHeroCard, MacroDeckCard, isMidiOnlyMode } from './LayoutShared';
 import type { ClipNote, JamEvent, JamPosition, JamSession } from '../../types/jam';
 import type { UiEdition } from '../../types/ui';
 
@@ -43,8 +43,12 @@ export function CommandGridLayout({
         <section className="plugin-card grid-mixer-card">
           <header className="plugin-card-head">
             <div>
-              <span className="plugin-eyebrow">{min ? '8-CHANNEL CONSOLE' : '8-KANAL MISCHPULT'}</span>
-              <h3 className="plugin-card-title">{min ? 'Mixer' : 'Studio-Mixer'}</h3>
+              <span className="plugin-eyebrow">
+                {isMidiOnlyMode(session)
+                  ? (min ? '8-CHANNEL MIDI CONSOLE' : '8-KANAL ABLETON MIDI-MIXER')
+                  : (min ? '8-CHANNEL CONSOLE' : '8-KANAL MISCHPULT')}
+              </span>
+              <h3 className="plugin-card-title">{isMidiOnlyMode(session) ? 'MIDI Output Channels' : (min ? 'Mixer' : 'Studio-Mixer')}</h3>
             </div>
           </header>
           <QuickMixerDeck session={session} position={position} />

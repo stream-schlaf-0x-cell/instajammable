@@ -18,7 +18,7 @@ import {
   getTimbreDisplayName,
 } from '../../engine/jam/minimalCatalog';
 import { noteName } from '../jam/PianoRoll';
-import { ChordBarStepMeter, SCALES_LIST, useSmoothBeat } from './LayoutShared';
+import { ChordBarStepMeter, SCALES_LIST, useSmoothBeat, TrackRhythmControls, TrackMidiControls, isMidiOnlyMode, getMacroLabelInfo } from './LayoutShared';
 import type { ArrangementSection, ClipNote, JamLayer, JamPosition, JamSession, MacroName } from '../../types/jam';
 import type { UiEdition } from '../../types/ui';
 
@@ -51,6 +51,7 @@ export function OrbitLayout({
   onAudition,
 }: OrbitLayoutProps) {
   const isMin = edition === 'minimal';
+  const midiMode = isMidiOnlyMode(session);
   const [selectedId, setSelectedId] = useState<string>(session.layers[1]?.id ?? session.layers[0]?.id ?? 'chords');
 
   const selectedLayer: JamLayer = useMemo(
@@ -412,7 +413,9 @@ export function OrbitLayout({
           <div className="orbit-gravity-overlay">
             {macroCards.map(({ key, classicName, corner }) => {
               const val = Math.round((session.macros[key] ?? 0.5) * 100);
-              const label = isMin ? MINIMAL_MACROS[key].name : classicName;
+              const label = midiMode
+                ? getMacroLabelInfo(key, true, isMin).name
+                : (isMin ? MINIMAL_MACROS[key].name : classicName);
               return (
                 <div key={key} className={`orbit-gravity-well pos-${corner}`}>
                   <div className="orbit-gravity-head">
@@ -543,9 +546,11 @@ export function OrbitLayout({
                 <div>
                   <strong>{selectedLayer.name}</strong>
                   <small>
-                    {selectedLayer.role === 'drum'
-                      ? getDrumModelDisplayName(selectedLayer.settings?.drumModel ?? selectedLayer.drumVoice, edition)
-                      : getTimbreDisplayName(selectedLayer.settings?.timbre ?? 'warm', edition)}
+                    {midiMode
+                      ? `MIDI Ch ${selectedLayer.channel}`
+                      : (selectedLayer.role === 'drum'
+                          ? getDrumModelDisplayName(selectedLayer.settings?.drumModel ?? selectedLayer.drumVoice, edition)
+                          : getTimbreDisplayName(selectedLayer.settings?.timbre ?? 'warm', edition))}
                   </small>
                 </div>
               </div>
@@ -583,39 +588,50 @@ export function OrbitLayout({
               </div>
             </div>
 
-            <div className="orbit-preset-bar">
-              <button
-                type="button"
-                className="button quiet orbit-dice-btn"
-                onClick={() => engine.randomizeInstrumentPreset(selectedLayer.id)}
-                title={isMin ? `Random preset for ${selectedLayer.name}` : `Zufälliges Instrument für ${selectedLayer.name}`}
-              >
-                <Dices size={14} />
-                <span>{isMin ? 'Dice Sound' : 'Würfel'}</span>
-              </button>
-              <select
-                className="orbit-preset-select"
-                value={activePreset?.id ?? ''}
-                onChange={(e) => {
-                  if (e.target.value) engine.applyInstrumentPreset(selectedLayer.id, e.target.value);
-                }}
-              >
-                <option value="" disabled>
-                  {isMin ? 'Choose instrument preset…' : 'Instrument wählen…'}
-                </option>
-                {selectedPresets.map((preset) => (
-                  <option key={preset.id} value={preset.id}>
-                    {getInstrumentPresetDisplay(preset, edition).name}
+            {midiMode ? (
+              <div className="orbit-midi-block">
+                <TrackMidiControls layer={selectedLayer} edition={edition} />
+              </div>
+            ) : (
+              <div className="orbit-preset-bar">
+                <button
+                  type="button"
+                  className="button quiet orbit-dice-btn"
+                  onClick={() => engine.randomizeInstrumentPreset(selectedLayer.id)}
+                  title={isMin ? `Random preset for ${selectedLayer.name}` : `Zufälliges Instrument für ${selectedLayer.name}`}
+                >
+                  <Dices size={14} />
+                  <span>{isMin ? 'Dice Sound' : 'Würfel'}</span>
+                </button>
+                <select
+                  className="orbit-preset-select"
+                  value={activePreset?.id ?? ''}
+                  onChange={(e) => {
+                    if (e.target.value) engine.applyInstrumentPreset(selectedLayer.id, e.target.value);
+                  }}
+                >
+                  <option value="" disabled>
+                    {isMin ? 'Choose instrument preset…' : 'Instrument wählen…'}
                   </option>
-                ))}
-              </select>
+                  {selectedPresets.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {getInstrumentPresetDisplay(preset, edition).name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="orbit-rhythm-bar">
+              <span className="orbit-sub-label">{isMin ? 'Rhythm Pattern' : 'Rhythmus-Muster'}</span>
+              <TrackRhythmControls layer={selectedLayer} edition={edition} />
             </div>
 
             <div className="orbit-slider-stack">
               <label className="orbit-slider-field">
                 <div className="orbit-slider-label">
-                  <span><Volume2 size={12} /> {isMin ? 'Orbit Volume' : 'Lautstärke'}</span>
-                  <b>{Math.round(selectedLayer.volume * 100)}%</b>
+                  <span><Volume2 size={12} /> {midiMode ? 'MIDI Velocity' : (isMin ? 'Orbit Volume' : 'Lautstärke')}</span>
+                  <b>{midiMode ? `Vel ${Math.round((0.35 + selectedLayer.volume * 0.85) * 100)}%` : `${Math.round(selectedLayer.volume * 100)}%`}</b>
                 </div>
                 <input
                   type="range"

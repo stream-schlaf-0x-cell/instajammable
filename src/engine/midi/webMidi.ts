@@ -19,7 +19,9 @@ export class WebMidiManager {
   private initPromise: Promise<boolean> | null = null;
   private activeNotes = new Map<string, ScheduledMidiNote>();
   private ownedPorts = new Map<string, { output: MIDIOutput; channels: Set<number> }>();
+  private clockOutputIds = new Set<string>();
   private pendingCC: { output: MIDIOutput; outputId: string; bytes: number[]; time: number }[] = [];
+  private pendingClock: { output: MIDIOutput; outputId: string; time: number }[] = [];
   private noteCounter = 0;
   private softwareTimers = new Map<string, Set<ReturnType<typeof setTimeout>>>();
   private warnedTimerPorts = new Set<string>();
@@ -127,6 +129,7 @@ export class WebMidiManager {
   private prune(time: number): void {
     for (const [id, note] of this.activeNotes) if (note.offPerformanceTime <= time) this.activeNotes.delete(id);
     this.pendingCC = this.pendingCC.filter(cc => cc.time > time);
+    this.pendingClock = this.pendingClock.filter(c => c.time > time);
   }
   public getTimingMode(outputId?: string | null): 'timestamped' | 'timer' | 'off' {
     const output = this.getOutput(outputId);
@@ -192,6 +195,7 @@ export class WebMidiManager {
         }
         for (const previous of this.activeNotes.values()) if (previous.outputId === output.id) this.sendNote(previous, time);
         for (const cc of this.pendingCC) if (cc.outputId === output.id) this.dispatch(output, cc.bytes, cc.time);
+        for (const clk of this.pendingClock) if (clk.outputId === output.id) this.dispatch(output, [0xf8], clk.time);
       }
       this.sendNote(scheduled, time, true);
       this.activeNotes.set(scheduled.id, scheduled);
@@ -219,8 +223,56 @@ export class WebMidiManager {
     const output = this.getOutput();
     if (!output) return { success: false, error: 'Kein MIDI-Ausgang aktiv oder ausgewählt.' };
     const time = now();
-    const success = !!this.scheduleNote(1, 60, 100, time, 400, 'test') && !!this.scheduleNote(10, 36, 110, time, 400, 'test');
+    const sent = [
+      this.scheduleNote(1, 48, 86, time, 350, 'test'),
+      this.scheduleNote(2, 60, 96, time, 350, 'test'),
+      this.scheduleNote(3, 36, 98, time, 350, 'test'),
+      this.scheduleNote(4, 72, 92, time, 350, 'test'),
+      this.scheduleNote(5, 36, 110, time, 300, 'test'),
+    ];
+    const success = sent.some(Boolean);
     return { success, portName: output.name ?? 'MIDI Port', error: success ? undefined : this.errorMessage ?? 'Senden fehlgeschlagen.' };
+  }
+  public sendRealtime(statusByte: 0xfa | 0xfb | 0xfc, outputId?: string | null): void {
+    const output = this.getOutput(outputId);
+    if (!output) return;
+    try {
+      if (statusByte === 0xfc) {
+        this.pendingClock = this.pendingClock.filter(c => c.outputId !== output.id);
+        this.clockOutputIds.delete(output.id);
+      }
+      this.dispatch(output, [statusByte]);
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : 'MIDI realtime send failed.';
+      this.notifyStatus();
+    }
+  }
+  public scheduleClockStep(onPerformanceTime: number, stepDurationMs: number, outputId?: string | null): void {
+    const output = this.getOutput(outputId);
+    if (!output || !Number.isFinite(onPerformanceTime) || !Number.isFinite(stepDurationMs) || stepDurationMs <= 0) return;
+    const base = Math.max(now(), onPerformanceTime);
+    const interval = stepDurationMs / 6;
+    this.clockOutputIds.add(output.id);
+    try {
+      this.prune(base);
+      for (let i = 0; i < 6; i++) {
+        const tickTime = base + i * interval;
+        this.dispatch(output, [0xf8], tickTime);
+        if (tickTime > now()) this.pendingClock.push({ output, outputId: output.id, time: tickTime });
+      }
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : 'MIDI clock send failed.';
+      this.notifyStatus();
+    }
+  }
+  public stopClock(outputId?: string | null): void {
+    const ids = outputId !== undefined ? (outputId ? [outputId] : []) : [...this.clockOutputIds];
+    for (const id of ids) {
+      const output = this.getOutput(id);
+      if (output && !this.ownedPorts.has(id)) this.clearQueue(output);
+      this.pendingClock = this.pendingClock.filter(c => c.outputId !== id);
+      this.clockOutputIds.delete(id);
+    }
   }
   /** Cancel a layer without silencing other layers that share its MIDI port. */
   public releaseNotesForLayer(layerId: string): void {
@@ -244,6 +296,9 @@ export class WebMidiManager {
       for (const cc of this.pendingCC) if (cleared && cc.outputId === outputId) {
         try { this.dispatch(output, cc.bytes, cc.time); } catch { /* disconnected */ }
       }
+      for (const clk of this.pendingClock) if (cleared && clk.outputId === outputId) {
+        try { this.dispatch(output, [0xf8], clk.time); } catch { /* disconnected */ }
+      }
     }
   }
   /** Clear scheduled messages before sending immediate releases, only on owned channels. */
@@ -264,9 +319,17 @@ export class WebMidiManager {
       } catch { /* device may have been unplugged */ }
     }
     this.pendingCC = this.pendingCC.filter(cc => cc.outputId !== outputId);
+    this.pendingClock = this.pendingClock.filter(clk => clk.outputId !== outputId);
+    this.clockOutputIds.delete(outputId);
     this.ownedPorts.delete(outputId);
   }
-  public panic(): void { for (const id of [...this.ownedPorts.keys()]) this.releaseNotesForOutput(id); }
+  public panic(): void {
+    const portIds = new Set([...this.ownedPorts.keys(), ...this.clockOutputIds]);
+    for (const id of portIds) {
+      if (this.ownedPorts.has(id)) this.releaseNotesForOutput(id);
+      else this.stopClock(id);
+    }
+  }
   private recordEvent(event: RecordedMidiEvent): void {
     this.eventHistory.push(event);
     if (this.eventHistory.length > 256) this.eventHistory.shift();

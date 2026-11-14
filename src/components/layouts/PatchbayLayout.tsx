@@ -21,7 +21,7 @@ import {
   getInstrumentPresetDisplay,
   getTimbreDisplayName,
 } from '../../engine/jam/minimalCatalog';
-import { ChordBarStepMeter, SCALES_LIST } from './LayoutShared';
+import { ChordBarStepMeter, SCALES_LIST, TrackRhythmControls, TrackMidiControls, isMidiOnlyMode, getMacroLabelInfo } from './LayoutShared';
 import type {
   AtmosphereKind,
   ChaosMode,
@@ -55,6 +55,10 @@ const DEFAULT_MODULES: Array<{ id: EffectModuleId; name: string; bypassed: boole
 
 export function PatchbayLayout({ session, position, edition, rollNotes }: PatchbayLayoutProps) {
   const isMin = edition === 'minimal';
+  const midiMode = isMidiOnlyMode(session);
+  const isGmLayout = ['kick', 'snare', 'hihat', 'perc'].every(
+    (id) => session.layers.find((l) => l.id === id)?.channel === 10,
+  );
   const [focusedLayerId, setFocusedLayerId] = useState<string | null>(null);
   const [focusedMacro, setFocusedMacro] = useState<MacroName | null>(null);
 
@@ -137,35 +141,66 @@ export function PatchbayLayout({ session, position, edition, rollNotes }: Patchb
       {/* Top Signal Flow Topology Header */}
       <div className="patchbay-topology-bar">
         <div className="patchbay-topo-title">
-          <span className="eyebrow">{isMin ? '7 · SIGNAL PATCHBAY' : '7 · SIGNAL-PATCHBAY'}</span>
+          <span className="eyebrow">{midiMode ? '7 · ABLETON MIDI PATCHBAY' : (isMin ? '7 · SIGNAL PATCHBAY' : '7 · SIGNAL-PATCHBAY')}</span>
           <strong>
-            {isMin
-              ? 'Clock & Macros → 8 Instrument Nodes → Modular FX Bus'
-              : 'Clock & Makros → 8 Instrumenten-Nodes → Modulares Effekt-Routing'}
+            {midiMode
+              ? (isMin
+                  ? 'Clock & Macros → 8 Pattern Nodes → Ableton MIDI Bus (Ch 1–8)'
+                  : 'Clock & Makros → 8 Pattern-Nodes → Ableton MIDI-Bus (Ch 1–8)')
+              : (isMin
+                  ? 'Clock & Macros → 8 Instrument Nodes → Modular FX Bus'
+                  : 'Clock & Makros → 8 Instrumenten-Nodes → Modulares Effekt-Routing')}
           </strong>
         </div>
 
-        <div className="patchbay-routing-pills" role="group" aria-label="FX Routing">
-          {fxModes.map((m) => (
+        {midiMode ? (
+          <div className="patchbay-routing-pills" role="group" aria-label="MIDI Bus Presets">
             <button
-              key={m.id}
               type="button"
-              className={`button quiet ${fxMode === m.id ? 'active' : ''}`}
-              onClick={() => engine.setEffectChainMode(m.id)}
+              className={`button quiet ${!isGmLayout ? 'active' : ''}`}
+              onClick={() => engine.applyMidiChannelPreset('separate-1-8')}
             >
-              {isMin ? m.en : m.de}
+              Ch 1–8
             </button>
-          ))}
-          <button
-            type="button"
-            className={`button quiet ${fxActive ? 'active' : ''}`}
-            onClick={() => engine.toggleFxChainActive()}
-            title={isMin ? 'Master FX Active / Bypass' : 'Effekt-Bus Aktiv / Bypass'}
-          >
-            <Power size={13} />
-            <span>{fxActive ? 'FX On' : 'FX Bypass'}</span>
-          </button>
-        </div>
+            <button
+              type="button"
+              className={`button quiet ${isGmLayout ? 'active' : ''}`}
+              onClick={() => engine.applyMidiChannelPreset('gm-drums-10')}
+            >
+              GM Ch 10
+            </button>
+            <button
+              type="button"
+              className={`button quiet ${session.midiClockEnabled ? 'active' : ''}`}
+              onClick={() => engine.updateSession({ midiClockEnabled: !session.midiClockEnabled })}
+            >
+              <Power size={13} />
+              <span>{session.midiClockEnabled ? 'Clock On' : 'Clock Off'}</span>
+            </button>
+          </div>
+        ) : (
+          <div className="patchbay-routing-pills" role="group" aria-label="FX Routing">
+            {fxModes.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                className={`button quiet ${fxMode === m.id ? 'active' : ''}`}
+                onClick={() => engine.setEffectChainMode(m.id)}
+              >
+                {isMin ? m.en : m.de}
+              </button>
+            ))}
+            <button
+              type="button"
+              className={`button quiet ${fxActive ? 'active' : ''}`}
+              onClick={() => engine.toggleFxChainActive()}
+              title={isMin ? 'Master FX Active / Bypass' : 'Effekt-Bus Aktiv / Bypass'}
+            >
+              <Power size={13} />
+              <span>{fxActive ? 'FX On' : 'FX Bypass'}</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Interactive Patch Matrix with Reactive Bezier Cable Field */}
@@ -197,10 +232,26 @@ export function PatchbayLayout({ session, position, edition, rollNotes }: Patchb
             );
           })}
 
-          {/* Middle -> Right Cables: Tracks feeding EQ, Delay, Reverb, Pump, Atmosphere */}
+          {/* Middle -> Right Cables: Tracks feeding FX Bus OR Ableton MIDI Channel Jacks */}
           {session.layers.map((layer, idx) => {
             const sy = trackAnchors[idx] ?? 320;
             const firing = activeLayerIds.has(layer.id);
+            if (midiMode) {
+              const ty = 52 + idx * 76;
+              const activeCable = !layer.muted;
+              const hot = activeCable && (firing || focusedLayerId === layer.id);
+              const d = `M 635 ${sy} C 680 ${sy}, 680 ${ty}, 715 ${ty}`;
+              return (
+                <path
+                  key={`t-${layer.id}`}
+                  d={d}
+                  className={`patch-cable ${hot ? 'hot' : ''} ${!activeCable ? 'muted' : ''}`}
+                  stroke={!activeCable ? 'var(--line)' : layer.color}
+                  strokeWidth={hot ? 2.6 : 1.3}
+                  strokeOpacity={!activeCable ? 0.16 : hot ? 0.9 : 0.35}
+                />
+              );
+            }
             const targetFxIdx =
               layer.role === 'drum'
                 ? layer.drumVoice === 'kick'
@@ -228,7 +279,7 @@ export function PatchbayLayout({ session, position, edition, rollNotes }: Patchb
           })}
 
           {/* Inter-FX Serial Cable between Delay and Reverb depending on fxMode */}
-          {fxMode !== 'parallel' && !isBypassed('delay') && !isBypassed('reverb') && (
+          {!midiMode && fxMode !== 'parallel' && !isBypassed('delay') && !isBypassed('reverb') && (
             <path
               d={
                 fxMode === 'delay-into-reverb'
@@ -309,6 +360,9 @@ export function PatchbayLayout({ session, position, edition, rollNotes }: Patchb
             <div className="patch-macro-list">
               {macroRows.map(({ key, classicName, affects }) => {
                 const pct = Math.round((session.macros[key] ?? 0.5) * 100);
+                const labelInfo = midiMode
+                  ? getMacroLabelInfo(key, true, isMin)
+                  : { name: isMin ? MINIMAL_MACROS[key].name : classicName, text: affects };
                 return (
                   <label
                     key={key}
@@ -317,8 +371,8 @@ export function PatchbayLayout({ session, position, edition, rollNotes }: Patchb
                     onMouseLeave={() => setFocusedMacro(null)}
                   >
                     <div className="patch-macro-meta">
-                      <span>{isMin ? MINIMAL_MACROS[key].name : classicName}</span>
-                      <small>{affects}</small>
+                      <span>{labelInfo.name}</span>
+                      <small>{midiMode && (key === 'warmth' || key === 'space') ? labelInfo.text : affects}</small>
                       <b>{pct}%</b>
                     </div>
                     <input
@@ -422,22 +476,26 @@ export function PatchbayLayout({ session, position, edition, rollNotes }: Patchb
                     <div>
                       <strong>{layer.name}</strong>
                       <small>
-                        {layer.role === 'drum'
-                          ? getDrumModelDisplayName(layer.settings?.drumModel ?? layer.drumVoice, edition)
-                          : getTimbreDisplayName(layer.settings?.timbre ?? 'warm', edition)}
+                        {midiMode
+                          ? `Ch ${layer.channel}`
+                          : (layer.role === 'drum'
+                              ? getDrumModelDisplayName(layer.settings?.drumModel ?? layer.drumVoice, edition)
+                              : getTimbreDisplayName(layer.settings?.timbre ?? 'warm', edition))}
                       </small>
                     </div>
                   </div>
 
                   <div className="patch-track-actions">
-                    <button
-                      type="button"
-                      className="mini-dice-btn"
-                      onClick={() => engine.randomizeInstrumentPreset(layer.id)}
-                      title={isMin ? `Dice preset for ${layer.name}` : `Zufalls-Sound für ${layer.name}`}
-                    >
-                      <Dices size={12} />
-                    </button>
+                    {!midiMode && (
+                      <button
+                        type="button"
+                        className="mini-dice-btn"
+                        onClick={() => engine.randomizeInstrumentPreset(layer.id)}
+                        title={isMin ? `Dice preset for ${layer.name}` : `Zufalls-Sound für ${layer.name}`}
+                      >
+                        <Dices size={12} />
+                      </button>
+                    )}
                     <button
                       type="button"
                       className={`track-btn ${layer.muted ? 'active mute' : ''}`}
@@ -471,26 +529,30 @@ export function PatchbayLayout({ session, position, edition, rollNotes }: Patchb
                 </div>
 
                 <div className="patch-track-controls">
-                  <select
-                    className="patch-preset-select"
-                    value={activePreset?.id ?? ''}
-                    aria-label={isMin ? `${layer.name} instrument` : `${layer.name} Instrument`}
-                    onChange={(e) => {
-                      if (e.target.value) engine.applyInstrumentPreset(layer.id, e.target.value);
-                    }}
-                  >
-                    <option value="" disabled>
-                      {isMin ? 'Preset…' : 'Instrument…'}
-                    </option>
-                    {presets.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {getInstrumentPresetDisplay(p, edition).name}
+                  {midiMode ? (
+                    <TrackRhythmControls layer={layer} edition={edition} compact />
+                  ) : (
+                    <select
+                      className="patch-preset-select"
+                      value={activePreset?.id ?? ''}
+                      aria-label={isMin ? `${layer.name} instrument` : `${layer.name} Instrument`}
+                      onChange={(e) => {
+                        if (e.target.value) engine.applyInstrumentPreset(layer.id, e.target.value);
+                      }}
+                    >
+                      <option value="" disabled>
+                        {isMin ? 'Preset…' : 'Instrument…'}
                       </option>
-                    ))}
-                  </select>
+                      {presets.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {getInstrumentPresetDisplay(p, edition).name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
 
                   <label className="patch-mini-slider">
-                    <span>Vol {volPct}%</span>
+                    <span>{midiMode ? `Vel ${Math.round((0.35 + layer.volume * 0.85) * 100)}%` : `Vol ${volPct}%`}</span>
                     <input
                       type="range"
                       min={0}
@@ -510,15 +572,50 @@ export function PatchbayLayout({ session, position, edition, rollNotes }: Patchb
                     />
                   </label>
                 </div>
+                {!midiMode && (
+                  <div className="patch-rhythm-subrow">
+                    <TrackRhythmControls layer={layer} edition={edition} compact />
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
 
-        {/* COLUMN 3: Master FX Nodes */}
+        {/* COLUMN 3: Master FX Nodes (Audio) OR 8 Ableton MIDI Output Bus Jacks (MIDI Mode) */}
         <div className="patch-col patch-col-fx">
-          {/* EQ + Warmth */}
-          <div className={`patch-node ${isBypassed('eq') && isBypassed('warmth') ? 'bypassed' : ''}`}>
+          {midiMode ? (
+            session.layers.map((layer: JamLayer, idx: number) => {
+              const firing = activeLayerIds.has(layer.id) && !layer.muted;
+              return (
+                <div
+                  key={`midi-bus-${layer.id}`}
+                  className={`patch-node patch-midi-bus-node ${firing ? 'firing' : ''} ${layer.muted ? 'bypassed' : ''}`}
+                  style={{ '--node-color': layer.color } as React.CSSProperties}
+                  onMouseEnter={() => setFocusedLayerId(layer.id)}
+                  onMouseLeave={() => setFocusedLayerId(null)}
+                >
+                  <div className="patch-node-head">
+                    <div className="patch-fx-title">
+                      <span className="patch-jack-in" />
+                      <span className={`patch-led ${firing ? 'on' : ''}`} style={{ background: layer.color }} />
+                      <div>
+                        <span className="eyebrow">ABLETON BUS · 0{idx + 1}</span>
+                        <strong>{layer.name}</strong>
+                      </div>
+                    </div>
+                    <span className={`patch-midi-live-badge ${firing ? 'is-live' : ''}`}>
+                      {layer.muted ? 'MUTE' : `CH ${layer.channel}`}
+                    </span>
+                  </div>
+                  <TrackMidiControls layer={layer} edition={edition} compact />
+                </div>
+              );
+            })
+          ) : (
+            <>
+              {/* EQ + Warmth */}
+              <div className={`patch-node ${isBypassed('eq') && isBypassed('warmth') ? 'bypassed' : ''}`}>
             <div className="patch-node-head">
               <div className="patch-fx-title">
                 <span className="patch-jack-in" />
@@ -751,6 +848,8 @@ export function PatchbayLayout({ session, position, edition, rollNotes }: Patchb
               </label>
             </div>
           </div>
+            </>
+          )}
         </div>
       </div>
     </section>

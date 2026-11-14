@@ -17,6 +17,9 @@ interface Props {
 }
 const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
 const uid = () => 'note-' + crypto.randomUUID();
+const DRUM_TRACK_IDS = new Set(['kick', 'snare', 'hihat', 'perc', 'editor-drums']);
+const isDrumTrack = (t: MidiClip['tracks'][number]): boolean =>
+  t.channel === 10 || DRUM_TRACK_IDS.has(t.id) || /kick|snare|hat|perc|drum/i.test(t.name);
 
 export function ClipEditor({ clip: original, onClose, onSave, onExport, onPreview, onStopPreview, onApply, onAudition }: Props) {
   const isMinimal = useUiEdition() === 'minimal';
@@ -27,7 +30,7 @@ export function ClipEditor({ clip: original, onClose, onSave, onExport, onPrevie
   const [focus, setFocus] = useState('');
   const [viewStart, setViewStart] = useState(0);
   const [span, setSpan] = useState(32);
-  const [trackId, setTrackId] = useState((original.tracks.find(t=>t.id==='melody')||original.tracks.find(t => t.channel !== 10))?.id || original.tracks[0]?.id || 'melody');
+  const [trackId, setTrackId] = useState((original.tracks.find(t=>t.id==='melody')||original.tracks.find(t => !isDrumTrack(t)))?.id || original.tracks[0]?.id || 'melody');
   const [preview, setPreview] = useState(false);
   const [selectedAll, setSelectedAll] = useState(false);
   const [revision, setRevision] = useState(0);
@@ -51,7 +54,7 @@ export function ClipEditor({ clip: original, onClose, onSave, onExport, onPrevie
     if (!track) return;
     let target = track;
     let tracks = clip.tracks;
-    if (drums && track.channel !== 10) { target = clip.tracks.find(t=>t.channel===10) || {id:'editor-drums',name:'Drums',channel:10,color:'#dba377'}; if(!tracks.some(t=>t.id===target.id))tracks=[...tracks,target]; setTrackId(target.id); }
+    if (drums && !isDrumTrack(track)) { target = clip.tracks.find(isDrumTrack) || {id:'editor-drums',name:'Drums',channel:10,color:'#dba377'}; if(!tracks.some(t=>t.id===target.id))tracks=[...tracks,target]; setTrackId(target.id); }
     const n: ClipNote = { id: uid(), layerId: target.id, channel: target.channel, note: pitch, velocity: 85, startBeat: beat, durationBeats: drums ? .25 : 1 };
     replace({ ...clip, tracks, lengthBeats: Math.max(clip.lengthBeats, Math.ceil((beat + n.durationBeats) / 4) * 4), notes: [...clip.notes, n] });
     setSelected(n.id); setSelectedAll(false);
@@ -104,7 +107,7 @@ export function ClipEditor({ clip: original, onClose, onSave, onExport, onPrevie
       <header className="editor-header"><div><span className="eyebrow">{isMinimal ? 'MIDI EDITOR' : 'DEIN MOMENT · MIDI EDITOR'}</span><h2 id="editor-title">{isMinimal ? 'Edit MIDI' : 'MIDI bearbeiten'}</h2><input className="clip-name-input" aria-label={isMinimal ? 'Clip name' : 'Clipname'} value={clip.name} onChange={e=>replace({...clip,name:e.target.value})}/></div><button className="icon-button" aria-label={isMinimal ? 'Close editor' : 'Editor schließen'} onClick={onClose}><X /></button></header>
       <div className="editor-toolbar">
         <button className={'button ' + (preview ? 'active' : '')} onClick={() => { if (preview) onStopPreview(); else onPreview(clip); setPreview(!preview); }}>{preview ? <Square /> : <Play />} {isMinimal ? (preview ? 'Stop Preview' : 'Preview') : (preview ? 'Vorhören stoppen' : 'Vorhören')}</button>
-        <div className="segmented"><button className={!drums ? 'selected' : ''} onClick={() => {setDrums(false);setFocus('');const t=clip.tracks.find(t=>t.channel!==10);if(t)setTrackId(t.id);}}>Keys</button><button className={drums ? 'selected' : ''} onClick={() => {setDrums(true);setFocus('');const t=clip.tracks.find(t=>t.channel===10);if(t)setTrackId(t.id);}}>Drums</button></div>
+        <div className="segmented"><button className={!drums ? 'selected' : ''} onClick={() => {setDrums(false);setFocus('');const t=clip.tracks.find(tr=>!isDrumTrack(tr));if(t)setTrackId(t.id);}}>Keys</button><button className={drums ? 'selected' : ''} onClick={() => {setDrums(true);setFocus('');const t=clip.tracks.find(isDrumTrack);if(t)setTrackId(t.id);}}>Drums</button></div>
         <label>{isMinimal ? 'Target track' : 'Neue Noten auf'} <select value={trackId} onChange={e => setTrackId(e.target.value)}>{clip.tracks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
         <label>{isMinimal ? 'Grid' : 'Raster'} <select value={grid} onChange={e => setGrid(Number(e.target.value))}><option value={.0625}>1/64</option><option value={.125}>1/32</option><option value={.25}>1/16</option><option value={.5}>1/8</option><option value={1}>1/4</option></select></label>
         <button className="icon-button" disabled={!past.current.length} onClick={undo} aria-label={isMinimal ? 'Undo edit' : 'Bearbeitung rückgängig'}><Undo2 /></button><button className="icon-button" disabled={!future.current.length} onClick={redo} aria-label={isMinimal ? 'Redo edit' : 'Bearbeitung wiederholen'}><Redo2 /></button>

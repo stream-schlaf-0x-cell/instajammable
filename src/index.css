@@ -7265,3 +7265,248 @@
   }
 }
 
+
+/* === MIDI MODE & TRACK RHYTHM CONTROLS === */
+
+.midi-mode-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 99px;
+  border: 1px solid var(--line);
+  background: var(--surface-high);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.midi-mode-toggle-btn:hover {
+  border-color: var(--accent-2);
+}
+
+.midi-mode-toggle-btn.is-midi-active {
+  background: color-mix(in srgb, var(--amber) 20%, var(--surface-high));
+  border-color: var(--amber);
+  color: var(--amber);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--amber) 32%, transparent);
+}
+
+.midi-master-strip {
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.midi-strip-left,
+.midi-strip-presets,
+.midi-strip-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.midi-strip-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--amber);
+  font-weight: 700;
+}
+
+.midi-port-inline-select {
+  max-width: 220px;
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface-inset);
+  color: var(--text);
+}
+
+.midi-preset-pill,
+.midi-clock-toggle-btn,
+.midi-inline-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 99px;
+  border: 1px solid var(--line);
+  background: var(--surface-inset);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.midi-preset-pill.is-active,
+.midi-clock-toggle-btn.is-active {
+  border-color: var(--accent-2);
+  color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent-2) 15%, var(--surface-inset));
+}
+
+.midi-inline-action-btn:hover,
+.midi-preset-pill:hover,
+.midi-clock-toggle-btn:hover {
+  color: var(--text);
+  border-color: var(--text);
+}
+
+.track-rhythm-bar,
+.track-midi-bar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+}
+
+.track-rhythm-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  padding: 4px 6px;
+  font-size: 11px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: var(--surface-inset);
+  color: var(--text);
+  text-overflow: ellipsis;
+}
+
+.track-rhythm-bar.is-compact .track-rhythm-select {
+  padding: 3px 5px;
+  font-size: 10.5px;
+}
+
+.mini-rhythm-dice-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 6px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: var(--surface-inset);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.mini-rhythm-dice-btn:hover {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.track-midi-bar {
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.track-midi-ch-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.track-midi-ch-field select {
+  padding: 2px 5px;
+  font-size: 11px;
+  font-family: var(--mono);
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--surface-inset);
+  color: var(--amber);
+  font-weight: 700;
+}
+
+.track-midi-oct-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.mini-oct-btn {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.track-midi-range-tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text);
+  white-space: nowrap;
+  padding: 0 2px;
+}
+
+.track-midi-ch-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--amber) 14%, var(--surface-inset));
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--line));
+  color: var(--amber);
+  white-space: nowrap;
+}
+
+.patch-rhythm-subrow {
+  margin-top: 6px;
+}
+
+.patch-midi-bus-node {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 10px;
+}
+
+.patch-midi-live-badge {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  border: 1px solid var(--line);
+  background: var(--surface-inset);
+  color: var(--muted);
+}
+
+.patch-midi-live-badge.is-live {
+  color: var(--amber);
+  border-color: var(--amber);
+}
+
+.syn-totem-footer-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.orbit-midi-block,
+.orbit-rhythm-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0;
+}
+
+.orbit-sub-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}

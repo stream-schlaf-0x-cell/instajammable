@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Compass, Activity, Disc, SlidersHorizontal, Waves, Sparkles, Cloud, Cpu } from 'lucide-react';
 import { PianoRoll } from '../jam/PianoRoll';
 import { QuickMixerDeck } from '../jam/QuickMixerDeck';
-import { HarmonyHeroCard, MacroDeckCard, CompactTrackMatrix, ToolDrawerContent, type ToolId } from './LayoutShared';
+import { HarmonyHeroCard, MacroDeckCard, CompactTrackMatrix, ToolDrawerContent, isMidiOnlyMode, type ToolId } from './LayoutShared';
 import type { ClipNote, JamEvent, JamPosition, JamSession } from '../../types/jam';
 import type { UiEdition } from '../../types/ui';
 
@@ -39,8 +39,13 @@ export function SplitLayout({
   onAudition,
 }: SplitLayoutProps) {
   const min = edition === 'minimal';
+  const midiMode = isMidiOnlyMode(session);
   const [activeTool, setActiveTool] = useState<ToolId>('soundscape');
   const [showDrumsRoll, setShowDrumsRoll] = useState(false);
+  const visibleTabs = midiMode
+    ? TOOL_TABS.filter(t => !['eq', 'fxchain', 'atmosphere'].includes(t.id))
+    : TOOL_TABS;
+  const effectiveTool = visibleTabs.some(t => t.id === activeTool) ? activeTool : visibleTabs[0].id;
 
   return (
     <div className="layout-split-grid">
@@ -92,15 +97,15 @@ export function SplitLayout({
 
         <section className="plugin-card split-tools-card">
           <div className="split-tool-tabs" role="tablist">
-            {TOOL_TABS.map(t => {
+            {visibleTabs.map(t => {
               const Icon = t.icon;
               return (
                 <button
                   key={t.id}
                   type="button"
                   role="tab"
-                  aria-selected={activeTool === t.id}
-                  className={`plugin-chip-btn ${activeTool === t.id ? 'is-accent' : ''}`}
+                  aria-selected={effectiveTool === t.id}
+                  className={`plugin-chip-btn ${effectiveTool === t.id ? 'is-accent' : ''}`}
                   onClick={() => setActiveTool(t.id)}
                 >
                   <Icon size={13} />
@@ -110,7 +115,7 @@ export function SplitLayout({
             })}
           </div>
           <div className="split-tool-body">
-            <ToolDrawerContent tool={activeTool} session={session} position={position} />
+            <ToolDrawerContent tool={effectiveTool} session={session} position={position} />
           </div>
         </section>
       </div>

@@ -673,24 +673,85 @@ export class JamComposer {
             add(barStep + approachStep, approachPitch, 0.45, 0.48, false, rng.range(12, 24));
           }
         }
+      } else if (bassStyle === 'breathingSub') {
+        if (density > 0) {
+          for (let step = 0; step < length; step += 16) {
+            if (step % 32 !== 0 && !rng.chance(Math.min(0.95, density * 1.15))) continue;
+            const anchorPitch = step % 32 === 0 ? harmony.root : rng.chance(0.55) ? harmony.root : scaleNote(session.root, session.scale, harmony.degree + 4);
+            add(step, fit(anchorPitch), 2.8, step % 32 === 0 ? 0.74 : 0.52, true);
+            if (density >= 0.32 && rng.chance(clamp(density * 0.75 + movement * 0.25, 0, 0.92))) {
+              const pickupPitch = movement > 0.45 ? scaleNote(session.root, session.scale, harmony.degree + 2) : scaleNote(session.root, session.scale, harmony.degree + 4);
+              add(step + 14, fit(pickupPitch), 0.48, 0.44, true);
+            }
+          }
+        }
+      } else if (bassStyle === 'syncopatedGroove') {
+        if (density > 0) {
+          const grooveHits = [0, 3, 6, 10, 12, 14];
+          for (let bar = 0; bar < length; bar += 16) {
+            for (const offset of grooveHits) {
+              const step = bar + offset;
+              const mandatory = offset === 0 || offset === 6 || offset === 10;
+              if (!mandatory && !rng.chance(clamp(density * 0.9 + movement * 0.25, 0.12, 0.95))) continue;
+              const pitch = offset === 0
+                ? harmony.root
+                : offset === 10
+                  ? scaleNote(session.root, session.scale, harmony.degree + (movement > 0.5 ? 4 : 2))
+                  : offset === 14
+                    ? harmony.root + (movement > 0.35 ? 12 : 0)
+                    : rng.chance(0.6)
+                      ? harmony.root
+                      : scaleNote(session.root, session.scale, harmony.degree + 4);
+              const dur = offset === 0 ? 0.68 : offset === 6 || offset === 10 ? 0.42 : 0.28;
+              add(step, fit(pitch), dur, offset === 0 ? 0.78 : offset === 10 ? 0.62 : 0.48, true);
+            }
+          }
+        }
+      } else if (bassStyle === 'minimalArp') {
+        if (density > 0) {
+          const arpDegrees = [0, 4, 7, 2];
+          const stride = density < 0.35 ? 6 : 3;
+          for (let step = 0, idx = 0; step < length; step += stride, idx++) {
+            if (step % 16 !== 0 && !rng.chance(clamp(density + 0.25, 0.3, 0.96))) continue;
+            const degOffset = arpDegrees[idx % arpDegrees.length];
+            const pitch = degOffset === 7
+              ? harmony.root + 12
+              : scaleNote(session.root, session.scale, harmony.degree + degOffset);
+            add(step, fit(pitch), stride === 6 ? 0.65 : 0.36, idx % 4 === 0 ? 0.7 : 0.46, true);
+          }
+        }
       } else if (bassStyle === 'pulse8') {
         if (density > 0) {
           let noteIdx = 0;
           for (let step = 0; step < length; step += 2) {
+            if (step % 4 !== 0 && density < 0.55 && !rng.chance(clamp(density * 1.4, 0.25, 1))) {
+              noteIdx++;
+              continue;
+            }
             const isFourth = noteIdx % 4 === 3;
-            const pitch = isFourth ? scaleNote(session.root, session.scale, harmony.degree + 4) : harmony.root;
-            add(step, fit(pitch), 0.30, step % 16 === 0 ? 0.72 : isFourth ? 0.58 : 0.46, false);
+            const isEighthTurn = noteIdx % 8 === 7;
+            const pitch = isEighthTurn && movement > 0.35
+              ? harmony.root + 12
+              : isFourth
+                ? scaleNote(session.root, session.scale, harmony.degree + 4)
+                : (movement > 0.6 && noteIdx % 4 === 2)
+                  ? scaleNote(session.root, session.scale, harmony.degree + 2)
+                  : harmony.root;
+            add(step, fit(pitch), 0.30, step % 16 === 0 ? 0.74 : isFourth ? 0.58 : 0.46, false);
             noteIdx++;
           }
         }
       } else if (bassStyle === 'psyRoll') {
         if (density > 0) {
           const rootPitch = fit(harmony.root);
+          const fifthPitch = fit(scaleNote(session.root, session.scale, harmony.degree + 4));
           for (let step = 0; step < length; step++) {
             const beatSub = step % 4;
             if (beatSub === 0) continue; // leave kick on 0 free
+            if (density < 0.4 && beatSub === 1 && !rng.chance(density * 1.8)) continue;
+            const pitch = movement > 0.55 && step % 16 === 15 ? fifthPitch : rootPitch;
             const accent = beatSub === 1 ? 0.46 : beatSub === 2 ? 0.54 : 0.60;
-            add(step, rootPitch, 0.08, accent, false);
+            add(step, pitch, 0.08, accent, false);
           }
         }
       } else {

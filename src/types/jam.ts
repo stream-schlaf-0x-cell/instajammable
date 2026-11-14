@@ -44,7 +44,7 @@ export const DRONE_STYLES = ['rootFifth', 'rootOctave', 'pedalTonic', 'shiftingF
 export type DroneStyle = typeof DRONE_STYLES[number];
 export const MELODY_STYLES = ['motif', 'ostinato', 'bellDrops', 'neoclassical', 'lofiHook', 'off'] as const;
 export type MelodyStyle = typeof MELODY_STYLES[number];
-export const BASS_STYLES = ['pedal', 'pulse8', 'psyRoll', 'dubOffbeat', 'jazzWalk'] as const;
+export const BASS_STYLES = ['pedal', 'breathingSub', 'dubOffbeat', 'jazzWalk', 'syncopatedGroove', 'minimalArp', 'pulse8', 'psyRoll'] as const;
 export type BassStyle = typeof BASS_STYLES[number];
 
 export interface LayerSettings {
@@ -168,6 +168,7 @@ export interface JamSession {
   chaosMode?: ChaosMode;
   effectChain?: EffectChainSettings;
   workspaceModules?: string[];
+  midiClockEnabled?: boolean;
   runtime?: Record<string, unknown>;
 }
 export type ArrangementSection = 'groove' | 'chorus' | 'breakdown' | 'buildup' | 'silent';

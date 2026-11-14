@@ -19,6 +19,9 @@ import {
   LayoutGrid,
   Volume2,
   Palette,
+  Cable,
+  Clock,
+  Send,
 } from 'lucide-react';
 import { JamEngine, SCENES } from '../../engine/jam/JamEngine';
 import { MasterAudio } from '../../engine/audio/audioContext';
@@ -111,6 +114,29 @@ export function EssentialMasterBar({
   const lastTapRef = useRef(0);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const themeWrapRef = useRef<HTMLDivElement | null>(null);
+  const [midiTestFeedback, setMidiTestFeedback] = useState<string | null>(null);
+  const midiMode = session.outputMode === 'midi';
+  const midiOutputs = engine.midi.getAvailableOutputs();
+  const isGmChannelLayout = ['kick', 'snare', 'hihat', 'perc'].every(
+    id => session.layers.find(l => l.id === id)?.channel === 10
+  );
+
+  const toggleMidiMode = () => {
+    if (midiMode) {
+      engine.updateSession({ outputMode: 'internal' });
+    } else {
+      void engine.midi.init();
+      engine.updateSession({ outputMode: 'midi' });
+    }
+  };
+
+  const handleSendMidiTest = () => {
+    void engine.midi.init().then(() => {
+      const res = engine.midi.sendTestNote();
+      setMidiTestFeedback(res.success ? `✓ ${res.portName || 'MIDI'}` : (res.error || 'Kein Port'));
+      window.setTimeout(() => setMidiTestFeedback(null), 2600);
+    });
+  };
 
   useEffect(() => {
     if (!themeMenuOpen) return;
@@ -489,6 +515,19 @@ export function EssentialMasterBar({
 
           <button
             type="button"
+            className={`button midi-mode-toggle-btn ${midiMode ? 'is-midi-active' : ''}`}
+            aria-pressed={midiMode}
+            onClick={toggleMidiMode}
+            title={uiEdition === 'minimal'
+              ? 'MIDI Mode for Ableton / DAW: mutes internal web audio and focuses UI on MIDI channels, rhythm patterns, gate & dynamics'
+              : 'MIDI Mode für Ableton Live: schaltet interne Web-Klänge stumm und zeigt nur MIDI-Kanäle, Rhythmus-Muster, Note Gate & Dynamik'}
+          >
+            <Cable size={14} />
+            <span>🎹 MIDI Mode</span>
+          </button>
+
+          <button
+            type="button"
             className="button quiet midi-route-pill"
             onClick={onOpenRouting}
             title={uiEdition === 'minimal' ? 'Configure Audio & MIDI output routing' : 'Audio- & MIDI-Ausgangsrouting konfigurieren'}
@@ -504,7 +543,7 @@ export function EssentialMasterBar({
             <span className={`status-led ${midiStatus === 'ready' ? 'is-ready' : ''}`} />
           </button>
 
-          {onRecord && (
+          {onRecord && !midiMode && (
             <button
               type="button"
               className={`record-button ${recording?.isRecording ? 'recording' : ''}`}
@@ -528,39 +567,109 @@ export function EssentialMasterBar({
         </div>
       </div>
 
-      {/* Prominent Master Volume Bar (Touch-ready 44px target, dB display & Peak LED) */}
-      <div className="master-volume-strip" aria-label={uiEdition === 'minimal' ? 'Master Volume' : 'Master Lautstärke'}>
-        <div className="master-volume-label">
-          <Volume2 size={15} />
-          <span>{uiEdition === 'minimal' ? 'Volume' : 'Lautstärke'}</span>
+      {/* Prominent Master Bar: Audio Volume in Internal Mode OR Ableton MIDI Status Strip in MIDI Mode */}
+      {midiMode ? (
+        <div className="master-volume-strip midi-master-strip" aria-label={uiEdition === 'minimal' ? 'Ableton MIDI Control Bar' : 'Ableton MIDI-Steuerleiste'}>
+          <div className="midi-strip-left">
+            <span className={`status-led ${midiStatus === 'ready' ? 'is-ready' : ''}`} />
+            <span className="midi-strip-badge">ABLETON MIDI OUT</span>
+            {midiOutputs.length > 0 ? (
+              <select
+                className="midi-port-inline-select"
+                aria-label={uiEdition === 'minimal' ? 'MIDI Output Port' : 'MIDI-Ausgangsport'}
+                value={session.globalOutputId || engine.midi.getSelectedOutputId() || midiOutputs[0]?.id || ''}
+                onChange={e => engine.updateSession({ globalOutputId: e.target.value || null })}
+              >
+                {midiOutputs.map(port => (
+                  <option key={port.id} value={port.id}>{port.name}</option>
+                ))}
+              </select>
+            ) : (
+              <button
+                type="button"
+                className="midi-inline-action-btn"
+                onClick={onOpenRouting}
+              >
+                {uiEdition === 'minimal' ? 'Connect IAC / MIDI Port…' : 'IAC / MIDI-Port wählen…'}
+              </button>
+            )}
+          </div>
+
+          <div className="midi-strip-presets" role="group" aria-label="MIDI Channel Mapping">
+            <button
+              type="button"
+              className={`midi-preset-pill ${!isGmChannelLayout ? 'is-active' : ''}`}
+              onClick={() => engine.applyMidiChannelPreset('separate-1-8')}
+              title={uiEdition === 'minimal' ? 'Separate Channels Ch 1–8 (1 Tex · 2 Chd · 3 Bas · 4 Mel · 5–8 Drums)' : 'Jedes Instrument eigener Kanal Ch 1–8 (1 Tex · 2 Chd · 3 Bas · 4 Mel · 5–8 Drums)'}
+            >
+              Ch 1–8
+            </button>
+            <button
+              type="button"
+              className={`midi-preset-pill ${isGmChannelLayout ? 'is-active' : ''}`}
+              onClick={() => engine.applyMidiChannelPreset('gm-drums-10')}
+              title={uiEdition === 'minimal' ? 'Melodic Ch 1–4 + Drum Rack on Ch 10' : 'Melodie Ch 1–4 + komplettes Drum Rack auf Ch 10'}
+            >
+              GM Ch 10
+            </button>
+          </div>
+
+          <div className="midi-strip-actions">
+            <button
+              type="button"
+              className={`midi-clock-toggle-btn ${session.midiClockEnabled ? 'is-active' : ''}`}
+              aria-pressed={!!session.midiClockEnabled}
+              onClick={() => engine.updateSession({ midiClockEnabled: !session.midiClockEnabled })}
+              title={uiEdition === 'minimal' ? 'Send 24 PPQN MIDI Beat Clock + Start/Stop to DAW' : '24 PPQN MIDI Beat Clock + Start/Stop an Ableton senden'}
+            >
+              <Clock size={13} />
+              <span>{uiEdition === 'minimal' ? 'Clock Sync' : 'MIDI Clock'}</span>
+            </button>
+            <button
+              type="button"
+              className="midi-inline-action-btn"
+              onClick={handleSendMidiTest}
+              title={uiEdition === 'minimal' ? 'Send test MIDI notes across channels 1–5' : 'Testnoten auf Kanal 1–5 an Ableton senden'}
+            >
+              <Send size={12} />
+              <span>{midiTestFeedback || (uiEdition === 'minimal' ? 'Test Ch 1–5' : 'Test MIDI')}</span>
+            </button>
+          </div>
         </div>
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.01}
-          value={session.volume}
-          aria-label={uiEdition === 'minimal' ? 'Master Volume' : 'Master Lautstärke'}
-          title={uiEdition === 'minimal' ? 'Master volume (double-click/tap = 90% reset)' : 'Master-Lautstärke (Doppelklick/Doppeltap = 90 % Reset)'}
-          className="master-volume-slider"
-          onChange={e => engine.updateSession({ volume: Number(e.target.value) })}
-          onDoubleClick={resetMasterVolume}
-          onTouchEnd={() => {
-            const now = Date.now();
-            if (now - lastTapRef.current < 320) resetMasterVolume();
-            lastTapRef.current = now;
-          }}
-        />
-        <div className="master-volume-readout">
-          <span className="master-volume-pct">{Math.round(session.volume * 100)}%</span>
-          <span className="master-volume-db">{masterDbLabel}</span>
-          <span
-            className={`master-peak-led ${peakLedClass}`}
-            title={uiEdition === 'minimal' ? `Output Peak: ${peakDb <= -90 ? '-∞' : peakDb.toFixed(1)} dBFS` : `Ausgangs-Peak: ${peakDb <= -90 ? '-∞' : peakDb.toFixed(1)} dBFS`}
-            aria-label={`Peak LED ${peakLedClass}`}
+      ) : (
+        <div className="master-volume-strip" aria-label={uiEdition === 'minimal' ? 'Master Volume' : 'Master Lautstärke'}>
+          <div className="master-volume-label">
+            <Volume2 size={15} />
+            <span>{uiEdition === 'minimal' ? 'Volume' : 'Lautstärke'}</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={session.volume}
+            aria-label={uiEdition === 'minimal' ? 'Master Volume' : 'Master Lautstärke'}
+            title={uiEdition === 'minimal' ? 'Master volume (double-click/tap = 90% reset)' : 'Master-Lautstärke (Doppelklick/Doppeltap = 90 % Reset)'}
+            className="master-volume-slider"
+            onChange={e => engine.updateSession({ volume: Number(e.target.value) })}
+            onDoubleClick={resetMasterVolume}
+            onTouchEnd={() => {
+              const now = Date.now();
+              if (now - lastTapRef.current < 320) resetMasterVolume();
+              lastTapRef.current = now;
+            }}
           />
+          <div className="master-volume-readout">
+            <span className="master-volume-pct">{Math.round(session.volume * 100)}%</span>
+            <span className="master-volume-db">{masterDbLabel}</span>
+            <span
+              className={`master-peak-led ${peakLedClass}`}
+              title={uiEdition === 'minimal' ? `Output Peak: ${peakDb <= -90 ? '-∞' : peakDb.toFixed(1)} dBFS` : `Ausgangs-Peak: ${peakDb <= -90 ? '-∞' : peakDb.toFixed(1)} dBFS`}
+              aria-label={`Peak LED ${peakLedClass}`}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Main 4-Cell Studio Control Strip (Well-spaced, clear overview, always editable) */}
       <div className="essential-strip-grid">
@@ -810,14 +919,16 @@ export function EssentialMasterBar({
                 </select>
               </label>
 
-              <button
-                type="button"
-                className={`mini-reharmonize-btn ${secondaryEnabled ? 'is-active' : ''}`}
-                onClick={() => engine.setSecondaryChord({ enabled: !secondaryEnabled })}
-                title={uiEdition === 'minimal' ? 'Toggle Dual-Chord Layer B' : 'Dual-Chord Spur B ein-/ausschalten'}
-              >
-                <span>B: {secondaryEnabled ? secondaryTimbre.toUpperCase() : 'OFF'}</span>
-              </button>
+              {!midiMode && (
+                <button
+                  type="button"
+                  className={`mini-reharmonize-btn ${secondaryEnabled ? 'is-active' : ''}`}
+                  onClick={() => engine.setSecondaryChord({ enabled: !secondaryEnabled })}
+                  title={uiEdition === 'minimal' ? 'Toggle Dual-Chord Layer B' : 'Dual-Chord Spur B ein-/ausschalten'}
+                >
+                  <span>B: {secondaryEnabled ? secondaryTimbre.toUpperCase() : 'OFF'}</span>
+                </button>
+              )}
             </div>
           </div>
 

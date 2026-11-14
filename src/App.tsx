@@ -25,6 +25,7 @@ import { GrooveboxLayout } from './components/layouts/GrooveboxLayout';
 import { OrbitLayout } from './components/layouts/OrbitLayout';
 import { PatchbayLayout } from './components/layouts/PatchbayLayout';
 import { SynesthesiaLayout } from './components/layouts/SynesthesiaLayout';
+import { getMacroLabelInfo, isMidiOnlyMode } from './components/layouts/LayoutShared';
 import {
   MINIMAL_MACROS,
   getSceneDisplay,
@@ -309,7 +310,10 @@ export default function App() {
           {/* Core & Custom Macros Ribbon */}
           <section className="macro-strip" aria-label={uiEdition === 'minimal' ? 'Sound Macros' : 'Musikalische Makros'}>
             {pinned.length ? pinned.map(m => {
-              const label = uiEdition === 'minimal' ? MINIMAL_MACROS[m.id] : m;
+              const midiMode = isMidiOnlyMode(session);
+              const label = (midiMode && (m.id === 'warmth' || m.id === 'space'))
+                ? getMacroLabelInfo(m.id, true, uiEdition === 'minimal')
+                : (uiEdition === 'minimal' ? MINIMAL_MACROS[m.id] : m);
               return (
                 <label className="macro" key={m.id}>
                   <span>{label.name}<output>{Math.round(session.macros[m.id]*100)}</output></span>
@@ -474,7 +478,7 @@ export default function App() {
                   isOn: session.customMacrosEnabled !== false,
                   onToggle: () => engine.setCustomMacrosEnabled(session.customMacrosEnabled === false),
                 },
-              ].map(d => {
+              ].filter(d => !isMidiOnlyMode(session) || !['eq', 'fxchain', 'atmosphere'].includes(d.id)).map(d => {
                 const IconComponent = d.icon;
                 const isSelected = activeDrawer === d.id;
                 return (
@@ -510,7 +514,7 @@ export default function App() {
             </div>
 
             {/* Active Drawer Panel Container */}
-            {activeDrawer && (
+            {activeDrawer && !(isMidiOnlyMode(session) && ['eq', 'fxchain', 'atmosphere'].includes(activeDrawer)) && (
               <div className="drawer-panel-body" role="tabpanel">
                 {activeDrawer === 'soundscape' && (
                   <SoundscapeDeck session={session} position={position} onClose={() => setActiveDrawer(null)} />

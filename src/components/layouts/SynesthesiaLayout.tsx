@@ -15,7 +15,7 @@ import {
   getTimbreDisplayName,
 } from '../../engine/jam/minimalCatalog';
 import { noteName } from '../jam/PianoRoll';
-import { ChordBarStepMeter, SCALES_LIST, useSmoothBeat } from './LayoutShared';
+import { ChordBarStepMeter, SCALES_LIST, useSmoothBeat, TrackRhythmControls, TrackMidiControls, isMidiOnlyMode, getMacroLabelInfo } from './LayoutShared';
 import type { ClipNote, JamPosition, JamSession, MacroName } from '../../types/jam';
 import type { UiEdition } from '../../types/ui';
 
@@ -123,10 +123,11 @@ export function SynesthesiaLayout({
   const space = session.macros.space ?? 0.5;
 
   const windowStart = Math.floor(beatPos / 16) * 16;
+  const DRUM_IDS = new Set(['kick', 'snare', 'hihat', 'perc']);
   const skyNotes = useMemo(
     () =>
       rollNotes
-        .filter((n) => n.startBeat >= Math.max(0, stepBeat - 16) && n.startBeat <= stepBeat + 12 && n.channel !== 10)
+        .filter((n) => n.startBeat >= Math.max(0, stepBeat - 16) && n.startBeat <= stepBeat + 12 && !DRUM_IDS.has(n.layerId) && n.channel !== 10)
         .slice(-90),
     [rollNotes, stepBeat],
   );
@@ -392,9 +393,9 @@ export function SynesthesiaLayout({
           {/* Left & Right Stage XY Pads */}
           <div className="syn-xy-overlay">
             <StageXYPad
-              title={isMin ? 'MOTION × SPACE' : 'BEWEGUNG × RAUM'}
+              title={session.outputMode === 'midi' ? (isMin ? 'MOTION × NOTE GATE' : 'BEWEGUNG × NOTE GATE') : (isMin ? 'MOTION × SPACE' : 'BEWEGUNG × RAUM')}
               xLabel={macroLabel('movement', 'Bewegung')}
-              yLabel={macroLabel('space', 'Raum')}
+              yLabel={session.outputMode === 'midi' ? getMacroLabelInfo('space', true, isMin).name : macroLabel('space', 'Raum')}
               xValue={movement}
               yValue={space}
               accentColor="var(--accent-2)"
@@ -404,8 +405,8 @@ export function SynesthesiaLayout({
               }}
             />
             <StageXYPad
-              title={isMin ? 'WARMTH × DENSITY' : 'WÄRME × DICHTE'}
-              xLabel={macroLabel('warmth', 'Wärme')}
+              title={session.outputMode === 'midi' ? (isMin ? 'DYNAMICS × DENSITY' : 'DYNAMIK × DICHTE') : (isMin ? 'WARMTH × DENSITY' : 'WÄRME × DICHTE')}
+              xLabel={session.outputMode === 'midi' ? getMacroLabelInfo('warmth', true, isMin).name : macroLabel('warmth', 'Wärme')}
               yLabel={macroLabel('density', 'Dichte')}
               xValue={warmth}
               yValue={density}
@@ -422,6 +423,7 @@ export function SynesthesiaLayout({
       {/* Middle: 8 Luminous Vertical Track Totems */}
       <div className="syn-totem-strip" aria-label={isMin ? 'Track Totems' : 'Spur-Totems'}>
         {session.layers.map((layer) => {
+          const midiMode = isMidiOnlyMode(session);
           const firing = activeLayerIds.has(layer.id) && !layer.muted;
           const volPct = Math.round(layer.volume * 100);
           const presets = getInstrumentPresets(layer.role, layer.drumVoice);
@@ -436,6 +438,7 @@ export function SynesthesiaLayout({
               <div className="syn-totem-head">
                 <span className="dot" style={{ background: layer.color }} />
                 <strong>{layer.name}</strong>
+                {midiMode && <span className="track-midi-ch-badge">Ch {layer.channel}</span>}
                 <div className="syn-totem-ms">
                   <button
                     type="button"
@@ -466,7 +469,7 @@ export function SynesthesiaLayout({
                 </div>
                 <div className="syn-totem-sliders">
                   <label>
-                    <span>Vol {volPct}%</span>
+                    <span>{midiMode ? `Vel ${Math.round((0.35 + layer.volume * 0.85) * 100)}%` : `Vol ${volPct}%`}</span>
                     <input
                       type="range"
                       min={0}
@@ -488,34 +491,41 @@ export function SynesthesiaLayout({
                 </div>
               </div>
 
-              <div className="syn-totem-footer">
-                <button
-                  type="button"
-                  className="mini-dice-btn"
-                  onClick={() => engine.randomizeInstrumentPreset(layer.id)}
-                  title={isMin ? `Dice preset for ${layer.name}` : `Zufalls-Sound für ${layer.name}`}
-                >
-                  <Dices size={12} />
-                </button>
-                <select
-                  className="compact-track-preset-select"
-                  value={activePreset?.id ?? ''}
-                  aria-label={isMin ? `${layer.name} instrument preset` : `${layer.name} Instrument`}
-                  onChange={(e) => {
-                    if (e.target.value) engine.applyInstrumentPreset(layer.id, e.target.value);
-                  }}
-                >
-                  <option value="" disabled>
-                    {layer.role === 'drum'
-                      ? getDrumModelDisplayName(layer.settings?.drumModel ?? layer.drumVoice, edition)
-                      : getTimbreDisplayName(layer.settings?.timbre ?? 'warm', edition)}
-                  </option>
-                  {presets.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {getInstrumentPresetDisplay(p, edition).name}
-                    </option>
-                  ))}
-                </select>
+              <div className="syn-totem-footer-stack">
+                {midiMode ? (
+                  <TrackMidiControls layer={layer} edition={edition} compact />
+                ) : (
+                  <div className="syn-totem-footer">
+                    <button
+                      type="button"
+                      className="mini-dice-btn"
+                      onClick={() => engine.randomizeInstrumentPreset(layer.id)}
+                      title={isMin ? `Dice preset for ${layer.name}` : `Zufalls-Sound für ${layer.name}`}
+                    >
+                      <Dices size={12} />
+                    </button>
+                    <select
+                      className="compact-track-preset-select"
+                      value={activePreset?.id ?? ''}
+                      aria-label={isMin ? `${layer.name} instrument preset` : `${layer.name} Instrument`}
+                      onChange={(e) => {
+                        if (e.target.value) engine.applyInstrumentPreset(layer.id, e.target.value);
+                      }}
+                    >
+                      <option value="" disabled>
+                        {layer.role === 'drum'
+                          ? getDrumModelDisplayName(layer.settings?.drumModel ?? layer.drumVoice, edition)
+                          : getTimbreDisplayName(layer.settings?.timbre ?? 'warm', edition)}
+                      </option>
+                      {presets.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {getInstrumentPresetDisplay(p, edition).name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <TrackRhythmControls layer={layer} edition={edition} compact />
               </div>
             </div>
           );

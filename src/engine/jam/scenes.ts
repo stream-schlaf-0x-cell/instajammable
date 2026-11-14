@@ -628,13 +628,13 @@ export function createSession(sceneId = 'dorian-dawn', seed = 142857): JamSessio
   const scene = SCENES.find(s => s.id === sceneId) || SCENES[0]; const lofi = scene.style === 'lofi'; const root = scene.root; const tuning = SCENE_TUNING[scene.id] || {};
   const definitions: Array<[string, string, JamLayer['role'], number, number, number, number, JamLayer['settings']['timbre']]> = [
     ['drone', 'Texture', 'drone', 1, root - 12, root + 12, lofi ? 0.24 : 0.58, scene.id === 'tidal-glass' ? 'air' : 'warm'],
-    ['chords', 'Chords', 'chords', 1, root, root + 25, lofi ? 0.63 : 0.52, lofi ? 'keys' : 'warm'],
+    ['chords', 'Chords', 'chords', 2, root, root + 25, lofi ? 0.63 : 0.52, lofi ? 'keys' : 'warm'],
     ['bass', 'Bass', 'bass', 3, root - 24, root - 8, lofi ? 0.74 : 0.44, 'warm'],
-    ['melody', 'Melody', 'melody', 2, root + 12, root + 31, lofi ? 0.42 : 0.32, scene.id === 'tidal-glass' ? 'bell' : 'keys'],
-    ['kick', 'Kick', 'drum', 10, 36, 36, lofi ? 0.82 : 0.24, 'warm'],
-    ['snare', 'Snare / Rim', 'drum', 10, 38, 38, lofi ? 0.64 : 0.16, 'warm'],
-    ['hihat', 'Hi-hat', 'drum', 10, 42, 42, lofi ? 0.36 : 0.17, 'warm'],
-    ['perc', 'Percussion', 'drum', 10, 37, 37, lofi ? 0.28 : 0.31, 'bell'],
+    ['melody', 'Melody', 'melody', 4, root + 12, root + 31, lofi ? 0.42 : 0.32, scene.id === 'tidal-glass' ? 'bell' : 'keys'],
+    ['kick', 'Kick', 'drum', 5, 36, 36, lofi ? 0.82 : 0.24, 'warm'],
+    ['snare', 'Snare / Rim', 'drum', 6, 38, 38, lofi ? 0.64 : 0.16, 'warm'],
+    ['hihat', 'Hi-hat', 'drum', 7, 42, 42, lofi ? 0.36 : 0.17, 'warm'],
+    ['perc', 'Percussion', 'drum', 8, 37, 37, lofi ? 0.28 : 0.31, 'bell'],
   ];
   const layers = definitions.map(([id, name, role, channel, minNote, maxNote, volume, timbre], index): JamLayer => ({
     id, name, role, channel, color: COLORS[index], volume, muted: scene.id === 'night-orbit' && role === 'drum', solo: false,

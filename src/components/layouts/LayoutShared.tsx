@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Sparkles, Dice5, Dices, Volume2, LockKeyhole, Snowflake, SkipForward } from 'lucide-react';
+import { Sparkles, Dice5, Dices, Volume2, LockKeyhole, Snowflake, SkipForward, SlidersHorizontal } from 'lucide-react';
 import { JamEngine, SCENES } from '../../engine/jam/JamEngine';
 import { getInstrumentPresets, detectActiveInstrumentPreset } from '../../engine/jam/instrumentPresets';
 import {
@@ -16,12 +16,211 @@ import { ChaosModulatorDeck } from '../jam/ChaosModulatorDeck';
 import { AtmosphereFlow } from '../jam/AtmosphereFlow';
 import { CustomMacroDeck } from '../jam/CustomMacroDeck';
 import { noteName } from '../jam/PianoRoll';
-import type { JamLayer, JamPosition, JamSession, MacroName } from '../../types/jam';
+import type { JamLayer, JamPosition, JamSession, LayerSettings, MacroName } from '../../types/jam';
 import type { MusicalScale } from '../../types';
 import type { UiEdition } from '../../types/ui';
 
 const engine = JamEngine.getInstance();
 const pitch = (n: number) => noteName(n).replace(/-?\d+$/, '');
+
+export function isMidiOnlyMode(session: JamSession): boolean {
+  return session.outputMode === 'midi';
+}
+
+export function getMacroLabelInfo(
+  id: MacroName,
+  midiMode: boolean,
+  min: boolean,
+): { name: string; text: string } {
+  if (midiMode) {
+    if (id === 'warmth') {
+      return min
+        ? { name: 'Dynamics', text: 'MIDI velocity curve & accent expression' }
+        : { name: 'MIDI Dynamik', text: 'Velocity-Ausdruck & Akzentstärke für Ableton' };
+    }
+    if (id === 'space') {
+      return min
+        ? { name: 'Note Gate', text: 'MIDI note sustain & gate duration in DAW' }
+        : { name: 'Note Gate', text: 'Notenlänge & Gate-Sustain in Ableton' };
+    }
+  }
+  return min ? MINIMAL_MACROS[id] : CLASSIC_MACROS[id];
+}
+
+export interface RhythmControlSpec {
+  field: keyof LayerSettings;
+  value: string;
+  options: Array<{ value: string; label: string }>;
+}
+
+export function getLayerRhythmOptions(layer: JamLayer, min = false): RhythmControlSpec {
+  const s = layer.settings;
+  if (layer.role === 'bass') {
+    return {
+      field: 'bassStyle',
+      value: s.bassStyle || 'pedal',
+      options: [
+        { value: 'pedal', label: 'Pedal Sub' },
+        { value: 'breathingSub', label: 'Breathing Sub' },
+        { value: 'dubOffbeat', label: 'Dub Offbeat' },
+        { value: 'jazzWalk', label: 'Jazz Walk' },
+        { value: 'syncopatedGroove', label: 'Syncopated' },
+        { value: 'minimalArp', label: 'Minimal Arp' },
+        { value: 'pulse8', label: '1/8 Pulse' },
+        { value: 'psyRoll', label: '1/16 Roll' },
+      ],
+    };
+  }
+  if (layer.role === 'chords') {
+    return {
+      field: 'chordPattern',
+      value: s.chordPattern || 'pad',
+      options: [
+        { value: 'pad', label: 'Pad Sustain' },
+        { value: 'wave', label: 'Breathing Wave' },
+        { value: 'broken', label: 'Broken Arp' },
+        { value: 'pulse', label: 'Gate Pulse' },
+        { value: 'syncopated', label: 'Syncopated' },
+        { value: 'euclidean', label: min ? 'Euclidean' : 'Euklidisch' },
+        { value: 'cluster', label: 'Cluster Swell' },
+      ],
+    };
+  }
+  if (layer.role === 'melody') {
+    return {
+      field: 'melodyStyle',
+      value: s.melodyStyle || 'motif',
+      options: [
+        { value: 'motif', label: min ? 'Motif' : 'Motiv' },
+        { value: 'ostinato', label: 'Ostinato' },
+        { value: 'bellDrops', label: 'Bell Drops' },
+        { value: 'neoclassical', label: 'Neoclassical' },
+        { value: 'lofiHook', label: 'Lo-Fi Hook' },
+        { value: 'off', label: min ? 'Off' : 'Aus' },
+      ],
+    };
+  }
+  if (layer.role === 'drone') {
+    return {
+      field: 'droneStyle',
+      value: s.droneStyle || 'rootFifth',
+      options: [
+        { value: 'rootFifth', label: min ? 'Root + 5th' : 'Grundton + Quinte' },
+        { value: 'rootOctave', label: min ? 'Root + Oct' : 'Grundton + Oktave' },
+        { value: 'pedalTonic', label: 'Pedal Tonic' },
+        { value: 'shiftingFifth', label: 'Shifting 5th' },
+        { value: 'cluster', label: 'Open Cluster' },
+      ],
+    };
+  }
+  return {
+    field: 'rhythmAlgorithm',
+    value: s.rhythmAlgorithm || 'composed',
+    options: [
+      { value: 'composed', label: min ? 'Composed' : 'Komponiert' },
+      { value: 'euclidean', label: min ? 'Euclidean' : 'Euklidisch' },
+      { value: 'probabilistic', label: min ? 'Probabilistic' : 'Wahrscheinlichkeit' },
+      { value: 'polymetric', label: min ? 'Polymetric' : 'Polymetrisch' },
+      { value: 'markov', label: 'Markov' },
+      { value: 'densityBurst', label: 'Density Burst' },
+    ],
+  };
+}
+
+export function TrackRhythmControls({
+  layer,
+  edition,
+  compact = false,
+}: {
+  layer: JamLayer;
+  edition: UiEdition;
+  compact?: boolean;
+}) {
+  const min = edition === 'minimal';
+  const spec = getLayerRhythmOptions(layer, min);
+  return (
+    <div
+      className={`track-rhythm-bar ${compact ? 'is-compact' : ''}`}
+      onClick={e => e.stopPropagation()}
+    >
+      <select
+        className="track-rhythm-select"
+        aria-label={`${layer.name} ${min ? 'rhythm pattern' : 'Rhythmus-Muster'}`}
+        title={min ? 'Change rhythm pattern' : 'Rhythmus / Spielmuster wechseln'}
+        value={spec.value}
+        onChange={e => engine.setLayerSettings(layer.id, { [spec.field]: e.target.value } as Partial<LayerSettings>)}
+      >
+        {spec.options.map(opt => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
+      <button
+        type="button"
+        className="mini-toggle mini-rhythm-dice-btn"
+        onClick={e => { e.stopPropagation(); engine.randomizeLayerRhythm(layer.id); }}
+        title={min ? 'Randomize rhythm pattern' : 'Neuen Rhythmus für diese Spur würfeln'}
+        aria-label={`${layer.name} ${min ? 'randomize rhythm' : 'Rhythmus würfeln'}`}
+      >
+        <Dices size={12} />
+      </button>
+    </div>
+  );
+}
+
+export function TrackMidiControls({
+  layer,
+  edition,
+  compact = false,
+}: {
+  layer: JamLayer;
+  edition: UiEdition;
+  compact?: boolean;
+}) {
+  const min = edition === 'minimal';
+  const isDrum = layer.role === 'drum';
+  const rangeLabel = isDrum
+    ? `${noteName(layer.settings.minNote)} (${layer.settings.minNote})`
+    : `${noteName(layer.settings.minNote)}–${noteName(layer.settings.maxNote)}`;
+
+  return (
+    <div
+      className={`track-midi-bar ${compact ? 'is-compact' : ''}`}
+      onClick={e => e.stopPropagation()}
+    >
+      <label className="track-midi-ch-field" title={min ? 'MIDI Channel (1–16)' : 'MIDI-Kanal (1–16) für Ableton'}>
+        <span>Ch</span>
+        <select
+          aria-label={`${layer.name} MIDI Channel`}
+          value={layer.channel}
+          onChange={e => engine.updateLayer(layer.id, { channel: Number(e.target.value) })}
+        >
+          {Array.from({ length: 16 }, (_, i) => i + 1).map(ch => (
+            <option key={ch} value={ch}>{ch}</option>
+          ))}
+        </select>
+      </label>
+      <div className="track-midi-oct-group" title={isDrum ? (min ? 'Drum trigger note −/+1' : 'Drum MIDI-Note −/+1') : (min ? 'Transpose −/+1 octave' : 'Register −/+1 Oktave verschieben')}>
+        <button
+          type="button"
+          className="mini-toggle mini-oct-btn"
+          onClick={e => { e.stopPropagation(); engine.shiftLayerOctave(layer.id, -1); }}
+          aria-label={`${layer.name} ${isDrum ? 'note down' : 'octave down'}`}
+        >
+          −
+        </button>
+        <span className="track-midi-range-tag">{rangeLabel}</span>
+        <button
+          type="button"
+          className="mini-toggle mini-oct-btn"
+          onClick={e => { e.stopPropagation(); engine.shiftLayerOctave(layer.id, 1); }}
+          aria-label={`${layer.name} ${isDrum ? 'note up' : 'octave up'}`}
+        >
+          +
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export const SCALES_LIST: [MusicalScale, string][] = [
   ['dorian', 'Dorian'],
@@ -270,19 +469,20 @@ export function MacroDeckCard({
   edition: UiEdition;
 }) {
   const min = edition === 'minimal';
+  const midiMode = isMidiOnlyMode(session);
   const macroIds: MacroName[] = ['movement', 'density', 'warmth', 'space'];
 
   return (
-    <section className="plugin-card macro-deck-card" aria-label={min ? 'Sound Macros' : 'Klang-Makros'}>
+    <section className={`plugin-card macro-deck-card ${midiMode ? 'is-midi-mode' : ''}`} aria-label={min ? 'Sound Macros' : 'Klang-Makros'}>
       <header className="plugin-card-head">
         <div>
-          <span className="plugin-eyebrow">{min ? 'EXPRESSION' : 'AUSDRUCK'}</span>
-          <h3 className="plugin-card-title">{min ? 'Core Macros' : 'Kern-Makros'}</h3>
+          <span className="plugin-eyebrow">{midiMode ? 'MIDI EXPRESSION' : (min ? 'EXPRESSION' : 'AUSDRUCK')}</span>
+          <h3 className="plugin-card-title">{midiMode ? (min ? 'MIDI Controls' : 'MIDI-Makros (Ableton)') : (min ? 'Core Macros' : 'Kern-Makros')}</h3>
         </div>
       </header>
       <div className="macro-deck-grid">
         {macroIds.map(id => {
-          const info = min ? MINIMAL_MACROS[id] : CLASSIC_MACROS[id];
+          const info = getMacroLabelInfo(id, midiMode, min);
           const val = session.macros[id];
           return (
             <label key={id} className="plugin-macro-tile">
@@ -320,8 +520,9 @@ export function CompactTrackMatrix({
   onSelectLayer?: (layerId: string) => void;
 }) {
   const min = edition === 'minimal';
+  const midiMode = isMidiOnlyMode(session);
   return (
-    <div className="compact-track-matrix" role="list" aria-label={min ? 'Tracks' : 'Spuren'}>
+    <div className={`compact-track-matrix ${midiMode ? 'is-midi-mode' : ''}`} role="list" aria-label={min ? 'Tracks' : 'Spuren'}>
       {session.layers.map((layer: JamLayer) => {
         const selected = selectedLayerId === layer.id;
         const presets = getInstrumentPresets(layer.role, layer.drumVoice);
@@ -340,16 +541,19 @@ export function CompactTrackMatrix({
             <div className="compact-track-top">
               <span className="track-led" />
               <strong className="compact-track-name">{layer.name}</strong>
+              {midiMode && <span className="track-midi-ch-badge">Ch {layer.channel}</span>}
               <div className="compact-track-btns">
-                <button
-                  type="button"
-                  className="mini-toggle mini-dice-btn"
-                  onClick={e => { e.stopPropagation(); engine.randomizeInstrumentPreset(layer.id); }}
-                  title={min ? 'Randomize track instrument' : 'Instrument für diese Spur würfeln'}
-                  aria-label={`${layer.name} ${min ? 'random instrument' : 'Instrument würfeln'}`}
-                >
-                  <Dices size={12} />
-                </button>
+                {!midiMode && (
+                  <button
+                    type="button"
+                    className="mini-toggle mini-dice-btn"
+                    onClick={e => { e.stopPropagation(); engine.randomizeInstrumentPreset(layer.id); }}
+                    title={min ? 'Randomize track instrument' : 'Instrument für diese Spur würfeln'}
+                    aria-label={`${layer.name} ${min ? 'random instrument' : 'Instrument würfeln'}`}
+                  >
+                    <Dices size={12} />
+                  </button>
+                )}
                 <button
                   type="button"
                   className={`mini-toggle ${layer.muted ? 'is-active-mute' : ''}`}
@@ -370,38 +574,43 @@ export function CompactTrackMatrix({
                 {layer.frozen && <Snowflake size={11} className="track-flag-icon" />}
               </div>
             </div>
-            <div className="compact-track-preset-row" onClick={e => e.stopPropagation()}>
-              <select
-                className="compact-track-preset-select"
-                aria-label={`${layer.name} ${min ? 'instrument preset' : 'Instrumenten-Preset'}`}
-                value={activePreset?.id || ''}
-                onChange={e => {
-                  if (e.target.value) engine.applyInstrumentPreset(layer.id, e.target.value);
-                }}
-              >
-                {!activePreset && (
-                  <option value="">{fallbackLabel}</option>
-                )}
-                {presets.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {getInstrumentPresetDisplay(p, edition).name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {midiMode ? (
+              <TrackMidiControls layer={layer} edition={edition} compact />
+            ) : (
+              <div className="compact-track-preset-row" onClick={e => e.stopPropagation()}>
+                <select
+                  className="compact-track-preset-select"
+                  aria-label={`${layer.name} ${min ? 'instrument preset' : 'Instrumenten-Preset'}`}
+                  value={activePreset?.id || ''}
+                  onChange={e => {
+                    if (e.target.value) engine.applyInstrumentPreset(layer.id, e.target.value);
+                  }}
+                >
+                  {!activePreset && (
+                    <option value="">{fallbackLabel}</option>
+                  )}
+                  {presets.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {getInstrumentPresetDisplay(p, edition).name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <TrackRhythmControls layer={layer} edition={edition} compact />
             <div className="compact-track-vol">
-              <Volume2 size={12} />
+              {midiMode ? <SlidersHorizontal size={12} /> : <Volume2 size={12} />}
               <input
                 type="range"
                 min={0}
                 max={1}
                 step={0.01}
                 value={layer.volume}
-                aria-label={`${layer.name} volume`}
+                aria-label={`${layer.name} ${midiMode ? 'MIDI velocity' : 'volume'}`}
                 onClick={e => e.stopPropagation()}
                 onChange={e => engine.updateLayer(layer.id, { volume: Number(e.target.value) })}
               />
-              <span>{Math.round(layer.volume * 100)}</span>
+              <span>{midiMode ? `Vel ${Math.round(35 + layer.volume * 85)}` : Math.round(layer.volume * 100)}</span>
             </div>
           </div>
         );

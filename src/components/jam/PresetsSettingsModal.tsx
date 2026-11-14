@@ -593,8 +593,8 @@ export const PresetsSettingsModal: React.FC<PresetsSettingsModalProps> = ({
               </div>
               <p>
                 {isMinimal
-                  ? 'Record live notes into your DAW: enable the IAC Driver in macOS Audio MIDI Setup, select it in MIDI Routing, and route channels 1, 2, 3 and 10.'
-                  : <>Du kannst die Noten während des Jammens auch live in Ableton aufnehmen: Aktiviere in macOS Audio-MIDI-Setup den <strong>IAC-Treiber</strong>, wähle in der App unter{' '}<em>Audio- & MIDI-Routing</em> den IAC-Treiber als Ausgang, und erstelle in Ableton MIDI-Spuren mit <em>MIDI From: IAC-Treiber</em> auf den Kanälen 1, 2, 3 und 10.</>}
+                  ? 'Record live notes into your DAW: enable the IAC Driver in macOS Audio MIDI Setup, select it in MIDI Routing, and receive each track on MIDI Ch 1–8 (1 Texture · 2 Chords · 3 Bass · 4 Melody · 5 Kick · 6 Snare · 7 Hi-Hat · 8 Perc), or switch to GM Drums Ch 10.'
+                  : <>Du kannst die Noten während des Jammens auch live in Ableton aufnehmen: Aktiviere in macOS Audio-MIDI-Setup den <strong>IAC-Treiber</strong>, wähle in der App den <strong>🎹 MIDI Mode</strong> (oder <em>Audio- & MIDI-Routing</em>) und lege in Ableton pro Instrument eine Spur auf <strong>Ch 1–8</strong> an (1 Texture · 2 Chords · 3 Bass · 4 Melody · 5 Kick · 6 Snare · 7 Hi-Hat · 8 Perc).</>}
               </p>
             </div>
           </div>

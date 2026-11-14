@@ -9,7 +9,7 @@ import {
 } from '../../engine/jam/minimalCatalog';
 import { DRUM_MODELS, TIMBRES, type DrumModel, type JamPosition, type JamSession, type Timbre } from '../../types/jam';
 import type { UiEdition } from '../../types/ui';
-import { HarmonyHeroCard, MacroDeckCard } from './LayoutShared';
+import { HarmonyHeroCard, MacroDeckCard, TrackRhythmControls, TrackMidiControls, isMidiOnlyMode, getLayerRhythmOptions } from './LayoutShared';
 
 const engine = JamEngine.getInstance();
 
@@ -21,6 +21,7 @@ interface GrooveboxLayoutProps {
 
 export function GrooveboxLayout({ session, position, edition }: GrooveboxLayoutProps) {
   const min = edition === 'minimal';
+  const midiMode = isMidiOnlyMode(session);
   const [selectedId, setSelectedId] = useState<string>('chords');
   const layer = session.layers.find(l => l.id === selectedId) || session.layers[0];
   const presets = getInstrumentPresets(layer.role, layer.drumVoice);
@@ -60,18 +61,21 @@ export function GrooveboxLayout({ session, position, edition }: GrooveboxLayoutP
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedId(l.id); } }}
               >
                 <div className="pad-header-row">
-                  <span className="pad-index">0{idx + 1}</span>
+                  <span className="pad-index">{midiMode ? `CH ${l.channel}` : `0${idx + 1}`}</span>
                   <span className="pad-led" />
                 </div>
                 <strong className="pad-title">{l.name}</strong>
                 <span className="pad-sub">
-                  {l.role === 'drum'
-                    ? getDrumModelDisplayName(l.settings.drumModel || l.drumVoice, edition)
-                    : getTimbreDisplayName(l.settings.timbre, edition)}
+                  {midiMode
+                    ? (getLayerRhythmOptions(l, min).options.find(o => o.value === getLayerRhythmOptions(l, min).value)?.label || '')
+                    : (l.role === 'drum'
+                        ? getDrumModelDisplayName(l.settings.drumModel || l.drumVoice, edition)
+                        : getTimbreDisplayName(l.settings.timbre, edition))}
                 </span>
                 <div className="pad-meter-bar">
                   <div className="pad-meter-fill" style={{ width: `${Math.round(l.volume * 100)}%` }} />
                 </div>
+                <TrackRhythmControls layer={l} edition={edition} compact />
                 <div className="pad-quick-actions">
                   <button
                     type="button"
@@ -122,11 +126,11 @@ export function GrooveboxLayout({ session, position, edition }: GrooveboxLayoutP
         </header>
 
         <div className="groovebox-controls-grid">
-          {/* Volume */}
+          {/* Level / Velocity */}
           <label className="plugin-macro-tile">
             <div className="plugin-macro-top">
-              <strong>{min ? 'Level' : 'Lautstärke'}</strong>
-              <output>{Math.round(layer.volume * 100)}%</output>
+              <strong>{midiMode ? 'MIDI Velocity' : (min ? 'Level' : 'Lautstärke')}</strong>
+              <output>{midiMode ? `Vel ${Math.round((0.35 + layer.volume * 0.85) * 100)}%` : `${Math.round(layer.volume * 100)}%`}</output>
             </div>
             <input
               type="range"
@@ -154,74 +158,93 @@ export function GrooveboxLayout({ session, position, edition }: GrooveboxLayoutP
             />
           </label>
 
-          {/* Timbre or Drum Model */}
-          {layer.role !== 'drum' ? (
-            <label className="plugin-macro-tile">
-              <div className="plugin-macro-top">
-                <strong>{min ? 'Sound Engine Timbre' : 'Klangfarbe (Timbre)'}</strong>
-              </div>
-              <select
-                value={layer.settings.timbre}
-                onChange={e => engine.setLayerSettings(layer.id, { timbre: e.target.value as Timbre })}
-              >
-                {TIMBRES.map(t => (
-                  <option key={t} value={t}>{getTimbreDisplayName(t, edition)}</option>
-                ))}
-              </select>
-            </label>
-          ) : (
-            <label className="plugin-macro-tile">
-              <div className="plugin-macro-top">
-                <strong>{min ? 'Percussion Model' : 'Drum-Modell'}</strong>
-              </div>
-              <select
-                value={layer.settings.drumModel || 'woodblock'}
-                onChange={e => engine.setLayerSettings(layer.id, { drumModel: e.target.value as DrumModel })}
-              >
-                {DRUM_MODELS.map(m => (
-                  <option key={m} value={m}>{getDrumModelDisplayName(m, edition)}</option>
-                ))}
-              </select>
-            </label>
-          )}
-
-          {/* Preset Selector & Quick Actions */}
+          {/* Rhythm Pattern Tile (Both modes) */}
           <div className="plugin-macro-tile">
             <div className="plugin-macro-top">
-              <strong>{min ? 'Channel Preset' : 'Kanal-Preset'}</strong>
-              <div className="hero-actions-inline">
-                <button
-                  type="button"
-                  className="plugin-chip-btn"
-                  onClick={() => engine.cycleInstrumentPreset(layer.id, 1)}
-                  title={min ? 'Next preset' : 'Nächstes Preset'}
-                >
-                  <ChevronRight size={12} />
-                </button>
-                <button
-                  type="button"
-                  className="plugin-chip-btn"
-                  onClick={() => engine.randomizeInstrumentPreset(layer.id)}
-                  title={min ? 'Randomize preset' : 'Zufälliges Preset'}
-                >
-                  <Shuffle size={12} />
-                </button>
-              </div>
+              <strong>{min ? 'Rhythm Pattern' : 'Rhythmus & Muster'}</strong>
             </div>
-            <select
-              value={activePreset?.id || ''}
-              onChange={e => {
-                if (e.target.value) engine.applyInstrumentPreset(layer.id, e.target.value);
-              }}
-            >
-              <option value="">{min ? '— Custom —' : '— Benutzerdefiniert —'}</option>
-              {presets.map(p => (
-                <option key={p.id} value={p.id}>
-                  {getInstrumentPresetDisplay(p, edition).name}
-                </option>
-              ))}
-            </select>
+            <TrackRhythmControls layer={layer} edition={edition} />
           </div>
+
+          {midiMode ? (
+            <div className="plugin-macro-tile">
+              <div className="plugin-macro-top">
+                <strong>{min ? 'MIDI Channel & Note Range' : 'MIDI-Kanal & Register'}</strong>
+              </div>
+              <TrackMidiControls layer={layer} edition={edition} />
+            </div>
+          ) : (
+            <>
+              {/* Timbre or Drum Model */}
+              {layer.role !== 'drum' ? (
+                <label className="plugin-macro-tile">
+                  <div className="plugin-macro-top">
+                    <strong>{min ? 'Sound Engine Timbre' : 'Klangfarbe (Timbre)'}</strong>
+                  </div>
+                  <select
+                    value={layer.settings.timbre}
+                    onChange={e => engine.setLayerSettings(layer.id, { timbre: e.target.value as Timbre })}
+                  >
+                    {TIMBRES.map(t => (
+                      <option key={t} value={t}>{getTimbreDisplayName(t, edition)}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <label className="plugin-macro-tile">
+                  <div className="plugin-macro-top">
+                    <strong>{min ? 'Percussion Model' : 'Drum-Modell'}</strong>
+                  </div>
+                  <select
+                    value={layer.settings.drumModel || 'woodblock'}
+                    onChange={e => engine.setLayerSettings(layer.id, { drumModel: e.target.value as DrumModel })}
+                  >
+                    {DRUM_MODELS.map(m => (
+                      <option key={m} value={m}>{getDrumModelDisplayName(m, edition)}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              {/* Preset Selector & Quick Actions */}
+              <div className="plugin-macro-tile">
+                <div className="plugin-macro-top">
+                  <strong>{min ? 'Channel Preset' : 'Kanal-Preset'}</strong>
+                  <div className="hero-actions-inline">
+                    <button
+                      type="button"
+                      className="plugin-chip-btn"
+                      onClick={() => engine.cycleInstrumentPreset(layer.id, 1)}
+                      title={min ? 'Next preset' : 'Nächstes Preset'}
+                    >
+                      <ChevronRight size={12} />
+                    </button>
+                    <button
+                      type="button"
+                      className="plugin-chip-btn"
+                      onClick={() => engine.randomizeInstrumentPreset(layer.id)}
+                      title={min ? 'Randomize preset' : 'Zufälliges Preset'}
+                    >
+                      <Shuffle size={12} />
+                    </button>
+                  </div>
+                </div>
+                <select
+                  value={activePreset?.id || ''}
+                  onChange={e => {
+                    if (e.target.value) engine.applyInstrumentPreset(layer.id, e.target.value);
+                  }}
+                >
+                  <option value="">{min ? '— Custom —' : '— Benutzerdefiniert —'}</option>
+                  {presets.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {getInstrumentPresetDisplay(p, edition).name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
         </div>
       </section>
     </div>
