@@ -81,7 +81,7 @@ export class WebMidiManager {
       this.selectedOutputId = (list.find(port => port.name.toLowerCase().includes('iac')) ?? list[0]).id;
       this.preferredOutputId = this.selectedOutputId; // pin initial discovery; unplugging never redirects a live route
     }
-    if (this.selectedOutputId && list.some(port => port.id === this.selectedOutputId) && (this.errorMessage?.startsWith('MIDI output ') || this.errorMessage?.includes('MIDI-Ausgang'))) { this.errorMessage = null; this.notifyStatus(); }
+    if (this.selectedOutputId && list.some(port => port.id === this.selectedOutputId) && (this.errorMessage?.startsWith('MIDI output ') || this.errorMessage?.includes('MIDI-Port') || this.errorMessage?.includes('MIDI-Ausgang'))) { this.errorMessage = null; this.notifyStatus(); }
     this.onDevicesChanged?.([...list]);
   }
   public getAvailableOutputs(): MidiDeviceOption[] { return [...this.availableOutputs]; }
@@ -89,8 +89,24 @@ export class WebMidiManager {
   public selectOutput(id: string, preserveLayerIds?: Set<string>): void {
     if (this.selectedOutputId && this.selectedOutputId !== id) this.releaseGlobalRoute(this.selectedOutputId, preserveLayerIds);
     this.outputExplicitlyOff = false; this.preferredOutputId = id; this.selectedOutputId = id;
-    if (!this.getOutput(id)) { this.errorMessage = `Gespeicherter MIDI-Port nicht verbunden. Internes Audio spielt wie gewohnt.`; this.notifyStatus(); }
-    else if (this.errorMessage?.startsWith('MIDI output ') || this.errorMessage?.includes('MIDI-Port')) { this.errorMessage = null; this.notifyStatus(); }
+    if (this.midiAccess && !this.getOutput(id)) { this.errorMessage = `Gespeicherter MIDI-Port nicht verbunden. Internes Audio spielt wie gewohnt.`; this.notifyStatus(); }
+    else if (this.errorMessage?.startsWith('MIDI output ') || this.errorMessage?.includes('MIDI-Port') || this.errorMessage?.includes('MIDI-Ausgang')) { this.errorMessage = null; this.notifyStatus(); }
+  }
+  public selectBestAvailableOutput(preferredId?: string | null, preserveLayerIds?: Set<string>): string | null {
+    if (preferredId && this.availableOutputs.some(port => port.id === preferredId)) {
+      this.selectOutput(preferredId, preserveLayerIds);
+      return preferredId;
+    }
+    if (this.selectedOutputId && this.availableOutputs.some(port => port.id === this.selectedOutputId)) {
+      this.selectOutput(this.selectedOutputId, preserveLayerIds);
+      return this.selectedOutputId;
+    }
+    const candidate = this.availableOutputs.find(port => port.name.toLowerCase().includes('iac')) ?? this.availableOutputs[0] ?? null;
+    if (candidate) {
+      this.selectOutput(candidate.id, preserveLayerIds);
+      return candidate.id;
+    }
+    return null;
   }
   public selectOff(preserveLayerIds?: Set<string>): void {
     if (this.selectedOutputId) this.releaseGlobalRoute(this.selectedOutputId, preserveLayerIds);
@@ -220,7 +236,11 @@ export class WebMidiManager {
     } catch (error) { this.errorMessage = error instanceof Error ? error.message : 'MIDI CC send failed.'; this.notifyStatus(); }
   }
   public sendTestNote(): { success: boolean; portName?: string; error?: string } {
-    const output = this.getOutput();
+    let output = this.getOutput();
+    if (!output) {
+      this.selectBestAvailableOutput();
+      output = this.getOutput();
+    }
     if (!output) return { success: false, error: 'Kein MIDI-Ausgang aktiv oder ausgewählt.' };
     const time = now();
     const sent = [
@@ -229,6 +249,7 @@ export class WebMidiManager {
       this.scheduleNote(3, 36, 98, time, 350, 'test'),
       this.scheduleNote(4, 72, 92, time, 350, 'test'),
       this.scheduleNote(5, 36, 110, time, 300, 'test'),
+      this.scheduleNote(10, 36, 110, time, 300, 'test'),
     ];
     const success = sent.some(Boolean);
     return { success, portName: output.name ?? 'MIDI Port', error: success ? undefined : this.errorMessage ?? 'Senden fehlgeschlagen.' };

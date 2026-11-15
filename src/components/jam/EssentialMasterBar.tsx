@@ -30,6 +30,7 @@ import type { JamPosition, JamSession, ChordPattern, ChordPace } from '../../typ
 import type { MusicalScale } from '../../types';
 import type { ViewDensityMode } from './WorkspaceBar';
 import type { RecorderState } from '../../engine/audio/recorder';
+import type { MidiDeviceOption } from '../../engine/midi/webMidi';
 import {
   DEFAULT_CUSTOM_THEME,
   LAYOUT_OPTIONS,
@@ -55,6 +56,8 @@ interface EssentialMasterBarProps {
   session: JamSession;
   position: JamPosition;
   midiStatus: string;
+  outputs?: MidiDeviceOption[];
+  onConnectMidi?: () => void;
   onOpenRouting: () => void;
   onCapture: () => void;
   onOpenSettings?: () => void;
@@ -87,6 +90,8 @@ export function EssentialMasterBar({
   session,
   position,
   midiStatus,
+  outputs,
+  onConnectMidi,
   onOpenRouting,
   onCapture,
   onOpenSettings,
@@ -116,22 +121,32 @@ export function EssentialMasterBar({
   const themeWrapRef = useRef<HTMLDivElement | null>(null);
   const [midiTestFeedback, setMidiTestFeedback] = useState<string | null>(null);
   const midiMode = session.outputMode === 'midi';
-  const midiOutputs = engine.midi.getAvailableOutputs();
+  const midiOutputs = outputs ?? engine.midi.getAvailableOutputs();
   const isGmChannelLayout = ['kick', 'snare', 'hihat', 'perc'].every(
     id => session.layers.find(l => l.id === id)?.channel === 10
   );
 
   const toggleMidiMode = () => {
     if (midiMode) {
-      engine.updateSession({ outputMode: 'internal' });
+      if (midiOutputs.length > 0 && session.globalOutputId !== null) {
+        engine.updateSession({ outputMode: 'both' });
+      } else {
+        engine.updateSession({ outputMode: 'internal' });
+      }
     } else {
-      void engine.midi.init();
-      engine.updateSession({ outputMode: 'midi' });
+      void engine.reconnectMidi({ targetOutputMode: 'midi' }).then(res => {
+        if (!res.ok) {
+          setMidiTestFeedback(engine.midi.getErrorMessage() || 'MIDI Fehler');
+          window.setTimeout(() => setMidiTestFeedback(null), 3200);
+        }
+      });
     }
   };
 
   const handleSendMidiTest = () => {
-    void engine.midi.init().then(() => {
+    void engine.reconnectMidi({
+      targetOutputMode: session.outputMode === 'internal' ? 'both' : session.outputMode,
+    }).then(() => {
       const res = engine.midi.sendTestNote();
       setMidiTestFeedback(res.success ? `✓ ${res.portName || 'MIDI'}` : (res.error || 'Kein Port'));
       window.setTimeout(() => setMidiTestFeedback(null), 2600);
@@ -577,9 +592,10 @@ export function EssentialMasterBar({
               <select
                 className="midi-port-inline-select"
                 aria-label={uiEdition === 'minimal' ? 'MIDI Output Port' : 'MIDI-Ausgangsport'}
-                value={session.globalOutputId || engine.midi.getSelectedOutputId() || midiOutputs[0]?.id || ''}
+                value={session.globalOutputId ?? engine.midi.getSelectedOutputId() ?? ''}
                 onChange={e => engine.updateSession({ globalOutputId: e.target.value || null })}
               >
+                <option value="">{uiEdition === 'minimal' ? 'Off / No Port' : 'Aus / Kein Port'}</option>
                 {midiOutputs.map(port => (
                   <option key={port.id} value={port.id}>{port.name}</option>
                 ))}
@@ -588,7 +604,7 @@ export function EssentialMasterBar({
               <button
                 type="button"
                 className="midi-inline-action-btn"
-                onClick={onOpenRouting}
+                onClick={midiStatus !== 'ready' && onConnectMidi ? onConnectMidi : onOpenRouting}
               >
                 {uiEdition === 'minimal' ? 'Connect IAC / MIDI Port…' : 'IAC / MIDI-Port wählen…'}
               </button>

@@ -453,6 +453,36 @@ export class JamEngine {
     if (strict && target === undefined && !outputs.length) throw new Error('Kein MIDI-Ausgang verbunden. Aktiviere den IAC-Treiber oder wähle interne Klänge.');
     if (strict) for (const layer of this.state.layers) if (!layer.muted && layer.outputId && !outputs.some(port => port.id === layer.outputId && port.state !== 'disconnected')) throw new Error(`${layer.name}: Der gespeicherte MIDI-Port ist nicht verbunden.`);
   }
+  async reconnectMidi(options?: { targetOutputMode?: JamSession['outputMode']; preferredOutputId?: string | null }): Promise<{ ok: boolean; portId: string | null; portName: string | null }> {
+    const ok = await this.midi.init();
+    const explicit = new Set(this.state.layers.filter(l => l.outputId !== null).map(l => l.id));
+    const chosenId = ok ? this.midi.selectBestAvailableOutput(options?.preferredOutputId ?? this.state.globalOutputId, explicit) : null;
+    if (chosenId) {
+      this.state.globalOutputId = chosenId;
+    }
+    const prevMode = this.state.outputMode;
+    if (options?.targetOutputMode) {
+      this.state.outputMode = options.targetOutputMode;
+    } else if (this.state.outputMode === 'internal' && chosenId !== null) {
+      this.state.outputMode = 'both';
+    }
+    if (this.state.outputMode === 'midi') {
+      for (const synth of this.pads.values()) synth.stopAllVoices();
+      for (const synth of this.secondaryPads.values()) synth.stopAllVoices();
+      this.drums?.stopAllVoices();
+      this.rack?.killTail();
+      this.bed?.setActive(false);
+    }
+    this.applyRouting(false);
+    if (this.running && this.state.midiClockEnabled && prevMode === 'internal' && this.state.outputMode !== 'internal') {
+      this.midi.sendRealtime(0xfa, this.state.globalOutputId);
+    }
+    this.applySound();
+    this.remember();
+    this.notify();
+    const portName = chosenId ? (this.midi.getAvailableOutputs().find(p => p.id === chosenId)?.name ?? null) : null;
+    return { ok, portId: chosenId, portName };
+  }
   private async init(): Promise<void> {
     if (this.initialized) return this.initialized;
     this.initialized = (async () => {
@@ -524,7 +554,7 @@ export class JamEngine {
   }
   stop(): void {
     this.transportToken++; if (this.running) this.resumeNotes = this.remainingNotes(); this.stoppedBeat = this.getPosition().beat; this.running = false; this.clock?.stop(); this.midi.panic();
-    if (this.state.midiClockEnabled || this.state.outputMode !== 'internal') this.midi.sendRealtime(0xfc, this.state.globalOutputId);
+    if (this.state.midiClockEnabled && this.state.outputMode !== 'internal') this.midi.sendRealtime(0xfc, this.state.globalOutputId);
     this.bed?.setActive(false);
     for (const synth of this.pads.values()) synth.stopAllVoices(true);
     for (const synth of this.secondaryPads.values()) synth.stopAllVoices(true);
@@ -614,7 +644,7 @@ export class JamEngine {
       const velScale = midiOnly ? (0.35 + layer.volume * 0.85) : 1;
       const warmthOffset = midiOnly ? (session.macros.warmth - 0.5) * 18 : 0;
       const midiVelocity = clamp(Math.round(note.velocity * velScale + warmthOffset), 1, 127);
-      const gateMult = midiOnly && layer.role !== 'drum' ? (0.45 + session.macros.space * 1.15) : 1;
+      const gateMult = midiOnly && layer.role !== 'drum' ? clamp(0.30 + session.macros.space * 0.70, 0.25, 1.0) : 1;
       this.midi.scheduleNote(note.channel ?? layer.channel, note.note, midiVelocity, perfTime, duration * gateMult * 1000, layer.id, layer.outputId ?? undefined);
     }
   }
@@ -842,10 +872,16 @@ export class JamEngine {
       }
       this.nextChordCache = null;
     }
-    if (Object.hasOwn(patch, 'globalOutputId') && patch.globalOutputId !== old.globalOutputId) {
-      const defaults = new Set(this.state.layers.filter(l => l.outputId === null).map(l => l.id));
-      for (const layerId of defaults) this.midi.releaseNotesForLayer(layerId);
-      if (this.state.outputMode === 'midi') this.truncatePerformed(defaults); this.applyRouting();
+    if (Object.hasOwn(patch, 'globalOutputId')) {
+      if (patch.globalOutputId !== old.globalOutputId) {
+        const defaults = new Set(this.state.layers.filter(l => l.outputId === null).map(l => l.id));
+        for (const layerId of defaults) this.midi.releaseNotesForLayer(layerId);
+        if (this.state.outputMode === 'midi') this.truncatePerformed(defaults);
+      }
+      if (typeof patch.globalOutputId === 'string' && patch.globalOutputId.length > 0 && this.state.outputMode === 'internal' && !Object.hasOwn(patch, 'outputMode')) {
+        this.state.outputMode = 'both';
+      }
+      this.applyRouting();
     }
     if (patch.bpm !== undefined) this.clock?.setBpm(this.state.bpm); if (patch.swing !== undefined) this.clock?.setSwing(this.state.swing);
     if (patch.outputMode && patch.outputMode !== old.outputMode) {
@@ -854,6 +890,16 @@ export class JamEngine {
       }
       this.midi.panic();
       if (patch.outputMode === 'midi') { for (const synth of this.pads.values()) synth.stopAllVoices(); for (const synth of this.secondaryPads.values()) synth.stopAllVoices(); this.drums?.stopAllVoices(); this.rack?.killTail(); }
+      if ((patch.outputMode === 'midi' || patch.outputMode === 'both')) {
+        if (this.midi.getStatus() === 'ready') {
+          const outputs = this.midi.getAvailableOutputs();
+          if (!this.state.globalOutputId || !outputs.some(p => p.id === this.state.globalOutputId)) {
+            const best = this.midi.selectBestAvailableOutput();
+            if (best) this.state.globalOutputId = best;
+          }
+        }
+        this.applyRouting(false);
+      }
       if (this.running && this.state.midiClockEnabled && old.outputMode === 'internal' && (patch.outputMode === 'midi' || patch.outputMode === 'both')) {
         this.midi.sendRealtime(0xfa, this.state.globalOutputId);
       }

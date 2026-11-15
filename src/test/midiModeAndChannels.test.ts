@@ -198,3 +198,69 @@ test('WebMidiManager clock sync emits 24 PPQN ticks (6 per 16th step) plus Start
   }
   assert.deepEqual(port.sent.at(-1)?.bytes, [0xfc]);
 });
+
+test('reconnectMidi recovers from null or stale globalOutputId and upgrades internal mode to both', async () => {
+  const other = createMockPort('External Synth');
+  const iac = createMockPort('IAC Driver Bus 1');
+  const state = createSession('dorian-dawn', 77);
+  state.outputMode = 'internal';
+  state.globalOutputId = null;
+
+  const engine = new JamEngine(state);
+  engine.midi.setMockMidiAccess({ outputs: new Map([[other.id, other], [iac.id, iac]]) } as unknown as MIDIAccess);
+
+  const resNull = await engine.reconnectMidi();
+  assert.equal(resNull.ok, true);
+  assert.equal(resNull.portId, iac.id);
+  assert.equal(resNull.portName, 'IAC Driver Bus 1');
+  assert.equal(engine.getState().globalOutputId, iac.id);
+  assert.equal(engine.getState().outputMode, 'both');
+  assert.equal(engine.midi.getSelectedOutputId(), iac.id);
+
+  // Also recover from a stale/disconnected port ID from a previous session
+  engine.updateSession({ outputMode: 'internal', globalOutputId: 'stale-disconnected-port-id' });
+  const resStale = await engine.reconnectMidi();
+  assert.equal(resStale.ok, true);
+  assert.equal(resStale.portId, iac.id);
+  assert.equal(engine.getState().globalOutputId, iac.id);
+  assert.equal(engine.getState().outputMode, 'both');
+  assert.equal(engine.midi.getSelectedOutputId(), iac.id);
+});
+
+test('switching outputMode to midi or selecting globalOutputId applies routing and sends MIDI notes immediately', () => {
+  const iac = createMockPort('IAC Driver Bus 1');
+  const h = createHarness('dorian-dawn');
+  const internal = h.engine as unknown as {
+    pads: Map<string, { triggerNote: () => void; stopAllVoices: () => void; fadeOutAll: () => void; updateParams: () => void; getActiveVoiceCount: () => { sounding: number; releasing: number } }>;
+    secondaryPads: Map<string, { triggerNote: () => void; stopAllVoices: () => void; fadeOutAll: () => void; updateParams: () => void; getActiveVoiceCount: () => { sounding: number; releasing: number } }>;
+    drums: { triggerKick: () => void; triggerSnare: () => void; triggerHiHat: () => void; triggerPerc: () => void; stopAllVoices: () => void; stopVoiceKind: () => void };
+  };
+  for (const l of h.engine.getState().layers) {
+    const stub = { triggerNote() {}, stopAllVoices() {}, fadeOutAll() {}, updateParams() {}, getActiveVoiceCount: () => ({ sounding: 0, releasing: 0 }) };
+    internal.pads.set(l.id, stub);
+    internal.secondaryPads.set(l.id, stub);
+  }
+  internal.drums = { triggerKick() {}, triggerSnare() {}, triggerHiHat() {}, triggerPerc() {}, stopAllVoices() {}, stopVoiceKind() {} };
+
+  // Put harness back into 'internal' with no port selected first
+  h.engine.updateSession({ outputMode: 'internal', globalOutputId: null });
+  h.engine.midi.setMockMidiAccess({ outputs: new Map([[iac.id, iac]]) } as unknown as MIDIAccess);
+
+  // Selecting globalOutputId in internal mode upgrades outputMode to 'both' and routes the port
+  h.engine.updateSession({ globalOutputId: iac.id });
+  assert.equal(h.engine.getState().outputMode, 'both');
+  assert.equal(h.engine.midi.getSelectedOutputId(), iac.id);
+  h.tick(0, 0.05);
+  assert.ok(iac.sent.some(msg => (msg.bytes[0] & 0xf0) === 0x90), 'expected Note On after selecting port');
+
+  // Re-switching via outputMode: 'midi' after selectOff still re-binds best available port and sends notes
+  iac.sent.length = 0;
+  h.engine.updateSession({ outputMode: 'internal', globalOutputId: null });
+  h.engine.updateSession({ outputMode: 'midi' });
+  assert.equal(h.engine.getState().outputMode, 'midi');
+  assert.equal(h.engine.getState().globalOutputId, iac.id);
+  for (let step = 1; step <= 16; step++) {
+    h.tick(step, 0.05 + step * 0.12);
+  }
+  assert.ok(iac.sent.some(msg => (msg.bytes[0] & 0xf0) === 0x90), 'expected Note On in midi mode');
+});

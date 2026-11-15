@@ -135,7 +135,20 @@ export default function App() {
   const act = useCallback(async (action: () => unknown | Promise<unknown>) => { try { return await action(); } catch (e) { message(e instanceof Error ? e.message : String(e)); return undefined; } }, [message]);
   const stopPreview = useCallback(() => engine.stopPreview(), []);
   const closeRouting = useCallback(() => setRouting(false), []);
-  const changeOutputMode = useCallback((outputMode: JamSession['outputMode']) => { void act(async () => { const resume = engine.getPosition().playing; if(resume)engine.stop(); engine.updateSession({outputMode}); if(resume)await engine.start(); }); }, [act]);
+  const changeOutputMode = useCallback((outputMode: JamSession['outputMode']) => {
+    void act(async () => {
+      const resume = engine.getPosition().playing;
+      if (resume) engine.stop();
+      if (outputMode === 'internal') {
+        engine.updateSession({ outputMode });
+      } else {
+        const res = await engine.reconnectMidi({ targetOutputMode: outputMode });
+        setOutputs(engine.midi.getAvailableOutputs());
+        setOutputId(res.portId || '');
+      }
+      if (resume) await engine.start();
+    });
+  }, [act]);
   const live = events.length > 0;
   // The scene preview is only needed before the first note has played. Computing eight bars of eight layers on every slider
   // tick blocks the main thread, which also drives the audio look-ahead scheduler, and can cause dropouts on older laptops.
@@ -149,7 +162,17 @@ export default function App() {
     const unsub = engine.subscribe(setSession);
     const recUnsub = engine.recorder.subscribe(setRecording);
     engine.midi.setCallbacks(devices => { setOutputs(devices); setOutputId(engine.midi.getSelectedOutputId() || ''); }, status => { setMidiStatus(status); if (engine.midi.getErrorMessage()) message(engine.midi.getErrorMessage()!); });
-    if (!restored.current) { restored.current = true; const saved = loadSavedSession(); if (saved) void act(() => engine.loadSession(saved)); }
+    if (!restored.current) {
+      restored.current = true;
+      const saved = loadSavedSession();
+      if (saved) void act(() => engine.loadSession(saved));
+      if (engine.midi.checkSupport() && engine.getState().globalOutputId !== null) {
+        void engine.reconnectMidi().then(res => {
+          setOutputs(engine.midi.getAvailableOutputs());
+          setOutputId(res.portId || '');
+        });
+      }
+    }
     return () => { unsub(); recUnsub(); };
   }, [act, message]);
   useEffect(() => {
@@ -186,7 +209,18 @@ export default function App() {
   const capture = () => { void act(() => { const rawClip = engine.createClip(captureBars); if (!rawClip.notes.length) { message(uiEdition === 'minimal' ? 'No played notes yet. Start the jam first.' : 'Noch keine gespielten Noten. Starte den Jam und halte einen Moment fest.'); return; } const clip = uiEdition === 'minimal' ? { ...rawClip, name: getClipTitleDisplay(rawClip.name, 'minimal') } : rawClip; keepClip(clip); setEditor(clip); }); };
   const importMidi = async (file?: File) => { if (!file) return; await act(async () => { if (file.size > 10_000_000) throw new Error(uiEdition === 'minimal' ? 'MIDI file too large (max 10 MB).' : 'MIDI-Datei ist zu groß (max. 10 MB).'); const clip = validateClip(midiToClip(new Uint8Array(await file.arrayBuffer()), file.name.replace(/\.mid[i]?$/i, ''))); setEditor(clip); message(uiEdition === 'minimal' ? 'MIDI opened. Save to add to library.' : 'MIDI geöffnet. Speichern übernimmt den Clip in die Sammlung.'); }); };
   const record = async () => { if (!recording.isRecording && session.outputMode === 'midi') { message(uiEdition === 'minimal' ? 'WAV records internal audio. Switch to Internal Audio or Audio + MIDI.' : 'WAV nimmt die internen Klänge auf. Wähle Audio intern oder Audio + MIDI; externe Instrumente nimmst du in Ableton auf. Für Noten nutze Capture.'); return; } if (recording.isRecording) { await act(async () => { const result = await engine.recorder.stop(); if (result.wavBytes) { downloadBytes(result.wavBytes, 'instajammable-take.wav', 'audio/wav'); message(uiEdition === 'minimal' ? 'WAV recording saved.' : 'WAV-Aufnahme gespeichert.'); } else if (result.webmBlob) { const blob = result.webmBlob; const ext = blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'm4a' : 'webm'; downloadBytes(new Uint8Array(await blob.arrayBuffer()), 'instajammable-take.' + ext, blob.type); message(uiEdition === 'minimal' ? 'Recording saved.' : 'Komprimierte Aufnahme gespeichert; PCM war nicht verfügbar.'); } else message(engine.recorder.getState().lastError || (uiEdition === 'minimal' ? 'No audio recorded.' : 'Keine Audiodaten aufgezeichnet.')); }); } else { await act(async () => { if (!engine.getPosition().playing) await engine.start(); if (!engine.recorder.start()) throw new Error(engine.recorder.getState().lastError || (uiEdition === 'minimal' ? 'Could not start recording.' : 'Aufnahme konnte nicht starten.')); }); } };
-  const connectMidi = async () => { await act(async () => { const ok = await engine.midi.init(); if (ok) { setOutputs(engine.midi.getAvailableOutputs()); const saved = engine.getState().globalOutputId; const preserve = new Set(engine.getState().layers.filter(l=>l.outputId!==null).map(l=>l.id)); if(saved === null) engine.midi.selectOff(preserve); else if(typeof saved === 'string') engine.midi.selectOutput(saved,preserve); else engine.updateSession({globalOutputId:engine.midi.getSelectedOutputId()}); setOutputId(engine.midi.getSelectedOutputId() || ''); } }); };
+  const connectMidi = async () => {
+    await act(async () => {
+      const res = await engine.reconnectMidi();
+      setOutputs(engine.midi.getAvailableOutputs());
+      setOutputId(res.portId || '');
+      message(
+        res.portName
+          ? (isMinimal ? `MIDI connected · ${res.portName}` : `MIDI verbunden · ${res.portName}`)
+          : (isMinimal ? 'MIDI ready — no output port found' : 'MIDI bereit — kein Ausgangsport gefunden')
+      );
+    });
+  };
   const pinned = MACROS.filter(m => session.pinned.includes(m.id));
   const isMinimal = uiEdition === 'minimal';
 
@@ -197,6 +231,8 @@ export default function App() {
         session={session}
         position={position}
         midiStatus={midiStatus}
+        outputs={outputs}
+        onConnectMidi={() => void connectMidi()}
         onOpenRouting={() => setRouting(true)}
         onCapture={capture}
         onOpenSettings={() => setSettingsOpen(true)}
