@@ -73,16 +73,16 @@ test('default sessions route every instrument to separate MIDI channels 1..8', (
   assert.deepEqual(Object.values(byId), [1, 2, 3, 4, 5, 6, 7, 8]);
 });
 
-test('legacy [1,1,3,2,10,10,10,10] sessions migrate to channels 1..8 while preserving custom or GM channels', () => {
+test('classic [1,1,3,2,10,10,10,10] and custom channels are preserved across migrateSession, validateSession, and updateSession', () => {
   const base = createSession('dorian-dawn', 5);
-  const legacyRaw = {
+  const classicRaw = {
     ...base,
     layers: base.layers.map(l => ({ ...l, channel: LEGACY_LAYER_CHANNELS[l.id] })),
   };
-  const migrated = migrateSession(legacyRaw);
+  const migrated = migrateSession(classicRaw);
   assert.deepEqual(
     migrated.layers.map(l => l.channel),
-    [1, 2, 3, 4, 5, 6, 7, 8],
+    [1, 1, 3, 2, 10, 10, 10, 10],
   );
 
   const customRaw = {
@@ -96,21 +96,41 @@ test('legacy [1,1,3,2,10,10,10,10] sessions migrate to channels 1..8 while prese
   assert.equal(preserved.layers.find(l => l.id === 'kick')?.channel, 12);
 });
 
-test('applyMidiChannelPreset switches cleanly between Ch 1..8 and GM Drums Ch 10', () => {
+test('applyMidiChannelPreset switches cleanly between Classic Ableton, Ch 1..8, and GM Drums Ch 10 and survives updateSession', () => {
   const engine = new JamEngine(createSession('dorian-dawn', 9));
-  engine.applyMidiChannelPreset('gm-drums-10');
-  const gm = engine.getState().layers;
+  engine.applyMidiChannelPreset('ableton-classic');
   assert.deepEqual(
-    gm.map(l => l.channel),
+    engine.getState().layers.map(l => l.channel),
+    [1, 1, 3, 2, 10, 10, 10, 10],
+  );
+  // Subsequent slider/session edits must never overwrite ableton-classic channels
+  engine.updateSession({ bpm: 96, swing: 0.12 });
+  assert.deepEqual(
+    engine.getState().layers.map(l => l.channel),
+    [1, 1, 3, 2, 10, 10, 10, 10],
+  );
+  assert.deepEqual(
+    validateSession(engine.getState()).layers.map(l => l.channel),
+    [1, 1, 3, 2, 10, 10, 10, 10],
+  );
+
+  engine.applyMidiChannelPreset('gm-drums-10');
+  assert.deepEqual(
+    engine.getState().layers.map(l => l.channel),
     [1, 2, 3, 4, 10, 10, 10, 10],
   );
-  // Ensure validateSession preserves GM preset instead of re-migrating it
+  engine.updateSession({ bpm: 102 });
   assert.deepEqual(
     validateSession(engine.getState()).layers.map(l => l.channel),
     [1, 2, 3, 4, 10, 10, 10, 10],
   );
 
   engine.applyMidiChannelPreset('separate-1-8');
+  assert.deepEqual(
+    engine.getState().layers.map(l => l.channel),
+    [1, 2, 3, 4, 5, 6, 7, 8],
+  );
+  engine.updateSession({ bpm: 105 });
   assert.deepEqual(
     engine.getState().layers.map(l => l.channel),
     [1, 2, 3, 4, 5, 6, 7, 8],
@@ -263,4 +283,50 @@ test('switching outputMode to midi or selecting globalOutputId applies routing a
     h.tick(step, 0.05 + step * 0.12);
   }
   assert.ok(iac.sent.some(msg => (msg.bytes[0] & 0xf0) === 0x90), 'expected Note On in midi mode');
+});
+
+test('browser mode uses 1-argument output.send(bytes) without Firefox clear(), and sendTestNote hits Ch 1..8 + Ch 10', async () => {
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: {} });
+  let clearCalls = 0;
+  let openCalls = 0;
+  const argCounts: number[] = [];
+  const sent: number[][] = [];
+  const iac = {
+    id: 'iac-1',
+    name: 'IAC-Treiber Bus 1',
+    state: 'connected',
+    open: async () => { openCalls++; },
+    send(bytes: number[], ...rest: unknown[]) {
+      argCounts.push(1 + rest.length);
+      sent.push([...bytes]);
+    },
+    clear() { clearCalls++; },
+  };
+  try {
+    const midi = new WebMidiManager();
+    midi.setMockMidiAccess({ outputs: new Map([[iac.id, iac]]) } as unknown as MIDIAccess);
+    midi.selectOutput(iac.id);
+    assert.ok(openCalls >= 1, 'should call open() when available');
+
+    const res = midi.sendTestNote();
+    assert.equal(res.success, true);
+    assert.equal(midi.getSentNoteCount(), 12);
+    assert.equal(midi.getLastSentNote()?.channel, 10);
+    assert.ok(argCounts.length >= 12);
+    assert.ok(argCounts.every(c => c === 1), 'must use 1-arg output.send(bytes) in browser mode');
+    assert.equal(clearCalls, 0, 'must not call output.clear() in browser timer mode');
+
+    // Verify all channels 1..8 and 10 received a Note On
+    const noteOnChannels = new Set(
+      sent.filter(b => (b[0] & 0xf0) === 0x90).map(b => (b[0] & 0x0f) + 1),
+    );
+    for (const ch of [1, 2, 3, 4, 5, 6, 7, 8, 10]) {
+      assert.ok(noteOnChannels.has(ch), `expected test Note On on channel ${ch}`);
+    }
+    midi.panic();
+  } finally {
+    if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+    else Reflect.deleteProperty(globalThis, 'window');
+  }
 });

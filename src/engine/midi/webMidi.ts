@@ -14,6 +14,8 @@ export class WebMidiManager {
   private preferredOutputId: string | null | undefined;
   private availableOutputs: MidiDeviceOption[] = [];
   private eventHistory: RecordedMidiEvent[] = [];
+  private sentNoteCount = 0;
+  private lastSentNote: { channel: number; note: number; velocity: number; portName: string; time: number } | null = null;
   private status: MidiSupportStatus = 'uninitialized';
   private errorMessage: string | null = null;
   private initPromise: Promise<boolean> | null = null;
@@ -39,6 +41,16 @@ export class WebMidiManager {
   }
   public getStatus(): MidiSupportStatus { return this.status; }
   public getErrorMessage(): string | null { return this.errorMessage; }
+  public getSentNoteCount(): number { return this.sentNoteCount; }
+  public getLastSentNote(): { channel: number; note: number; velocity: number; portName: string; time: number } | null {
+    return this.lastSentNote ? { ...this.lastSentNote } : null;
+  }
+  private ensurePortOpen(output: MIDIOutput | null | undefined): void {
+    const openFn = (output as (MIDIOutput & { open?: () => Promise<unknown> }) | null | undefined)?.open;
+    if (typeof openFn === 'function') {
+      void Promise.resolve(openFn.call(output)).catch(() => {});
+    }
+  }
   public init(): Promise<boolean> {
     if (this.midiAccess && this.status === 'ready') return Promise.resolve(true);
     if (this.initPromise) return this.initPromise;
@@ -49,6 +61,7 @@ export class WebMidiManager {
         this.midiAccess = await navigator.requestMIDIAccess({ sysex: false });
         this.status = 'ready'; this.errorMessage = null;
         this.updateOutputsList();
+        this.ensurePortOpen(this.getOutput());
         this.midiAccess.onstatechange = () => this.updateOutputsList();
         this.notifyStatus(); return true;
       } catch (error) {
@@ -89,7 +102,9 @@ export class WebMidiManager {
   public selectOutput(id: string, preserveLayerIds?: Set<string>): void {
     if (this.selectedOutputId && this.selectedOutputId !== id) this.releaseGlobalRoute(this.selectedOutputId, preserveLayerIds);
     this.outputExplicitlyOff = false; this.preferredOutputId = id; this.selectedOutputId = id;
-    if (this.midiAccess && !this.getOutput(id)) { this.errorMessage = `Gespeicherter MIDI-Port nicht verbunden. Internes Audio spielt wie gewohnt.`; this.notifyStatus(); }
+    const output = this.getOutput(id);
+    if (output) this.ensurePortOpen(output);
+    if (this.midiAccess && !output) { this.errorMessage = `Gespeicherter MIDI-Port nicht verbunden. Internes Audio spielt wie gewohnt.`; this.notifyStatus(); }
     else if (this.errorMessage?.startsWith('MIDI output ') || this.errorMessage?.includes('MIDI-Port') || this.errorMessage?.includes('MIDI-Ausgang')) { this.errorMessage = null; this.notifyStatus(); }
   }
   public selectBestAvailableOutput(preferredId?: string | null, preserveLayerIds?: Set<string>): string | null {
@@ -151,11 +166,18 @@ export class WebMidiManager {
     const output = this.getOutput(outputId);
     return !output ? 'off' : typeof (output as MIDIOutput & {clear?: () => void}).clear === 'function' ? 'timestamped' : 'timer';
   }
+  private useTimerScheduling(output: MIDIOutput): boolean {
+    if (typeof (output as MIDIOutput & { clear?: () => void }).clear !== 'function') return true;
+    return typeof window !== 'undefined';
+  }
   private dispatch(output: MIDIOutput, bytes: number[], timestamp?: number): void {
-    // Chromium currently omits MIDIOutput.clear(). Avoid its uncancellable
-    // hardware queue: retain future events in cancellable app-owned timers.
-    if (timestamp !== undefined && timestamp > now() && typeof (output as MIDIOutput & {clear?: () => void}).clear !== 'function') {
-      if (!this.warnedTimerPorts.has(output.id)) {
+    const useTimers = this.useTimerScheduling(output);
+    // In browsers, schedule future events via app-owned cancellable timers and send
+    // 1-argument output.send(bytes) when due so Firefox/macOS CoreMIDI never stalls on
+    // DOMHighResTimeStamp or output.clear() queues.
+    if (timestamp !== undefined && timestamp > now() && useTimers) {
+      const lacksClear = typeof (output as MIDIOutput & { clear?: () => void }).clear !== 'function';
+      if (lacksClear && !this.warnedTimerPorts.has(output.id)) {
         this.warnedTimerPorts.add(output.id);
         this.errorMessage = 'This output uses cancellable browser-timer MIDI scheduling. UI/background stalls can affect timing; Firefox provides cancellable timestamped scheduling.';
         this.notifyStatus();
@@ -169,11 +191,16 @@ export class WebMidiManager {
         }
       }, Math.max(0, timestamp - now()));
       timers.add(timer); this.softwareTimers.set(output.id, timers);
-    } else output.send(bytes, timestamp);
+    } else if (timestamp === undefined || timestamp <= now() || useTimers) {
+      output.send(bytes);
+    } else {
+      output.send(bytes, timestamp);
+    }
   }
   private clearQueue(output: MIDIOutput): boolean {
     for (const timer of this.softwareTimers.get(output.id) ?? []) clearTimeout(timer);
     this.softwareTimers.delete(output.id);
+    if (this.useTimerScheduling(output)) return true; // future events live in app-owned timers
     const clear = (output as MIDIOutput & {clear?: () => void}).clear;
     if (typeof clear !== 'function') return true; // this port only has app-owned timers
     try { clear.call(output); return true; }
@@ -215,6 +242,8 @@ export class WebMidiManager {
       }
       this.sendNote(scheduled, time, true);
       this.activeNotes.set(scheduled.id, scheduled);
+      this.sentNoteCount++;
+      this.lastSentNote = { channel: scheduled.channel + 1, note: scheduled.note, velocity: scheduled.velocity, portName: output.name ?? 'MIDI Port', time: Date.now() };
       this.recordEvent({ timestamp: Date.now(), type: 'noteOn', channel: scheduled.channel + 1, note: scheduled.note, velocity: scheduled.velocity, durationMs: scheduled.offPerformanceTime - on, layerId });
       return scheduled.id;
     } catch (error) {
@@ -242,14 +271,21 @@ export class WebMidiManager {
       output = this.getOutput();
     }
     if (!output) return { success: false, error: 'Kein MIDI-Ausgang aktiv oder ausgewählt.' };
+    this.ensurePortOpen(output);
     const time = now();
     const sent = [
-      this.scheduleNote(1, 48, 86, time, 350, 'test'),
-      this.scheduleNote(2, 60, 96, time, 350, 'test'),
-      this.scheduleNote(3, 36, 98, time, 350, 'test'),
-      this.scheduleNote(4, 72, 92, time, 350, 'test'),
-      this.scheduleNote(5, 36, 110, time, 300, 'test'),
-      this.scheduleNote(10, 36, 110, time, 300, 'test'),
+      this.scheduleNote(1, 60, 100, time, 380, 'test'),
+      this.scheduleNote(1, 64, 95, time, 380, 'test'),
+      this.scheduleNote(2, 67, 100, time, 380, 'test'),
+      this.scheduleNote(3, 36, 105, time, 380, 'test'),
+      this.scheduleNote(4, 72, 98, time, 380, 'test'),
+      this.scheduleNote(5, 36, 115, time, 320, 'test'),
+      this.scheduleNote(6, 38, 110, time, 320, 'test'),
+      this.scheduleNote(7, 42, 100, time, 320, 'test'),
+      this.scheduleNote(8, 47, 100, time, 320, 'test'),
+      this.scheduleNote(10, 36, 115, time, 320, 'test'),
+      this.scheduleNote(10, 38, 110, time, 320, 'test'),
+      this.scheduleNote(10, 42, 100, time, 320, 'test'),
     ];
     const success = sent.some(Boolean);
     return { success, portName: output.name ?? 'MIDI Port', error: success ? undefined : this.errorMessage ?? 'Senden fehlgeschlagen.' };

@@ -120,11 +120,19 @@ export function EssentialMasterBar({
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const themeWrapRef = useRef<HTMLDivElement | null>(null);
   const [midiTestFeedback, setMidiTestFeedback] = useState<string | null>(null);
+  const [txCount, setTxCount] = useState<number>(() => engine.midi.getSentNoteCount());
   const midiMode = session.outputMode === 'midi';
   const midiOutputs = outputs ?? engine.midi.getAvailableOutputs();
-  const isGmChannelLayout = ['kick', 'snare', 'hihat', 'perc'].every(
-    id => session.layers.find(l => l.id === id)?.channel === 10
-  );
+  const chOf = (id: string) => session.layers.find(l => l.id === id)?.channel;
+  const isClassicChannelLayout =
+    chOf('chords') === 1 &&
+    chOf('melody') === 2 &&
+    chOf('bass') === 3 &&
+    ['kick', 'snare', 'hihat', 'perc'].every(id => chOf(id) === 10);
+  const isGmChannelLayout =
+    !isClassicChannelLayout &&
+    ['kick', 'snare', 'hihat', 'perc'].every(id => chOf(id) === 10);
+  const isSeparateChannelLayout = !isClassicChannelLayout && !isGmChannelLayout;
 
   const toggleMidiMode = () => {
     if (midiMode) {
@@ -148,10 +156,21 @@ export function EssentialMasterBar({
       targetOutputMode: session.outputMode === 'internal' ? 'both' : session.outputMode,
     }).then(() => {
       const res = engine.midi.sendTestNote();
+      setTxCount(engine.midi.getSentNoteCount());
       setMidiTestFeedback(res.success ? `✓ ${res.portName || 'MIDI'}` : (res.error || 'Kein Port'));
       window.setTimeout(() => setMidiTestFeedback(null), 2600);
     });
   };
+
+  useEffect(() => {
+    if (!midiMode) return;
+    setTxCount(engine.midi.getSentNoteCount());
+    const timer = window.setInterval(() => {
+      const next = engine.midi.getSentNoteCount();
+      setTxCount(prev => (prev === next ? prev : next));
+    }, 200);
+    return () => window.clearInterval(timer);
+  }, [midiMode]);
 
   useEffect(() => {
     if (!themeMenuOpen) return;
@@ -614,7 +633,15 @@ export function EssentialMasterBar({
           <div className="midi-strip-presets" role="group" aria-label="MIDI Channel Mapping">
             <button
               type="button"
-              className={`midi-preset-pill ${!isGmChannelLayout ? 'is-active' : ''}`}
+              className={`midi-preset-pill ${isClassicChannelLayout ? 'is-active' : ''}`}
+              onClick={() => engine.applyMidiChannelPreset('ableton-classic')}
+              title={uiEdition === 'minimal' ? 'Classic Ableton layout (Ch 1 Texture/Chords · 2 Melody · 3 Bass · 10 Drums)' : 'Classic Ableton Belegung (Ch 1 Texture/Chords · 2 Melody · 3 Bass · 10 Drums)'}
+            >
+              Classic 1/2/3/10
+            </button>
+            <button
+              type="button"
+              className={`midi-preset-pill ${isSeparateChannelLayout ? 'is-active' : ''}`}
               onClick={() => engine.applyMidiChannelPreset('separate-1-8')}
               title={uiEdition === 'minimal' ? 'Separate Channels Ch 1–8 (1 Tex · 2 Chd · 3 Bas · 4 Mel · 5–8 Drums)' : 'Jedes Instrument eigener Kanal Ch 1–8 (1 Tex · 2 Chd · 3 Bas · 4 Mel · 5–8 Drums)'}
             >
@@ -631,6 +658,17 @@ export function EssentialMasterBar({
           </div>
 
           <div className="midi-strip-actions">
+            <span
+              className={`midi-strip-badge ${txCount > 0 ? 'is-tx-live' : ''}`}
+              title={(() => {
+                const last = engine.midi.getLastSentNote();
+                return last
+                  ? `${uiEdition === 'minimal' ? 'Last TX' : 'Letzte Note'}: Ch ${last.channel} · Note ${last.note} · Vel ${last.velocity} -> ${last.portName}`
+                  : (uiEdition === 'minimal' ? 'Sent MIDI notes counter' : 'Zähler gesendeter MIDI-Noten');
+              })()}
+            >
+              TX: {txCount}
+            </span>
             <button
               type="button"
               className={`midi-clock-toggle-btn ${session.midiClockEnabled ? 'is-active' : ''}`}
@@ -645,10 +683,10 @@ export function EssentialMasterBar({
               type="button"
               className="midi-inline-action-btn"
               onClick={handleSendMidiTest}
-              title={uiEdition === 'minimal' ? 'Send test MIDI notes across channels 1–5' : 'Testnoten auf Kanal 1–5 an Ableton senden'}
+              title={uiEdition === 'minimal' ? 'Send test MIDI notes across channels 1–8 & 10' : 'Testnoten auf Kanal 1–8 & 10 an Ableton senden'}
             >
               <Send size={12} />
-              <span>{midiTestFeedback || (uiEdition === 'minimal' ? 'Test Ch 1–5' : 'Test MIDI')}</span>
+              <span>{midiTestFeedback || (uiEdition === 'minimal' ? 'Test Ch 1–8 + 10' : 'Test MIDI')}</span>
             </button>
           </div>
         </div>

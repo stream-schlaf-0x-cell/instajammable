@@ -7317,6 +7317,10 @@
   font-weight: 700;
 }
 
+.midi-strip-badge.is-tx-live {
+  color: var(--accent-2);
+}
+
 .midi-port-inline-select {
   max-width: 220px;
   padding: 4px 8px;

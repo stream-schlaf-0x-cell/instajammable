@@ -49,10 +49,6 @@ export const DEFAULT_LAYER_CHANNELS: Record<string, number> = {
 export const LEGACY_LAYER_CHANNELS: Record<string, number> = {
   drone: 1, chords: 1, bass: 3, melody: 2, kick: 10, snare: 10, hihat: 10, perc: 10,
 };
-function shouldMigrateLegacyChannels(rawLayers: JamLayer[] | undefined): boolean {
-  if (!Array.isArray(rawLayers) || rawLayers.length !== 8) return false;
-  return Object.entries(LEGACY_LAYER_CHANNELS).every(([layerId, ch]) => rawLayers.find(l => l.id === layerId)?.channel === ch);
-}
 
 export function ambientPatch(layer: JamLayer, session: JamSession, beat = 0, cutoffOffset = 0, timbreOverride?: Timbre): AmbientSynthParams {
   const timbre = timbreOverride || layer.settings.timbre; const bass = layer.role === 'bass'; const pluck = timbre === 'keys' || timbre === 'bell' || timbre === 'celeste';
@@ -513,6 +509,11 @@ export class JamEngine {
               throw new Error(this.midi.getErrorMessage() || 'MIDI konnte nicht aktiviert werden. Wähle interne Klänge oder erlaube MIDI im Browser.');
             }
           } else {
+            const avail = this.midi.getAvailableOutputs();
+            if (avail.length > 0 && (!this.state.globalOutputId || !avail.some(p => p.id === this.state.globalOutputId && p.state !== 'disconnected'))) {
+              const best = this.midi.selectBestAvailableOutput();
+              if (best) this.state.globalOutputId = best;
+            }
             // Strict checking only if outputMode is purely 'midi' (no internal audio).
             // In 'both' mode, an unavailable or disconnected MIDI device must NEVER stop internal audio from playing!
             this.applyRouting(this.state.outputMode === 'midi');
@@ -639,11 +640,11 @@ export class JamEngine {
         this.synthFor(layer, preview).triggerNote(time, note.note, note.velocity, duration, patch, layer.volume * roleMult);
       }
     }
-    if (!preview && (session.outputMode === 'midi' || session.outputMode === 'both')) {
+    if (!preview && note.subLayer !== 'chords_b' && (session.outputMode === 'midi' || session.outputMode === 'both')) {
       const midiOnly = session.outputMode === 'midi';
-      const velScale = midiOnly ? (0.35 + layer.volume * 0.85) : 1;
+      const velScale = midiOnly ? (0.65 + layer.volume * 0.50) : 1;
       const warmthOffset = midiOnly ? (session.macros.warmth - 0.5) * 18 : 0;
-      const midiVelocity = clamp(Math.round(note.velocity * velScale + warmthOffset), 1, 127);
+      const midiVelocity = clamp(Math.round(note.velocity * velScale + warmthOffset), 32, 127);
       const gateMult = midiOnly && layer.role !== 'drum' ? clamp(0.30 + session.macros.space * 0.70, 0.25, 1.0) : 1;
       this.midi.scheduleNote(note.channel ?? layer.channel, note.note, midiVelocity, perfTime, duration * gateMult * 1000, layer.id, layer.outputId ?? undefined);
     }
@@ -983,16 +984,25 @@ export class JamEngine {
     this.addChange(`${layer.name} Zufalls-Sound · ${result.preset.name}`);
     return result.preset;
   }
-  applyMidiChannelPreset(preset: 'separate-1-8' | 'gm-drums-10'): void {
+  applyMidiChannelPreset(preset: 'separate-1-8' | 'gm-drums-10' | 'ableton-classic'): void {
     this.midi.panic();
     this.state.layers = this.state.layers.map(layer => {
+      if (preset === 'ableton-classic') {
+        return { ...layer, channel: LEGACY_LAYER_CHANNELS[layer.id] ?? layer.channel };
+      }
       if (preset === 'gm-drums-10') {
         const channel = DRUM_LAYER_IDS.has(layer.id) ? 10 : (DEFAULT_LAYER_CHANNELS[layer.id] ?? layer.channel);
         return { ...layer, channel };
       }
       return { ...layer, channel: DEFAULT_LAYER_CHANNELS[layer.id] ?? layer.channel };
     });
-    this.addChange(preset === 'separate-1-8' ? 'MIDI Channels · Ch 1–8 Getrennt' : 'MIDI Channels · Melodic 1–4 + Drums Ch 10');
+    this.addChange(
+      preset === 'ableton-classic'
+        ? 'MIDI Channels · Classic Ableton (1/2/3/10)'
+        : preset === 'separate-1-8'
+          ? 'MIDI Channels · Ch 1–8 Getrennt'
+          : 'MIDI Channels · Melodic 1–4 + Drums Ch 10',
+    );
     this.remember();
     this.notify();
   }
@@ -2365,14 +2375,7 @@ export function validateSession(raw: JamSession): JamSession {
     ...(Array.isArray(raw.workspaceModules) ? {
       workspaceModules: raw.workspaceModules.map(String)
     } : { workspaceModules: DEFAULT_WORKSPACE_MODULES }),
-    macros, layers: (() => {
-      const migrateChannels = shouldMigrateLegacyChannels(raw.layers);
-      return base.layers.map(l => {
-        const rawLayer = raw.layers?.find(r => r.id === l.id) || l;
-        const normalized = normalizeLayer(rawLayer, l);
-        return migrateChannels ? { ...normalized, channel: DEFAULT_LAYER_CHANNELS[l.id] ?? normalized.channel } : normalized;
-      });
-    })(),
+    macros, layers: base.layers.map(l => normalizeLayer(raw.layers?.find(r => r.id === l.id) || l, l)),
     changes: Array.isArray(raw.changes) ? raw.changes.filter(c => c && typeof c.label === 'string' && typeof c.beat === 'number' && Number.isFinite(c.beat)).slice(-30) : [],
     deepMindChannel: Math.round(clamp(raw.deepMindChannel ?? 1, 1, 16)) };
 }
