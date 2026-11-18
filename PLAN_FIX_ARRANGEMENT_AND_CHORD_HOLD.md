@@ -1,5 +1,7 @@
 # Technical Self-Prompt: Fix Arrangement "OFF" Lock & True Single-Chord Hold ("Hold A")
 
+> **Status**: Implemented & deployed in commit `25327c6`. Follow-up bugfix + feature plan (Continuous Melody, 2x Instrument Styles, Seamless Legato, and Synesthesia Octave UI Overflow Fix) lives in `PLAN_MELODY_16STYLES_LEGATO_AND_UI.md`.
+
 > **Scope & Constraint**: Preserve all existing functionality, audio smoothness, MIDI routing (`Ch 1–8 + 10`), octave switchers, and `v2.0-stable-fallback`. Ensure `npm run typecheck`, `npm test`, `npm run test:legacy`, and `npm run build` stay 100% green after execution.
 
 ---

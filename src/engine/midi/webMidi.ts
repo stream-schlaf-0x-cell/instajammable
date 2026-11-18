@@ -226,7 +226,7 @@ export class WebMidiManager {
       velocity: Math.round(Math.max(1, Math.min(127, velocity))), onPerformanceTime: on,
       offPerformanceTime: on + Math.max(10, durationMs), layerId,
     };
-    const overlaps = [...this.activeNotes.values()].filter(n => n.outputId === output.id && n.channel === scheduled.channel && n.note === scheduled.note && n.offPerformanceTime > on && n.onPerformanceTime < scheduled.offPerformanceTime);
+    const overlaps = [...this.activeNotes.values()].filter(n => n.outputId === output.id && n.channel === scheduled.channel && n.note === scheduled.note && n.offPerformanceTime >= on - 2 && n.onPerformanceTime < scheduled.offPerformanceTime);
     try {
       this.own(output, scheduled.channel);
       if (overlaps.length) {

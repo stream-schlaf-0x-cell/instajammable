@@ -1,5 +1,5 @@
 import type { MusicalScale } from '../../types';
-import type { ClipNote, JamLayer, JamSession, MidiClip, ChordPattern, ChordPace, ChordLoopMode, VoicingFamily, DroneStyle, MelodyStyle, BassStyle } from '../../types/jam';
+import type { ClipNote, JamLayer, JamSession, MidiClip, ChordPattern, ChordPace, ChordLoopMode, VoicingFamily, DroneStyle, MelodyStyle, BassStyle, RhythmAlgorithm } from '../../types/jam';
 import { PRNG } from '../prng';
 import { EuclideanGenerator } from '../generators/rhythm/euclidean';
 import { ProbabilisticGenerator } from '../generators/rhythm/probabilistic';
@@ -448,7 +448,7 @@ export class JamComposer {
           }
         }
       } else if (density > 0 && (phraseIndex === 0 || rng.chance(Math.max(0.55, density)))) {
-        const dur = s.phraseBars * 4 - 0.12;
+        const dur = s.phraseBars * 4;
         const style: DroneStyle = s.droneStyle ?? 'rootFifth';
         if (style === 'pedalTonic') {
           add(0, fit(session.root - 12), dur, 0.42, false, 0);
@@ -456,27 +456,54 @@ export class JamComposer {
           const rootNote = fit(session.root - 12);
           const octNote = fit(session.root);
           add(0, rootNote, dur, 0.40, false, 0);
-          if (octNote !== rootNote && density > 0.3) add(0, octNote, dur - 0.12, 0.25, false, 0);
+          if (octNote !== rootNote && density > 0.3) add(0, octNote, dur, 0.25, false, 0);
         } else if (style === 'shiftingFifth') {
           const anchor = harmony.root;
           const rootNote = fit(anchor - 12);
           const fifthNote = fit(anchor - 5);
           add(0, rootNote, dur, 0.40, false, 0);
-          if (fifthNote !== rootNote && density > 0.32) add(0, fifthNote, dur - 0.12, 0.26, false, 0);
+          if (fifthNote !== rootNote && density > 0.32) add(0, fifthNote, dur, 0.26, false, 0);
         } else if (style === 'cluster') {
           const rootNote = fit(session.root - 12);
           const secNote = fit(scaleNote(session.root, session.scale, 1) - 12);
           const fifthNote = fit(session.root - 5);
           add(0, rootNote, dur, 0.24, false, 0);
-          if (secNote !== rootNote) add(0, secNote, dur - 0.12, 0.14, false, 0);
-          if (fifthNote !== rootNote && fifthNote !== secNote) add(0, fifthNote, dur - 0.12, 0.18, false, 0);
+          if (secNote !== rootNote) add(0, secNote, dur, 0.14, false, 0);
+          if (fifthNote !== rootNote && fifthNote !== secNote) add(0, fifthNote, dur, 0.18, false, 0);
+        } else if (style === 'infiniteRibbon') {
+          const rootNote = fit(session.root - 12);
+          const fifthNote = fit(session.root - 5);
+          const octNote = fit(session.root);
+          add(0, rootNote, dur + 0.15, 0.42, false, 0);
+          if (fifthNote !== rootNote) add(0, fifthNote, dur, 0.24, false, 18);
+          if (octNote !== rootNote && length >= 32) add(Math.floor(length / 2), octNote, dur / 2 + 0.15, 0.26, false, 24);
+        } else if (style === 'angelicTriad') {
+          const tones = harmony.notes.slice(0, 3);
+          tones.forEach((p, idx) => add(0, fit(p + 12), dur, 0.36 - idx * 0.04, false, idx * 28));
+        } else if (style === 'subCatharsis') {
+          const rootNote = fit(session.root - 12);
+          const fifthNote = fit(session.root - 5);
+          const ninthNote = fit(scaleNote(session.root, session.scale, 8));
+          add(0, rootNote, dur, 0.44, false, 0);
+          if (fifthNote !== rootNote) add(0, fifthNote, dur, 0.26, false, 12);
+          if (ninthNote !== rootNote && ninthNote !== fifthNote) add(0, ninthNote, dur, 0.18, false, 36);
+        } else if (style === 'quartalStack') {
+          [0, 3, 6].forEach((degOff, idx) => {
+            add(0, fit(scaleNote(session.root - 12, session.scale, harmony.degree + degOff)), dur, 0.34 - idx * 0.05, false, idx * 22);
+          });
+        } else if (style === 'binauralBreath') {
+          const halfSteps = Math.max(16, Math.floor(length / 2));
+          for (let step = 0; step < length; step += halfSteps) {
+            const p = step % (halfSteps * 2) === 0 ? fit(session.root - 12) : fit(session.root - 5);
+            add(step, p, halfSteps / 4, 0.38, false, 12);
+          }
         } else {
           // rootFifth: Deep sub-fundamental anchor + harmonic fifth
           const rootNote = fit(session.root - 12);
           add(0, rootNote, dur, 0.42, false, 0);
           const fifthNote = fit(session.root - 5);
           if (density > 0.42 && fifthNote !== rootNote) {
-            add(0, fifthNote, dur - 0.12, 0.28, false, 0);
+            add(0, fifthNote, dur, 0.28, false, 0);
           }
         }
       }
@@ -485,8 +512,8 @@ export class JamComposer {
       const roll = lofi ? rng.range(12, 34) : rng.range(35, 95);
       const chordHoldBars = effectivePhraseBars ?? holdBarsFor(session.style, s.chordPace);
       const chordStride = Math.max(16, chordHoldBars * 16);
-      const maxChordDur = Math.max(1.8, chordHoldBars * 4 - 0.12);
-      const capDur = (stepPos: number, desired: number) => Math.max(0.18, Math.min(desired, (length - stepPos) / 4 - 0.08));
+      const maxChordDur = Math.max(1.8, chordHoldBars * 4);
+      const capDur = (stepPos: number, desired: number) => Math.max(0.18, Math.min(desired, (length - stepPos) / 4));
 
       if (pattern === 'pulse') {
         // CBL / Ultimae floating harmonic pad foundation with gentle dotted-8th upper-voice pulses (never choppy block stabs)
@@ -612,6 +639,60 @@ export class JamComposer {
             add(step, fit(pitch), capDur(step, 4.2 + rng.range(0, 1.2)), vel, false, rng.range(15, 60));
           }
         });
+      } else if (pattern === 'eternalDrone') {
+        harmony.notes.forEach((pitch, i) => add(0, fit(pitch), chordHoldBars * 4 + 0.08, 0.50 - i * 0.03, false, i * 18));
+      } else if (pattern === 'risingArp') {
+        const arpPool = [...harmony.notes, ...harmony.notes.slice(0, 2).map(n => n + 12)];
+        for (let bar = 0; bar < phraseBars; bar++) {
+          for (let slot = 0; slot < 8; slot++) {
+            const absStep = bar * 16 + slot * 2;
+            const pitch = arpPool[slot % arpPool.length];
+            add(absStep, fit(pitch), capDur(absStep, 0.95), slot === 0 ? 0.52 : 0.36 + (slot % 4) * 0.03, false, rng.range(2, 10));
+          }
+        }
+      } else if (pattern === 'fallingArp') {
+        const arpPool = [...harmony.notes, ...harmony.notes.slice(0, 2).map(n => n + 12)].reverse();
+        for (let bar = 0; bar < phraseBars; bar++) {
+          for (let slot = 0; slot < 8; slot++) {
+            const absStep = bar * 16 + slot * 2;
+            const pitch = arpPool[slot % arpPool.length];
+            add(absStep, fit(pitch), capDur(absStep, 0.95), slot === 0 ? 0.52 : 0.36 + ((7 - slot) % 4) * 0.03, false, rng.range(2, 10));
+          }
+        }
+      } else if (pattern === 'pendulumArp') {
+        const up = harmony.notes;
+        const seq = up.length >= 2 ? [...up, ...up.slice(1, -1).reverse()] : up;
+        for (let bar = 0; bar < phraseBars; bar++) {
+          for (let slot = 0; slot < 8; slot++) {
+            const absStep = bar * 16 + slot * 2;
+            const pitch = seq[(bar * 8 + slot) % seq.length];
+            add(absStep, fit(pitch), capDur(absStep, 0.85), slot % 4 === 0 ? 0.48 : 0.36, false, rng.range(2, 10));
+          }
+        }
+      } else if (pattern === 'offbeatEcho') {
+        harmony.notes.forEach((pitch, i) => add(0, fit(pitch), capDur(0, 2.0), 0.48 - i * 0.03, false, i * roll));
+        for (let bar = 0; bar < phraseBars; bar++) {
+          for (const pos of [2, 6, 10, 14]) {
+            const absStep = bar * 16 + pos;
+            harmony.notes.slice(-3).forEach((pitch, i) => add(absStep, fit(pitch), capDur(absStep, 0.9), 0.36 - i * 0.03, false, i * 8));
+          }
+        }
+      } else if (pattern === 'tripletFlow') {
+        for (let bar = 0; bar < phraseBars; bar++) {
+          [0, 3, 6, 9, 12, 14].forEach((pos, idx) => {
+            const absStep = bar * 16 + pos;
+            const pitch = harmony.notes[idx % harmony.notes.length];
+            add(absStep, fit(pitch), capDur(absStep, 1.25), pos === 0 ? 0.50 : 0.38, false, rng.range(4, 14));
+          });
+        }
+      } else if (pattern === 'cathedralChoir') {
+        harmony.notes.forEach((pitch, i) => add(0, fit(pitch), maxChordDur, 0.46 - i * 0.03, false, i * 28));
+        if (length >= 16) {
+          harmony.notes.slice(-2).forEach((pitch, i) => {
+            const enterStep = 4 + i * 4;
+            if (enterStep < length) add(enterStep, fit(pitch + 12), (length - enterStep) / 4, 0.30, false, 20 + i * 18);
+          });
+        }
       } else {
         // 'pad' (Living atmospheric pad) or default lo-fi / ambient
         const stride = lofi ? 16 : chordStride;
@@ -621,12 +702,12 @@ export class JamComposer {
             const barIdx = Math.floor(step / 16);
             const lateComp = density >= 0.5 && barIdx % 2 === 0 && rng.chance(0.45 + movement * 0.35);
             const compStep = step + rng.pick([10, 12]);
-            harmony.notes.forEach((pitch, i) => add(step, fit(pitch), Math.min(3.85, lateComp ? 2.4 : 3.4 + rng.range(0, 0.45)), 0.48 - i * 0.04, false, i * roll));
+            harmony.notes.forEach((pitch, i) => add(step, fit(pitch), lateComp ? 2.4 : 4.0, 0.48 - i * 0.04, false, i * roll));
             if (lateComp && compStep < length) {
               harmony.notes.slice(-3).forEach((p, i) => add(compStep, fit(p), 0.85, 0.22 + rng.range(0, 0.08), false, i * 10));
             }
           } else {
-            harmony.notes.forEach((pitch, i) => add(step, fit(pitch), Math.max(3.8, chordHoldBars * 4 - 0.15), 0.48 - i * 0.04, false, i * roll));
+            harmony.notes.forEach((pitch, i) => add(step, fit(pitch), Math.max(4.0, chordHoldBars * 4), 0.48 - i * 0.04, false, i * roll));
             // Mid-phrase response: delicate upper dyad blooms smoothly halfway through the hold (disabled in single-chord Hold A)
             if (!holdSingleChord && phraseBars >= 2 && rng.chance(0.32 + movement * 0.38)) {
               const upper = harmony.notes.slice(-2);
@@ -811,12 +892,13 @@ export class JamComposer {
         if (density > 0) {
           const singleBarHold = (chordSlotHoldBars ?? 2) === 1;
           for (let step = 0; step < length; step += 16) {
-            if (step % 32 !== 0 && !singleBarHold && !rng.chance(Math.min(0.95, density * 1.15))) continue;
+            if (step % 32 !== 0 && !singleBarHold && !holdSingleChord && !rng.chance(Math.min(0.95, density * 1.15))) continue;
             const anchorPitch = (holdSingleChord || singleBarHold || step % 32 === 0) ? harmony.root : rng.chance(0.55) ? harmony.root : scaleNote(session.root, session.scale, harmony.degree + 4);
-            add(step, fit(anchorPitch), singleBarHold ? 2.6 : 2.8, (holdSingleChord || singleBarHold || step % 32 === 0) ? 0.74 : 0.52, true);
-            if (density >= 0.32 && rng.chance(clamp(density * 0.75 + movement * 0.25, 0, 0.92))) {
+            const hasPickup = density >= 0.32 && rng.chance(clamp(density * 0.75 + movement * 0.25, 0, 0.92));
+            add(step, fit(anchorPitch), hasPickup ? 3.5 : 4.0, (holdSingleChord || singleBarHold || step % 32 === 0) ? 0.74 : 0.52, true);
+            if (hasPickup) {
               const pickupPitch = holdSingleChord ? harmony.root : (movement > 0.45 ? scaleNote(session.root, session.scale, harmony.degree + 2) : scaleNote(session.root, session.scale, harmony.degree + 4));
-              add(step + 14, fit(pickupPitch), 0.48, 0.44, true);
+              add(step + 14, fit(pickupPitch), 0.5, 0.44, true);
             }
           }
         }
@@ -889,11 +971,83 @@ export class JamComposer {
             add(step, pitch, 0.08, accent, false);
           }
         }
+      } else if (bassStyle === 'infiniteDrone') {
+        if (density > 0) {
+          add(0, fit(harmony.root), length / 4 + 0.05, 0.76, false);
+        }
+      } else if (bassStyle === 'fifthPendulum') {
+        if (density > 0) {
+          const rootPitch = fit(harmony.root);
+          const fifthPitch = holdSingleChord ? rootPitch : fit(scaleNote(session.root, session.scale, harmony.degree + 4));
+          for (let step = 0; step < length; step += 8) {
+            add(step, step % 16 === 0 ? rootPitch : fifthPitch, 2.0, step % 16 === 0 ? 0.74 : 0.54, false);
+          }
+        }
+      } else if (bassStyle === 'octaveGlide') {
+        if (density > 0) {
+          const lowPitch = fit(harmony.root);
+          const octPitch = fit(harmony.root + 12);
+          for (let step = 0; step < length; step += 8) {
+            add(step, step % 16 === 0 ? lowPitch : octPitch, 2.0, step % 16 === 0 ? 0.76 : 0.58, false);
+          }
+        }
+      } else if (bassStyle === 'berlinSequence') {
+        if (density > 0) {
+          const degSeq = [0, 0, 4, 2, 0, 4, 2, 1];
+          for (let step = 0, idx = 0; step < length; step += 2, idx++) {
+            const off = holdSingleChord ? (idx % 4 === 2 ? 4 : 0) : degSeq[idx % degSeq.length];
+            const pitch = off === 0 ? harmony.root : scaleNote(session.root, session.scale, harmony.degree + off);
+            add(step, fit(pitch), 0.48, step % 16 === 0 ? 0.78 : idx % 2 === 0 ? 0.62 : 0.46, false);
+          }
+        }
+      } else if (bassStyle === 'tresilloSub') {
+        if (density > 0) {
+          const rootPitch = fit(harmony.root);
+          const fifthPitch = holdSingleChord ? rootPitch : fit(scaleNote(session.root, session.scale, harmony.degree + 4));
+          for (let bar = 0; bar < length; bar += 16) {
+            add(bar + 0, rootPitch, 1.5, 0.80, false);
+            add(bar + 6, rootPitch, 1.5, 0.62, false);
+            add(bar + 12, fifthPitch, 1.0, 0.58, false);
+          }
+        }
+      } else if (bassStyle === 'acidLine') {
+        if (density > 0) {
+          const rootPitch = fit(harmony.root);
+          const octPitch = fit(harmony.root + 12);
+          const fifthPitch = fit(scaleNote(session.root, session.scale, harmony.degree + 4));
+          const stepsMask = [0, 3, 4, 6, 8, 10, 11, 14, 15];
+          for (let bar = 0; bar < length; bar += 16) {
+            stepsMask.forEach((pos, idx) => {
+              const p = pos === 6 || pos === 14 ? octPitch : pos === 11 ? fifthPitch : rootPitch;
+              add(bar + pos, p, 0.24, idx === 0 ? 0.85 : pos === 11 ? 0.76 : 0.52, false);
+            });
+          }
+        }
+      } else if (bassStyle === 'ukGarageSub') {
+        if (density > 0) {
+          const rootPitch = fit(harmony.root);
+          const thirdPitch = holdSingleChord ? rootPitch : fit(scaleNote(session.root, session.scale, harmony.degree + 2));
+          for (let bar = 0; bar < length; bar += 16) {
+            add(bar + 0, rootPitch, 0.75, 0.82, false);
+            add(bar + 3, rootPitch, 1.75, 0.66, false);
+            add(bar + 10, thirdPitch, 1.0, 0.62, false);
+            add(bar + 14, rootPitch, 0.5, 0.56, false);
+          }
+        }
+      } else if (bassStyle === 'poly5Bass') {
+        if (density > 0) {
+          const degs = [0, 0, 4, 7, 2];
+          for (let step = 0, idx = 0; step < length; step += 5, idx++) {
+            const off = degs[idx % degs.length];
+            const pitch = off === 7 ? harmony.root + 12 : scaleNote(session.root, session.scale, harmony.degree + off);
+            add(step, fit(pitch), Math.min(1.25, (length - step) / 4), idx % 3 === 0 ? 0.76 : 0.52, false);
+          }
+        }
       } else {
-        // pedal: 1 note per hold (ambient default), adapting to 1-bar chord pace and strictly anchoring root in Hold A
+        // pedal: 100% seamless legato note per hold (zero gap before next note)
         const holdSteps = Math.max(16, (chordSlotHoldBars ?? 2) * 16);
         const stride = Math.min(32, holdSteps);
-        const noteDur = Math.min(7.6, stride / 4 - 0.15, length / 4);
+        const noteDur = Math.min(stride / 4, length / 4);
         for (let step = 0; step < length; step += stride) {
           if (density <= 0 || (step % 16 !== 0 && !rng.chance(density))) continue;
           const pitch = (holdSingleChord || step % stride === 0 || step % 16 === 0) ? harmony.root : rng.chance(0.68) ? harmony.root : scaleNote(session.root, session.scale, harmony.degree + 4);
@@ -903,7 +1057,39 @@ export class JamComposer {
     } else if (layer.role === 'melody') {
       const mStyle: MelodyStyle = s.melodyStyle ?? (lofi ? 'lofiHook' : 'motif');
       if (mStyle === 'off' || density <= 0) return notes;
-      if (session.evolving && !layer.locked && !layer.frozen && s.density <= 0.40 && phraseIndex % 3 === 2) return notes;
+
+      if (mStyle === 'endlessStream' || mStyle === 'arpCascade' || mStyle === 'pentatonicFlow' || mStyle === 'berlinLead' || mStyle === 'cinematicArc' || mStyle === 'callResponse') {
+        const sRng = new PRNG(streamSeed(session.seed, `mel-stream-${mStyle}-${session.sceneId}`, epoch + phraseIndex));
+        const activeScale = mStyle === 'pentatonicFlow' ? 'minorPentatonic' : session.scale;
+        const positions = mStyle === 'cinematicArc'
+          ? [0, 6, 10, 14]
+          : mStyle === 'pentatonicFlow'
+            ? [0, 3, 6, 8, 10, 12, 14]
+            : mStyle === 'berlinLead'
+              ? [0, 3, 6, 8, 11, 12, 14]
+              : mStyle === 'arpCascade' && density > 0.55
+                ? [0, 2, 4, 6, 7, 8, 10, 12, 14, 15]
+                : [0, 2, 4, 6, 8, 10, 12, 14];
+        const offsets = mStyle === 'arpCascade'
+          ? [0, 2, 4, 7, 4, 2, 6, 4]
+          : mStyle === 'callResponse'
+            ? [4, 5, 4, 2, 0, 2, 1, 0]
+            : mStyle === 'berlinLead'
+              ? [0, 4, 2, 7, 4, 5, 2, 0]
+              : [0, 1, 2, 4, 3, 2, 4, 5];
+        for (let bar = 0; bar < s.phraseBars; bar++) {
+          positions.forEach((pos, idx) => {
+            if (idx > 0 && density < 0.25 && idx % 2 === 1) return;
+            const gapBeats = Math.max(0.25, ((positions[idx + 1] ?? 16) - pos) / 4);
+            const dur = mStyle === 'cinematicArc' ? gapBeats * 1.02 : mStyle === 'pentatonicFlow' ? gapBeats * 0.96 : gapBeats * 0.88;
+            const deg = harmony.degree + offsets[(idx + bar + Math.floor(sRng.next() * 3)) % offsets.length];
+            const pitch = fit(scaleNote(session.root + 12, activeScale, deg));
+            const accent = pos === 0 || pos === 8 ? 0.72 : 0.48 + 0.14 * Math.sin(idx);
+            add(bar * 16 + pos, pitch, dur, accent, true);
+          });
+        }
+        return notes;
+      }
 
       if (mStyle === 'ostinato') {
         const cycle16 = Math.floor(phraseIndex / 4);
@@ -928,17 +1114,17 @@ export class JamComposer {
         return notes;
       }
 
-      // Motif Engine ('motif' | 'bellDrops' | 'neoclassical' | 'lofiHook')
+      // Motif Engine ('motif' | 'bellDrops' | 'neoclassical' | 'lofiHook') - continuous singing stream
       const mRng = new PRNG(streamSeed(session.seed, `motif-${session.sceneId}`, epoch));
       const cellPool = mStyle === 'bellDrops'
-        ? [[0, 8], [0, 6, 12], [2, 10], [0, 10], [4, 12], [1, 9], [3, 11], [0, 7, 14]]
+        ? [[0, 4, 8, 12], [0, 6, 10, 14], [2, 6, 10, 14], [0, 3, 8, 12], [0, 4, 10, 12], [1, 6, 9, 14], [0, 5, 9, 13], [0, 4, 7, 11, 14]]
         : mStyle === 'lofiHook'
-          ? [[0, 6, 10], [0, 8, 12], [0, 3, 8], [0, 6, 10, 14], [0, 4, 9, 12], [2, 8, 11], [0, 7, 10, 14], [0, 5, 8, 11]]
+          ? [[0, 4, 6, 10, 14], [0, 3, 6, 8, 12], [0, 3, 8, 10, 14], [0, 6, 9, 10, 14], [0, 4, 8, 9, 12], [2, 6, 8, 11, 14], [0, 4, 7, 10, 14], [0, 5, 8, 11, 14]]
           : mStyle === 'neoclassical'
-            ? [[0, 4, 8, 12], [0, 4, 6, 8, 12], [0, 2, 4, 8, 12]]
+            ? [[0, 2, 4, 8, 10, 12], [0, 4, 6, 8, 12, 14], [0, 2, 4, 6, 8, 12], [0, 3, 6, 8, 10, 12, 14]]
             : techno
-              ? [[0, 3, 6, 10, 12], [0, 3, 7, 10], [0, 4, 6, 10, 14]]
-              : [[0, 6, 12], [0, 4, 10], [0, 8, 12], [0, 6, 10, 14]];
+              ? [[0, 3, 6, 10, 12, 14], [0, 3, 7, 10, 12, 15], [0, 4, 6, 10, 12, 14]]
+              : [[0, 4, 8, 12], [0, 4, 10, 14], [0, 6, 10, 14], [0, 3, 6, 10, 12], [0, 4, 8, 10, 14], [0, 6, 8, 12, 14], [0, 2, 6, 10, 14]];
       const cell = cellPool[Math.floor(mRng.next() * cellPool.length) % cellPool.length];
       let jumped = false;
       let prevOff = mRng.pick([0, 2, 4]);
@@ -970,17 +1156,12 @@ export class JamComposer {
 
       const cycle16 = Math.floor(phraseIndex / 4);
       const octaveLift = epoch === 0 && cycle16 % 2 === 1 ? 7 : 0;
-      const phraseForm: Array<'A' | 'Ap' | 'B' | 'App' | 'rest'> = mStyle === 'bellDrops'
-        ? ['A', 'rest', 'Ap', 'rest']
-        : s.density < 0.72
-          ? ['A', 'Ap', 'B', 'rest']
-          : ['A', 'Ap', 'B', 'App'];
+      const phraseForm: Array<'A' | 'Ap' | 'B' | 'App'> = ['A', 'Ap', 'B', 'App'];
 
       const maxBaseOff = Math.max(...baseMotif.map(e => e.degreeOffset));
 
       for (let bar = 0; bar < s.phraseBars; bar++) {
         const section = phraseForm[bar % phraseForm.length];
-        if (section === 'rest') continue;
 
         let barEvents = baseMotif.map((ev, i) => {
           let off = ev.degreeOffset + octaveLift;
@@ -989,11 +1170,6 @@ export class JamComposer {
           else if (section === 'App' && i === baseMotif.length - 1) off = (i % 2 === 0 ? 0 : 2) + octaveLift;
           return { pos: ev.pos, degreeOffset: off };
         });
-
-        // Breathing rule: ensure at least 25% of bars leave >= 1 beat pause at end
-        if (bar % 4 === 3 && barEvents.length > 2) {
-          barEvents = barEvents.filter(e => e.pos <= 11);
-        }
 
         // Climax: once per 8 bars allow highest note +2 degrees
         const isClimaxBar = phraseIndex % 2 === 1 && bar === Math.min(2, s.phraseBars - 1);
@@ -1014,22 +1190,55 @@ export class JamComposer {
           const isAmbientLegato = session.style === 'ambient' && mStyle !== 'bellDrops';
           const isPhraseEnd = bar === s.phraseBars - 1 && i === barEvents.length - 1;
           const dur = isAmbientLegato
-            ? Math.min(6, gapBeats * 0.95)
+            ? Math.min(6, gapBeats * 1.05)
             : mStyle === 'bellDrops'
               ? Math.min(6, gapBeats + 1.5)
               : isPhraseEnd
                 ? Math.min(5, gapBeats * 1.15)
-                : Math.min(4, gapBeats * 0.85);
+                : Math.min(4, gapBeats * 0.92);
 
-          // Velocity contour: rises toward middle of phrase, falls toward end; last note -10%
+          // Velocity contour: rises toward middle of phrase, falls toward end
           const phraseProgress = (bar * 16 + ev.pos) / Math.max(16, length);
-          const contour = 0.42 + Math.sin(phraseProgress * Math.PI) * 0.34;
-          const accent = isPhraseEnd ? contour * 0.9 : contour;
+          const contour = 0.46 + Math.sin(phraseProgress * Math.PI) * 0.34;
+          const accent = isPhraseEnd ? contour * 0.92 : contour;
           add(bar * 16 + ev.pos, finalNote, dur, accent, true, lofi ? rng.range(8, 20) : undefined);
         });
       }
     } else {
       const drum = layer.drumVoice || 'perc'; const midi = s.drumPatch?.midiNote !== undefined ? Math.round(clamp(s.drumPatch.midiNote, 0, 127)) : Math.round(clamp({ kick: 36, snare: 38, hihat: 42, perc: 37 }[drum], s.minNote, s.maxNote));
+      const drumAlgo: RhythmAlgorithm = s.rhythmAlgorithm || 'composed';
+      if (['fourOnFloor', 'twoStep', 'halftime', 'tribalPoly', 'minimalClick', 'rolling16'].includes(drumAlgo)) {
+        if (density <= 0) return notes;
+        for (let bar = 0; bar < s.phraseBars; bar++) {
+          for (let pos = 0; pos < 16; pos++) {
+            let hit = false;
+            let acc = 0.55;
+            if (drumAlgo === 'fourOnFloor') {
+              hit = (drum === 'kick' && pos % 4 === 0) || (drum === 'snare' && (pos === 4 || pos === 12)) || (drum === 'hihat' && pos % 2 === 0) || (drum === 'perc' && [3, 11, 14].includes(pos));
+              acc = pos % 4 === 0 ? 0.85 : 0.52;
+            } else if (drumAlgo === 'twoStep') {
+              hit = (drum === 'kick' && [0, 10].includes(pos)) || (drum === 'snare' && [4, 12].includes(pos)) || (drum === 'hihat' && [2, 6, 8, 14].includes(pos)) || (drum === 'perc' && [3, 9, 15].includes(pos));
+              acc = pos === 0 || pos === 4 || pos === 12 ? 0.82 : 0.48;
+            } else if (drumAlgo === 'halftime') {
+              hit = (drum === 'kick' && (pos === 0 || (pos === 10 && bar % 2 === 1))) || (drum === 'snare' && pos === 8) || (drum === 'hihat' && pos % 2 === 0) || (drum === 'perc' && [6, 14].includes(pos));
+              acc = pos === 0 || pos === 8 ? 0.88 : 0.44;
+            } else if (drumAlgo === 'tribalPoly') {
+              hit = (drum === 'kick' && [0, 6, 12].includes(pos)) || (drum === 'snare' && [5, 11].includes(pos)) || (drum === 'hihat' && (bar * 16 + pos) % 3 === 0) || (drum === 'perc' && [2, 7, 10, 14].includes(pos));
+              acc = pos === 0 ? 0.8 : 0.54;
+            } else if (drumAlgo === 'minimalClick') {
+              hit = (drum === 'kick' && pos === 0) || (drum === 'snare' && pos === 12) || (drum === 'hihat' && [2, 10].includes(pos)) || (drum === 'perc' && [6, 15].includes(pos));
+              acc = 0.52;
+            } else {
+              hit = (drum === 'kick' && pos % 4 === 0) || (drum === 'snare' && [4, 12].includes(pos)) || drum === 'hihat' || (drum === 'perc' && pos % 2 === 1);
+              acc = pos % 4 === 0 ? 0.82 : pos % 2 === 0 ? 0.48 : 0.30;
+            }
+            if (hit && (pos === 0 || rng.chance(Math.min(1, 0.45 + density * 0.65)))) {
+              add(bar * 16 + pos, midi, drum === 'hihat' ? 0.12 : 0.22, acc);
+            }
+          }
+        }
+        return notes;
+      }
       if (s.rhythmAlgorithm && s.rhythmAlgorithm !== 'composed') {
         const seed = streamSeed(session.seed, `${layer.id}-algorithm`, Math.floor(phraseIndex / 2) + epoch * 31) || 1;
         const velocity = Math.round((s.velocityMin + s.velocityMax) / 2); const common = { velocity, accentVelocity: s.velocityMax, density }; let generator: IGenerator;

@@ -212,36 +212,40 @@ test('Chaos state, mode, drift clamping, drag pause, and FX chain master toggle 
   assert.equal(roundtripped.chaosMode, 'pulse');
 });
 
-test('applyArrangement orchestrates melody mute/unmute across sections and respects locked layers', () => {
+test('applyArrangement keeps user melody audible across sections and mutes drums in breakdown/silent', () => {
   const session = createSession('dusty-keys', 42);
   const engine = new JamEngine(session);
   const melody = () => engine.getState().layers.find(l => l.role === 'melody')!;
+  const kick = () => engine.getState().layers.find(l => l.id === 'kick')!;
 
   assert.equal(melody().muted, false);
 
   engine.applyArrangement('breakdown');
-  assert.equal(melody().muted, true);
+  assert.equal(melody().muted, false, 'melody stream stays present during breakdown');
+  assert.equal(kick().muted, true);
 
   engine.applyArrangement('groove');
   assert.equal(melody().muted, false);
+  assert.equal(kick().muted, false);
 
   engine.applyArrangement('buildup');
-  assert.equal(melody().muted, true);
+  assert.equal(melody().muted, false, 'melody stream stays present during buildup');
 
   engine.applyArrangement('chorus');
   assert.equal(melody().muted, false);
 
   engine.applyArrangement('silent');
-  assert.equal(melody().muted, true);
+  assert.equal(melody().muted, false, 'melody stays enabled unless explicitly muted by user');
+  assert.equal(kick().muted, true);
 
-  // Locked melody must not be toggled by applyArrangement
+  // Locked muted melody stays muted when applyArrangement runs
   const lockedSession = createSession('dusty-keys', 42);
   const lockedMelody = lockedSession.layers.find(l => l.role === 'melody')!;
   lockedMelody.locked = true;
-  lockedMelody.muted = false;
+  lockedMelody.muted = true;
   const lockedEngine = new JamEngine(lockedSession);
-  lockedEngine.applyArrangement('breakdown');
-  assert.equal(lockedEngine.getState().layers.find(l => l.role === 'melody')!.muted, false);
+  lockedEngine.applyArrangement('chorus');
+  assert.equal(lockedEngine.getState().layers.find(l => l.role === 'melody')!.muted, true);
 });
 
 test('ambientPatch applies warmth breathing even when custom audioPatch.filterCutoff is configured', () => {

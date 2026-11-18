@@ -964,12 +964,19 @@ export function EssentialMasterBar({
                   aria-label={uiEdition === 'minimal' ? 'Chord pattern' : 'Akkordmuster'}
                 >
                   <option value="pad">Pad</option>
+                  <option value="eternalDrone">Eternal Drone</option>
                   <option value="wave">Wave</option>
+                  <option value="cathedralChoir">Cathedral</option>
                   <option value="pulse">Pulse</option>
                   <option value="broken">Arp</option>
+                  <option value="risingArp">Rising Arp</option>
+                  <option value="fallingArp">Falling Arp</option>
+                  <option value="pendulumArp">Pendulum</option>
                   <option value="cluster">Cluster</option>
                   <option value="euclidean">{uiEdition === 'minimal' ? 'Euclid' : 'Euklid'}</option>
                   <option value="syncopated">Sync</option>
+                  <option value="offbeatEcho">Offbeat Echo</option>
+                  <option value="tripletFlow">Triplets</option>
                 </select>
               </label>
 

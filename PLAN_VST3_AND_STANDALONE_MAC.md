@@ -85,7 +85,26 @@ Why wrap the existing React/Vite/TypeScript engine in **JUCE 8** instead of Elec
 3. Configure C++ -> JS native functions via `juce::WebBrowserComponent::Options::withNativeFunction(...)`:
    - `sendMidi(channel, bytesArray, delayMs)`
    - `getMidiOutputs()`
+   - `getMidiInputs()` / `setMidiInputMode(mode, portId)`
    - `setStateSnapshot(jsonString)` -> stored in `lastSessionJson` for DAW `.als` project save.
+
+### Phase 2.5: Bidirectional MIDI Input — Reading Recorded Ableton MIDI Notes & Clips
+Enables the VST3 (and browser via Web MIDI Input) to listen to MIDI clips or live keyboard notes played/recorded on an Ableton Live track and generate accompaniment around them:
+1. **VST3 C++ MIDI-In Capture (`PluginProcessor::processBlock`)**:
+   - Because `NEEDS_MIDI_INPUT TRUE` is enabled in `CMakeLists.txt`, read incoming `juce::MidiBuffer& midiMessages` (from the VST3 track's MIDI clips or `MIDI From` routing in Ableton) plus optional CoreMIDI virtual input (`juce::MidiInput::createNewDevice("Instajammable In")`).
+   - Extract `isNoteOn` / `isNoteOff` / controller events with channel, MIDI note, velocity, and exact sample/PPQ timestamp into a lock-free SPSC ring buffer and push batches to JS via `window.__JUCE__.backend.emitEvent('midiIn', events)`.
+2. **Browser Web MIDI Input Support (`src/engine/midi/webMidi.ts`)**:
+   - Add `midiAccess.inputs` enumeration & `onmidimessage` listener so the browser edition supports the exact same workflow via macOS IAC Driver (`Bus 2` or MIDI keyboard) before VST3 is built.
+3. **Three Generative MIDI-Input Modes in `JamEngine` (`midiInputMode`)**:
+   - **`followHarmony` (Realtime Chord & Root Follower)**:
+     - Analyzes incoming sustained/polyphonic notes within a short chord-detection window (~35 ms): `>= 3` simultaneous tones automatically detect chord root, quality (via `chordSuffix`), and voicing and update `latchedHarmony` + `manualHarmonyDegree`; bass notes `< C3` update harmonic root/scale automatically.
+     - All generative tracks (Texture, Chords B, Bass, Melody, Drums) lock instantaneously onto the harmonies of your recorded Ableton MIDI clip!
+   - **`captureMotif` (Recorded Phrase → Evolving Melody Seed)**:
+     - Records incoming MIDI notes over a selectable `1–4` bar window into `baseMotif` (`pos`, `degreeOffset`, durations, velocities), quantizing them to `step % 16` slots.
+     - `JamComposer` plays back and organically varies/harmonizes your recorded motif across `A / A' / B` variations instead of discarding your riff.
+   - **`layerThruOverride` (Track Replace / Build-Around)**:
+     - Converts incoming MIDI on a selected input channel into a live `MidiClip` override for a chosen track (e.g., your hand-played Bassline or Lead in Ableton) while Instajammable generates the remaining 7 tracks cleanly around it.
+   - Expose UI toggles in the MIDI Routing Dialog (`MIDI In` selector + `Follow Harmony` / `Capture Motif` / `Live Replace` pill buttons).
 
 ### Phase 3: Ableton Project Recall (`getStateInformation` / `setStateInformation`)
 1. Whenever `JamEngine` notifies state changes (`subscribe` debounced at ~500 ms), call JS -> C++ `updateSessionSnapshot(JSON.stringify(engine.saveSession()))`.

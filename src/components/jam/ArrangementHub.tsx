@@ -111,11 +111,18 @@ export function SoundscapeDeck({ session, position, onClose }: { session: JamSes
             onChange={e => engine.setChordPattern(e.target.value as ChordPattern)}
           >
             <option value="pad">{isMinimal ? '🌊 Living Pad (Sustained & gentle movement)' : '🌊 Living Pad (Flächig, rollende Anschläge & feine Antworten)'}</option>
+            <option value="eternalDrone">{isMinimal ? '♾️ Eternal Drone (Seamless unbroken hold)' : '♾️ Eternal Drone (Endlos gehalten, ohne Pause)'}</option>
+            <option value="wave">{isMinimal ? '🌊 Ocean Waves (Staggered voice entries)' : '🌊 Ozeanische Wellen (Zeitlich gestaffelte Voice-Einsätze)'}</option>
+            <option value="cathedralChoir">{isMinimal ? '⛪ Cathedral Choir (Layered bloom)' : '⛪ Kathedral-Chor (Mehrstufig aufblühend)'}</option>
             <option value="pulse">{isMinimal ? '⚡ Syncopated Pulse (3/16 rhythmic drive)' : '⚡ CBL / Jon Hopkins Pulse (3/16 synkopierte rhythmische Impulse)'}</option>
             <option value="broken">{isMinimal ? '🎹 Broken Arpeggio (Stepped chord notes)' : '🎹 Neo-Klassik Arpeggio (Nils Frahm zerlegte Stufenakkorde)'}</option>
+            <option value="risingArp">{isMinimal ? '📈 Rising Arp (Upward 8th weave)' : '📈 Aufwärts-Arpeggio (Durchgehende 8tel)'}</option>
+            <option value="fallingArp">{isMinimal ? '📉 Falling Arp (Downward 8th weave)' : '📉 Abwärts-Arpeggio (Fallende Kaskade)'}</option>
+            <option value="pendulumArp">{isMinimal ? '〰️ Pendulum Arp (Up & down wave)' : '〰️ Pendel-Arpeggio (Auf & ab wogend)'}</option>
             <option value="syncopated">{isMinimal ? '🌌 Deep Dub Stabs (Off-beat chord hits)' : '🌌 Deep Dub Stabs (Off-Beat Akkordschläge mit Ghost-Hits)'}</option>
+            <option value="offbeatEcho">{isMinimal ? '🎛️ Offbeat Echo (Dubby chords)' : '🎛️ Offbeat Echo (Synkopierte Antworten)'}</option>
             <option value="euclidean">{isMinimal ? '📐 Euclidean Rhythm (Hypnotic polyrhythm)' : '📐 Euklidische Rhythmik (Polyrhythmisch hypnotische Impulse)'}</option>
-            <option value="wave">{isMinimal ? '🌊 Ocean Waves (Staggered voice entries)' : '🌊 Ozeanische Wellen (Zeitlich gestaffelte Voice-Einsätze)'}</option>
+            <option value="tripletFlow">{isMinimal ? '🌀 Triplet Flow (3-feel weave)' : '🌀 Triolen-Fluss (Schwebender 3er-Groove)'}</option>
             <option value="cluster">{isMinimal ? '✨ Shimmer Cluster (Pulsing overtones)' : '✨ Schimmerndes Cluster-Gewebe (Polyzyklisch pulsierende Obertöne)'}</option>
           </select>
         </div>

@@ -1,5 +1,5 @@
 import type { AmbientSynthParams, DrumVoiceParams, EffectsParams, StepContext, MusicalScale } from '../../types';
-import { TIMBRES, CHORD_PATTERNS, CHORD_PACES, CHORD_TEXTURES, DRUM_MODELS, DRONE_STYLES, MELODY_STYLES, BASS_STYLES, VOICING_FAMILIES, type ChaosMode, type DrumModel, type DroneStyle, type MelodyStyle, type BassStyle, type VoicingFamily, type ChordPattern, type ChordPace, type ChordLoopMode, type ChordTexture, type JamEvent, type JamLayer, type JamPosition, type JamSession, type LayerSettings, type MacroName, type MidiClip, type ClipTempo, type ClipRawEvent, type ArrangementSection, type DrumVoice, type SequenceBlock, type SequencerPosition, type Timbre, type CustomMacro, type CustomMacroTarget, type EffectChainMode, type EffectChainSettings, type EffectModuleId, type EffectModuleConfig, type AtmosphereKind, type JamStyle } from '../../types/jam';
+import { TIMBRES, CHORD_PATTERNS, CHORD_PACES, CHORD_TEXTURES, DRUM_MODELS, DRONE_STYLES, MELODY_STYLES, BASS_STYLES, RHYTHM_ALGORITHMS, VOICING_FAMILIES, type ChaosMode, type DrumModel, type DroneStyle, type MelodyStyle, type BassStyle, type RhythmAlgorithm, type VoicingFamily, type ChordPattern, type ChordPace, type ChordLoopMode, type ChordTexture, type JamEvent, type JamLayer, type JamPosition, type JamSession, type LayerSettings, type MacroName, type MidiClip, type ClipTempo, type ClipRawEvent, type ArrangementSection, type DrumVoice, type SequenceBlock, type SequencerPosition, type Timbre, type CustomMacro, type CustomMacroTarget, type EffectChainMode, type EffectChainSettings, type EffectModuleId, type EffectModuleConfig, type AtmosphereKind, type JamStyle } from '../../types/jam';
 import { MasterAudio } from '../audio/audioContext';
 import { AmbientSynth } from '../audio/ambientSynth';
 import { DrumSynth } from '../audio/drumSynth';
@@ -651,7 +651,12 @@ export class JamEngine {
       const velScale = midiOnly ? (0.65 + layer.volume * 0.50) : 1;
       const warmthOffset = midiOnly ? (session.macros.warmth - 0.5) * 18 : 0;
       const midiVelocity = clamp(Math.round(note.velocity * velScale + warmthOffset), 32, 127);
-      const gateMult = midiOnly && layer.role !== 'drum' ? clamp(0.30 + session.macros.space * 0.70, 0.25, 1.0) : 1;
+      const s = layer.settings;
+      const isSeamlessAnchor =
+        layer.role === 'drone' ||
+        (layer.role === 'bass' && ['pedal', 'infiniteDrone', 'breathingSub', 'fifthPendulum', 'octaveGlide', 'tresilloSub', 'ukGarageSub'].includes(s.bassStyle || 'pedal')) ||
+        (layer.role === 'chords' && s.chordPattern === 'eternalDrone');
+      const gateMult = midiOnly && layer.role !== 'drum' && !isSeamlessAnchor ? clamp(0.30 + session.macros.space * 0.70, 0.25, 1.0) : 1;
       this.midi.scheduleNote(note.channel ?? layer.channel, note.note, midiVelocity, perfTime, duration * gateMult * 1000, layer.id, layer.outputId ?? undefined);
     }
   }
@@ -1074,8 +1079,7 @@ export class JamEngine {
       this.setLayerSettings(layerId, { droneStyle: next });
       label = next;
     } else {
-      const drumAlgos = ['composed', 'euclidean', 'probabilistic', 'polymetric', 'markov', 'densityBurst'] as const;
-      const next = pickOther(drumAlgos, s.rhythmAlgorithm);
+      const next = pickOther(RHYTHM_ALGORITHMS, s.rhythmAlgorithm);
       this.setLayerSettings(layerId, { rhythmAlgorithm: next, ...(s.density < 0.18 ? { density: 0.48 } : {}) });
       label = next;
     }
@@ -1254,9 +1258,7 @@ export class JamEngine {
     const melodyTimbres: Timbre[] = ['bell', 'glass', 'keys', 'celeste', 'shimmer', 'strings', 'air'];
     const droneTimbres: Timbre[] = ['root', 'air', 'warm', 'solina'];
     const bassTimbres: Timbre[] = ['warm', 'dub', 'root'];
-    const drumAlgos: JamLayer['settings']['rhythmAlgorithm'][] = [
-      'composed', 'euclidean', 'probabilistic', 'polymetric', 'markov', 'densityBurst'
-    ];
+    const drumAlgos: RhythmAlgorithm[] = [...RHYTHM_ALGORITHMS];
 
     let chordPick = '';
     let melodyPick = '';
@@ -1491,9 +1493,6 @@ export class JamEngine {
           const isHatOrPerc = l.id === 'hihat' || l.id === 'perc';
           return { ...l, muted: false, volume: Math.max(l.volume, 0.4), settings: { ...l.settings, density: clamp(l.settings.density + (isHatOrPerc ? 0.25 : 0.1), 0, 1) } };
         }
-        if (l.role === 'melody' && !l.locked && !l.frozen) {
-          return { ...l, muted: true };
-        }
         return l;
       });
       this.state.macros.movement = clamp(this.state.macros.movement + 0.15, 0, 1);
@@ -1504,17 +1503,17 @@ export class JamEngine {
       this.arrangement.buildupBarsLeft = 0;
       this.state.layers = this.state.layers.map(l => {
         if (l.role === 'drum') return { ...l, muted: true };
-        if (l.role === 'melody' && !l.locked && !l.frozen) return { ...l, muted: true };
         if (l.role === 'bass' && !l.locked && !l.frozen) return { ...l, volume: clamp(l.volume * 0.75, 0.25, 0.55) };
         if (l.role === 'chords' || l.role === 'drone') return { ...l, muted: false, volume: Math.max(l.volume, 0.55) };
         return l;
       });
       this.state.macros.space = clamp(this.state.macros.space + 0.2, 0, 1);
-      if (logChange) this.addChange('Arrangement: 💥 Breakdown · Drums ausgeblendet, Pad schwebt', beat);
+      if (logChange) this.addChange('Arrangement: 💥 Breakdown · Drums ausgeblendet, Pad & Melodie schweben', beat);
     } else if (target === 'chorus') {
       this.arrangement.current = 'chorus';
       this.arrangement.buildupBarsLeft = 0;
       this.state.layers = this.state.layers.map(l => {
+        if (l.locked || l.frozen) return l;
         if (l.role === 'drum') return { ...l, muted: false, volume: Math.max(l.volume, 0.5) };
         if (l.role === 'chords') return { ...l, muted: false, volume: Math.max(l.volume, 0.6), settings: { ...l.settings, density: clamp(l.settings.density + 0.15, 0, 1) } };
         if (l.role === 'melody') return { ...l, muted: false, volume: Math.max(l.volume, 0.45), settings: { ...l.settings, density: clamp(l.settings.density + 0.2, 0, 1) } };
@@ -1528,7 +1527,7 @@ export class JamEngine {
       this.arrangement.buildupBarsLeft = 0;
       this.state.layers = this.state.layers.map(l => {
         if (l.role === 'drum') return { ...l, muted: true };
-        if (l.role === 'melody' && !l.locked && !l.frozen) return { ...l, muted: true, settings: { ...l.settings, density: clamp(l.settings.density * 0.4, 0.1, 0.25) } };
+        if (l.role === 'melody' && !l.locked && !l.frozen) return { ...l, volume: clamp(l.volume * 0.72, 0.24, 0.45) };
         if (l.role === 'bass' && !l.locked && !l.frozen) return { ...l, volume: clamp(l.volume * 0.55, 0.18, 0.45) };
         return l;
       });
@@ -2448,7 +2447,7 @@ function normalizeLayer(raw: JamLayer, fallback: JamLayer): JamLayer {
       ...(s.melodyStyle !== undefined && (MELODY_STYLES as readonly string[]).includes(s.melodyStyle) ? { melodyStyle: s.melodyStyle as MelodyStyle } : {}),
       ...(s.bassStyle !== undefined && (BASS_STYLES as readonly string[]).includes(s.bassStyle) ? { bassStyle: s.bassStyle as BassStyle } : {}),
       ...(s.ambientAlgorithm !== undefined ? { ambientAlgorithm: s.ambientAlgorithm === 'granularDrift' ? 'granularDrift' : 'harmonicDrone' } : {}),
-      rhythmAlgorithm: ['composed', 'euclidean', 'probabilistic', 'polymetric', 'markov', 'densityBurst'].includes(s.rhythmAlgorithm || '') ? s.rhythmAlgorithm : 'composed', minNote: min, maxNote: max, phraseBars: Math.round(clamp(s.phraseBars, 1, 16)),
+      rhythmAlgorithm: (RHYTHM_ALGORITHMS as readonly string[]).includes(s.rhythmAlgorithm || '') ? s.rhythmAlgorithm : 'composed', minNote: min, maxNote: max, phraseBars: Math.round(clamp(s.phraseBars, 1, 16)),
       humanizeMs: clamp(s.humanizeMs, 0, 30), velocityMin, velocityMax,
       ...(s.chordPattern !== undefined && (CHORD_PATTERNS as readonly string[]).includes(s.chordPattern) ? { chordPattern: s.chordPattern } : {}),
       ...(s.chordPace !== undefined && (CHORD_PACES as readonly string[]).includes(s.chordPace) ? { chordPace: s.chordPace } : {}),

@@ -550,3 +550,60 @@ test('Harmony Pace (1/2/4/8-bars & dynamic) and Chord Loop Mode (A/AB/ABC/ABCD) 
   const abDegrees = new Set([0, 16, 32, 48].map(s => composer.harmonyAt(s, engine.getState()).degree));
   assert.ok(abDegrees.size <= 2, 'Loop AB should cycle at most 2 chord degrees');
 });
+
+test('continuous melody plays in every bar, seamless legato bass holds full duration, and all 16/14/12/10/12 styles work', async () => {
+  const { BASS_STYLES, CHORD_PATTERNS, MELODY_STYLES, DRONE_STYLES, RHYTHM_ALGORITHMS } = await import('../types/jam');
+  const port = createMockPort('IAC Driver Bus 1');
+  const h = createHarness('dorian-dawn');
+  const engine = h.engine;
+  engine.midi.setMockMidiAccess({ outputs: new Map([[port.id, port]]) } as unknown as MIDIAccess);
+  engine.updateSession({ outputMode: 'midi', globalOutputId: port.id });
+
+  const composer = (engine as unknown as {
+    composer: { planStep: (step: number, session: ReturnType<JamEngine['getState']>) => Array<{ layerId: string; durationBeats: number }> };
+  }).composer;
+
+  // 1. Melody never drops a whole bar silent even at low density (0.28)
+  engine.setLayerSettings('melody', { density: 0.28, melodyStyle: 'motif' });
+  for (let bar = 0; bar < 8; bar++) {
+    let barMelodyNotes = 0;
+    for (let pos = 0; pos < 16; pos++) {
+      barMelodyNotes += composer.planStep(bar * 16 + pos, engine.getState()).filter(n => n.layerId === 'melody').length;
+    }
+    assert.ok(barMelodyNotes >= 2, `Melody bar ${bar} must keep singing (got ${barMelodyNotes} notes)`);
+  }
+
+  // 2. Seamless legato pedal/infiniteDrone/breathingSub bass keeps full duration in MIDI mode even with low space macro
+  engine.setMacro('space', 0.25);
+  engine.setLayerSettings('bass', { bassStyle: 'pedal', density: 0.8 });
+  const pedalNote = composer.planStep(0, engine.getState()).find(n => n.layerId === 'bass');
+  assert.ok(pedalNote && pedalNote.durationBeats >= 4.0, `Expected seamless >= 4 beats for pedal bass (got ${pedalNote?.durationBeats})`);
+
+  engine.setLayerSettings('bass', { bassStyle: 'infiniteDrone', density: 0.8 });
+  const droneBassNote = composer.planStep(0, engine.getState()).find(n => n.layerId === 'bass');
+  assert.ok(droneBassNote && droneBassNote.durationBeats >= 16, `Expected full phrase infiniteDrone bass (got ${droneBassNote?.durationBeats})`);
+
+  // Verify WebMidiManager preserves full durationMs (>= 4 full beats in ms at 120 BPM = 2000ms) without gateMult shrink
+  engine.setLayerSettings('bass', { bassStyle: 'pedal', density: 0.8 });
+  port.sent.length = 0;
+  h.tick(0, 0.05);
+  const bassRec = engine.midi.getRecentHistory().find(e => e.layerId === 'bass' && e.type === 'noteOn');
+  const expectedFourBeatsMs = (4 * 60000) / engine.getState().bpm;
+  assert.ok(typeof bassRec?.durationMs === 'number' && bassRec.durationMs >= expectedFourBeatsMs - 1, `Expected un-gated seamless MIDI bass duration (got ${bassRec?.durationMs}ms)`);
+
+  // 3. Verify all 16 bass, 14 chord, 11 active melody, 10 drone, 12 drum styles produce valid notes across a 4-bar phrase
+  const hasNotesFor = (fn: () => void, layerId: string, label: string) => {
+    fn();
+    let count = 0;
+    for (let step = 0; step < 64; step++) {
+      count += composer.planStep(step, engine.getState()).filter(n => n.layerId === layerId).length;
+    }
+    assert.ok(count > 0, `Expected notes for ${label} on layer ${layerId}`);
+  };
+
+  for (const bs of BASS_STYLES) hasNotesFor(() => engine.setLayerSettings('bass', { bassStyle: bs, density: 0.75 }), 'bass', `bass:${bs}`);
+  for (const cp of CHORD_PATTERNS) hasNotesFor(() => engine.setLayerSettings('chords', { chordPattern: cp, density: 0.75 }), 'chords', `chords:${cp}`);
+  for (const ms of MELODY_STYLES.filter(m => m !== 'off')) hasNotesFor(() => engine.setLayerSettings('melody', { melodyStyle: ms, density: 0.75 }), 'melody', `melody:${ms}`);
+  for (const ds of DRONE_STYLES) hasNotesFor(() => engine.setLayerSettings('drone', { droneStyle: ds, density: 0.75 }), 'drone', `drone:${ds}`);
+  for (const ra of RHYTHM_ALGORITHMS) hasNotesFor(() => engine.setLayerSettings('kick', { rhythmAlgorithm: ra, density: 0.8 }), 'kick', `drum:${ra}`);
+});

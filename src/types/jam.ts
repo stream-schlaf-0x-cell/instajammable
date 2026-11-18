@@ -14,8 +14,11 @@ export interface AtmosphereSettings { kind: AtmosphereKind; level: number; tone:
 /** Gentle automatic section changes: macros drift and drums breathe in and out. Never touches key or tempo. */
 export interface FlowSettings { enabled: boolean; bars: 4 | 8 | 16 | 32 | number; depth: number }
 export type MacroName = 'movement' | 'density' | 'warmth' | 'space';
-export type ChordPattern = 'pad' | 'pulse' | 'broken' | 'syncopated' | 'euclidean' | 'wave' | 'cluster';
-export const CHORD_PATTERNS: readonly ChordPattern[] = ['pad', 'pulse', 'broken', 'syncopated', 'euclidean', 'wave', 'cluster'] as const;
+export const CHORD_PATTERNS = [
+  'pad', 'pulse', 'broken', 'syncopated', 'euclidean', 'wave', 'cluster',
+  'eternalDrone', 'risingArp', 'fallingArp', 'pendulumArp', 'offbeatEcho', 'tripletFlow', 'cathedralChoir',
+] as const;
+export type ChordPattern = typeof CHORD_PATTERNS[number];
 export type ChordPace = '1-bar' | '2-bars' | '4-bars' | '8-bars' | 'dynamic';
 export const CHORD_PACES: readonly ChordPace[] = ['1-bar', '2-bars', '4-bars', '8-bars', 'dynamic'] as const;
 export type ChordLoopMode = 'A' | 'AB' | 'ABC' | 'ABCD';
@@ -42,12 +45,27 @@ export type DrumModel = typeof DRUM_MODELS[number];
 
 export const VOICING_FAMILIES = ['triad', 'sus', 'open9', 'quartal', 'power', 'jazz'] as const;
 export type VoicingFamily = typeof VOICING_FAMILIES[number];
-export const DRONE_STYLES = ['rootFifth', 'rootOctave', 'pedalTonic', 'shiftingFifth', 'cluster'] as const;
+export const DRONE_STYLES = [
+  'rootFifth', 'rootOctave', 'pedalTonic', 'shiftingFifth', 'cluster',
+  'infiniteRibbon', 'angelicTriad', 'subCatharsis', 'quartalStack', 'binauralBreath',
+] as const;
 export type DroneStyle = typeof DRONE_STYLES[number];
-export const MELODY_STYLES = ['motif', 'ostinato', 'bellDrops', 'neoclassical', 'lofiHook', 'off'] as const;
+export const MELODY_STYLES = [
+  'motif', 'ostinato', 'bellDrops', 'neoclassical', 'lofiHook',
+  'endlessStream', 'arpCascade', 'callResponse', 'pentatonicFlow', 'berlinLead', 'cinematicArc',
+  'off',
+] as const;
 export type MelodyStyle = typeof MELODY_STYLES[number];
-export const BASS_STYLES = ['pedal', 'breathingSub', 'dubOffbeat', 'jazzWalk', 'syncopatedGroove', 'minimalArp', 'pulse8', 'psyRoll'] as const;
+export const BASS_STYLES = [
+  'pedal', 'breathingSub', 'dubOffbeat', 'jazzWalk', 'syncopatedGroove', 'minimalArp', 'pulse8', 'psyRoll',
+  'infiniteDrone', 'fifthPendulum', 'octaveGlide', 'berlinSequence', 'tresilloSub', 'acidLine', 'ukGarageSub', 'poly5Bass',
+] as const;
 export type BassStyle = typeof BASS_STYLES[number];
+export const RHYTHM_ALGORITHMS = [
+  'composed', 'euclidean', 'probabilistic', 'polymetric', 'markov', 'densityBurst',
+  'fourOnFloor', 'twoStep', 'halftime', 'tribalPoly', 'minimalClick', 'rolling16',
+] as const;
+export type RhythmAlgorithm = typeof RHYTHM_ALGORITHMS[number];
 
 export interface LayerSettings {
   density: number;
@@ -58,7 +76,7 @@ export interface LayerSettings {
   melodyStyle?: MelodyStyle;
   bassStyle?: BassStyle;
   ambientAlgorithm?: 'harmonicDrone' | 'granularDrift';
-  rhythmAlgorithm?: 'composed' | 'euclidean' | 'probabilistic' | 'polymetric' | 'markov' | 'densityBurst';
+  rhythmAlgorithm?: RhythmAlgorithm;
   chordPattern?: ChordPattern;
   chordPace?: ChordPace;
   chordTexture?: ChordTexture;

@@ -60,14 +60,22 @@ export function getLayerRhythmOptions(layer: JamLayer, min = false): RhythmContr
       field: 'bassStyle',
       value: s.bassStyle || 'pedal',
       options: [
-        { value: 'pedal', label: 'Pedal Sub' },
-        { value: 'breathingSub', label: 'Breathing Sub' },
+        { value: 'pedal', label: 'Pedal Sub (Legato)' },
+        { value: 'infiniteDrone', label: 'Infinite Drone (Endlos)' },
+        { value: 'breathingSub', label: 'Breathing Sub (Legato)' },
+        { value: 'fifthPendulum', label: min ? '5th Pendulum' : 'Quinten-Pendel' },
+        { value: 'octaveGlide', label: min ? 'Octave Glide' : 'Oktav-Wechsel' },
         { value: 'dubOffbeat', label: 'Dub Offbeat' },
         { value: 'jazzWalk', label: 'Jazz Walk' },
         { value: 'syncopatedGroove', label: 'Syncopated' },
         { value: 'minimalArp', label: 'Minimal Arp' },
         { value: 'pulse8', label: '1/8 Pulse' },
         { value: 'psyRoll', label: '1/16 Roll' },
+        { value: 'berlinSequence', label: 'Berlin Sequence' },
+        { value: 'tresilloSub', label: 'Tresillo Sub (3+3+2)' },
+        { value: 'acidLine', label: 'Acid 16th Line' },
+        { value: 'ukGarageSub', label: 'UK 2-Step Sub' },
+        { value: 'poly5Bass', label: min ? 'Poly-5 Bass' : 'Polymetrisch 5er' },
       ],
     };
   }
@@ -76,12 +84,19 @@ export function getLayerRhythmOptions(layer: JamLayer, min = false): RhythmContr
       field: 'chordPattern',
       value: s.chordPattern || 'pad',
       options: [
-        { value: 'pad', label: 'Pad Sustain' },
+        { value: 'pad', label: 'Pad Sustain (Legato)' },
+        { value: 'eternalDrone', label: 'Eternal Drone (Unbroken)' },
         { value: 'wave', label: 'Breathing Wave' },
+        { value: 'cathedralChoir', label: 'Cathedral Choir' },
         { value: 'broken', label: 'Broken Arp' },
+        { value: 'risingArp', label: min ? 'Rising Arp' : 'Aufwärts-Arp' },
+        { value: 'fallingArp', label: min ? 'Falling Arp' : 'Abwärts-Arp' },
+        { value: 'pendulumArp', label: min ? 'Pendulum Arp' : 'Pendel-Arp' },
         { value: 'pulse', label: 'Gate Pulse' },
         { value: 'syncopated', label: 'Syncopated' },
+        { value: 'offbeatEcho', label: 'Offbeat Echo' },
         { value: 'euclidean', label: min ? 'Euclidean' : 'Euklidisch' },
+        { value: 'tripletFlow', label: min ? 'Triplet Flow' : 'Triolen-Fluss' },
         { value: 'cluster', label: 'Cluster Swell' },
       ],
     };
@@ -91,7 +106,13 @@ export function getLayerRhythmOptions(layer: JamLayer, min = false): RhythmContr
       field: 'melodyStyle',
       value: s.melodyStyle || 'motif',
       options: [
-        { value: 'motif', label: min ? 'Motif' : 'Motiv' },
+        { value: 'motif', label: min ? 'Motif' : 'Motiv (Konstant)' },
+        { value: 'endlessStream', label: min ? 'Endless Stream' : 'Endlos-Melodie' },
+        { value: 'cinematicArc', label: min ? 'Cinematic Arc' : 'Langer Gesangsbogen' },
+        { value: 'pentatonicFlow', label: 'Pentatonic Flow' },
+        { value: 'arpCascade', label: min ? 'Arp Cascade' : 'Arpeggio-Kaskade' },
+        { value: 'callResponse', label: min ? 'Call & Response' : 'Frage & Antwort' },
+        { value: 'berlinLead', label: 'Berlin Lead' },
         { value: 'ostinato', label: 'Ostinato' },
         { value: 'bellDrops', label: 'Bell Drops' },
         { value: 'neoclassical', label: 'Neoclassical' },
@@ -110,6 +131,11 @@ export function getLayerRhythmOptions(layer: JamLayer, min = false): RhythmContr
         { value: 'pedalTonic', label: 'Pedal Tonic' },
         { value: 'shiftingFifth', label: 'Shifting 5th' },
         { value: 'cluster', label: 'Open Cluster' },
+        { value: 'infiniteRibbon', label: min ? 'Infinite Ribbon' : 'Endlos-Band' },
+        { value: 'angelicTriad', label: min ? 'Angelic Triad' : 'Sphären-Dreiklang' },
+        { value: 'subCatharsis', label: 'Sub Catharsis (9th)' },
+        { value: 'quartalStack', label: min ? 'Quartal Stack' : 'Quarten-Stapel' },
+        { value: 'binauralBreath', label: min ? 'Binaural Breath' : 'Binaurales Atmen' },
       ],
     };
   }
@@ -123,6 +149,12 @@ export function getLayerRhythmOptions(layer: JamLayer, min = false): RhythmContr
       { value: 'polymetric', label: min ? 'Polymetric' : 'Polymetrisch' },
       { value: 'markov', label: 'Markov' },
       { value: 'densityBurst', label: 'Density Burst' },
+      { value: 'fourOnFloor', label: '4-on-Floor' },
+      { value: 'twoStep', label: 'Two-Step UKG' },
+      { value: 'halftime', label: 'Halftime' },
+      { value: 'tribalPoly', label: 'Tribal Poly' },
+      { value: 'minimalClick', label: 'Minimal Click' },
+      { value: 'rolling16', label: 'Rolling 1/16' },
     ],
   };
 }
@@ -225,7 +257,7 @@ export function TrackOctaveControls({
   const isDrum = layer.role === 'drum';
   if (isDrum && !includeDrums) return null;
   const rangeLabel = isDrum
-    ? `${noteName(layer.settings.minNote)} (${layer.settings.minNote})`
+    ? (compact ? `${noteName(layer.settings.minNote)}·${layer.settings.minNote}` : `${noteName(layer.settings.minNote)} (${layer.settings.minNote})`)
     : `${noteName(layer.settings.minNote)}–${noteName(layer.settings.maxNote)}`;
 
   const group = (
