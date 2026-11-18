@@ -75,26 +75,31 @@ export function sendNativeMidi(portId: string, bytes: number[], delayMs = 0): vo
 
 let stateSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingStateJson: string | null = null;
+let pendingStateProducer: string | (() => string) | null = null;
 
-export function sendNativeSessionState(json: string): void {
+export function sendNativeSessionState(jsonOrProvider: string | (() => string)): void {
   if (!isNativePlugin()) return;
-  pendingStateJson = json;
+  pendingStateProducer = jsonOrProvider;
+  if (typeof jsonOrProvider === 'string') {
+    pendingStateJson = jsonOrProvider;
+  }
   if (stateSaveTimer !== null) return;
   stateSaveTimer = setTimeout(() => {
     stateSaveTimer = null;
-    if (pendingStateJson !== null) {
-      emitNativeEvent('__instajammable_state_save', { json: pendingStateJson });
+    const producer = pendingStateProducer;
+    if (!producer) return;
+    try {
+      const json = typeof producer === 'function' ? producer() : producer;
+      pendingStateJson = json;
+      emitNativeEvent('__instajammable_state_save', { json });
+    } catch {
+      // Ignore serialization error during teardown
     }
-  }, 250);
+  }, 1200);
 }
 
-export function sendNativeAudioPcm(base64Float32: string, frames: number, sampleRate: number): void {
-  if (!isVst3Plugin() || !base64Float32 || frames <= 0) return;
-  emitNativeEvent('__instajammable_pcm_out', {
-    data: base64Float32,
-    frames,
-    sampleRate,
-  });
+export function sendNativeAudioPcm(_base64Float32: string, _frames: number, _sampleRate: number): void {
+  // No-op: WebKit outputs directly via macOS CoreAudio for glitch-free realtime playback
 }
 
 type TransportCb = (state: HostTransportState) => void;

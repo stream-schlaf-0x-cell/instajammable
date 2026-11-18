@@ -285,8 +285,13 @@ export const ROLE_GAIN = {
 
 /** Sounding / releasing voice limits. Releasing is generous for pads: cutting a long tail early is audible. */
 export function voiceBudget(layer: JamLayer, lowResource: boolean): [number, number] {
-  const sounding = layer.role === 'chords' ? 16 : layer.role === 'drone' ? 6 : layer.role === 'bass' ? 2 : 5;
-  const releasing = layer.role === 'chords' ? 18 : layer.role === 'drone' ? 8 : 6;
+  const nativeCap = isNativePlugin();
+  const sounding = nativeCap
+    ? (layer.role === 'chords' ? 8 : layer.role === 'drone' ? 4 : layer.role === 'bass' ? 2 : 4)
+    : (layer.role === 'chords' ? 16 : layer.role === 'drone' ? 6 : layer.role === 'bass' ? 2 : 5);
+  const releasing = nativeCap
+    ? (layer.role === 'chords' ? 8 : layer.role === 'drone' ? 5 : layer.role === 'bass' ? 3 : 5)
+    : (layer.role === 'chords' ? 18 : layer.role === 'drone' ? 8 : 6);
   return lowResource ? [Math.min(sounding, layer.role === 'chords' ? 5 : 3), Math.min(releasing, 4)] : [sounding, releasing];
 }
 
@@ -409,7 +414,7 @@ export class JamEngine {
     const s = this.getState();
     for (const listener of this.listeners) listener(s);
     if (isNativePlugin()) {
-      sendNativeSessionState(JSON.stringify(this.saveSession()));
+      sendNativeSessionState(() => JSON.stringify(this.saveSession()));
     }
   }
   private addChange(label: string, beat = this.getPosition().beat): void {

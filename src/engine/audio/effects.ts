@@ -105,8 +105,8 @@ export class EffectsRack {
       const prePad = this.keep(ctx.createGain());
       prePad.gain.setValueAtTime(0.25, now);
       const shaper = this.keep(ctx.createWaveShaper());
-      shaper.curve = MasterAudio.createWideSoftClipCurve(4097, 4.0, 0.72) as Float32Array<ArrayBuffer>;
-      if ('oversample' in shaper) shaper.oversample = '2x';
+      shaper.curve = MasterAudio.createWideSoftClipCurve(2049, 4.0, 0.72) as Float32Array<ArrayBuffer>;
+      if ('oversample' in shaper) shaper.oversample = 'none';
       loop.connect(prePad); prePad.connect(shaper); loop = shaper;
     }
     loop.connect(this.delayFeedbackLeft);
@@ -151,14 +151,14 @@ export class EffectsRack {
     }
     const bank = (delays: number[]): GainNode => {
       const output = this.keep(ctx.createGain()); output.gain.setValueAtTime(1 / Math.sqrt(delays.length) * 0.36, now);
-      for (const baseDelay of delays) {
+      delays.forEach((baseDelay, idx) => {
         const delay = this.keep(ctx.createDelay(0.25)); delay.delayTime.setValueAtTime(baseDelay, now);
         const damping = this.keep(ctx.createBiquadFilter()); damping.type = 'lowpass'; damping.frequency.setValueAtTime(3300, now); damping.Q.setValueAtTime(FLAT_Q, now);
         const feedback = this.keep(ctx.createGain()); feedback.gain.setValueAtTime(0.8, now);
         highpass.connect(delay); delay.connect(damping); damping.connect(feedback); feedback.connect(delay); delay.connect(output);
-        if (this.reverbLfo) { const wobble = this.keep(ctx.createGain()); wobble.gain.setValueAtTime(0.00028 * (1 + baseDelay * 8), now); this.reverbLfo.connect(wobble); wobble.connect(delay.delayTime); }
+        if (this.reverbLfo && idx < 2) { const wobble = this.keep(ctx.createGain()); wobble.gain.setValueAtTime(0.00028 * (1 + baseDelay * 8), now); this.reverbLfo.connect(wobble); wobble.connect(delay.delayTime); }
         this.combFilters.push({ delay, feedback, damping, baseDelay });
-      }
+      });
       return output;
     };
     const diffuseChannel = (input: AudioNode, time: number): AudioNode => {

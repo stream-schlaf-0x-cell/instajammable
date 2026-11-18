@@ -149,7 +149,7 @@ export class AmbientSynth {
     let lfo: OscillatorNode | null = null; let lfoGain: GainNode | null = null;
     if (params.lfoDepth > 0.001 && params.lfoRate > 0) { lfo = this.ctx.createOscillator(); lfoGain = this.ctx.createGain(); nodes.push(lfoGain);
       lfo.type = 'sine'; lfo.frequency.setValueAtTime(params.lfoRate, time); lfoGain.gain.setValueAtTime(baseCutoff * Math.max(0, Math.min(0.45, params.lfoDepth * 0.65)), time);
-      lfo.connect(lfoGain); lfoGain.connect(filter1.frequency); lfoGain.connect(filter2.frequency);
+      lfo.connect(lfoGain); lfoGain.connect(filter1.frequency);
       lfo.start(time); lfo.stop(end + 0.03); sources.push(lfo); }
     const voice: Voice = {
       id, note, start: time, releaseAt: time + duration, end, sources, nodes, gain, level, layerVolume, pan, driftUnits, osc3IntervalCents, subGain, filters: [filter1, filter2], lfo, lfoGain,

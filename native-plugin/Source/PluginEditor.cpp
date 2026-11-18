@@ -66,7 +66,7 @@ InstajammableAudioProcessorEditor::InstajammableAudioProcessorEditor(Instajammab
   setSize(1340, 860);
 
   processorRef.requestStatePushToJsIfNonEmpty();
-  startTimerHz(60);
+  startTimerHz(30);
 }
 
 InstajammableAudioProcessorEditor::~InstajammableAudioProcessorEditor() {
