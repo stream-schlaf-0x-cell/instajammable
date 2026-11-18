@@ -395,7 +395,9 @@ export class JamComposer {
       const epoch = layer.locked ? 0 : this.epoch + (session.evolving ? Math.floor(step / 128) : 0);
       const paceSig = isChordLayer || layer.role === 'bass'
         ? `${chordLayer?.settings?.chordPace || 'def'}:${activeChordSlot.holdBars}:${session.chordLoopMode || 'ABCD'}:${session.manualHarmonyDegree ?? 'a'}`
-        : '';
+        : layer.role === 'melody' && session.customMotifNotes?.length
+          ? `cm:${session.customMotifNotes.map(n => `${n.pos},${n.degreeOffset}`).join(';')}`
+          : '';
       const signature = `${session.seed}:${session.root}:${session.scale}:${session.style}:${harmony.index}:${harmony.name}:${phraseIndex}:${effectivePhraseBars}:${paceSig}:${epoch}:${JSON.stringify(layer.settings)}:${session.macros.density}:${session.macros.movement}`;
       let plan = this.plans.get(layer.id);
       if (!plan || plan.key !== signature) {
@@ -1057,8 +1059,9 @@ export class JamComposer {
     } else if (layer.role === 'melody') {
       const mStyle: MelodyStyle = s.melodyStyle ?? (lofi ? 'lofiHook' : 'motif');
       if (mStyle === 'off' || density <= 0) return notes;
+      const hasCustomMotif = Boolean(session.customMotifNotes && session.customMotifNotes.length > 0);
 
-      if (mStyle === 'endlessStream' || mStyle === 'arpCascade' || mStyle === 'pentatonicFlow' || mStyle === 'berlinLead' || mStyle === 'cinematicArc' || mStyle === 'callResponse') {
+      if (!hasCustomMotif && (mStyle === 'endlessStream' || mStyle === 'arpCascade' || mStyle === 'pentatonicFlow' || mStyle === 'berlinLead' || mStyle === 'cinematicArc' || mStyle === 'callResponse')) {
         const sRng = new PRNG(streamSeed(session.seed, `mel-stream-${mStyle}-${session.sceneId}`, epoch + phraseIndex));
         const activeScale = mStyle === 'pentatonicFlow' ? 'minorPentatonic' : session.scale;
         const positions = mStyle === 'cinematicArc'
@@ -1091,7 +1094,7 @@ export class JamComposer {
         return notes;
       }
 
-      if (mStyle === 'ostinato') {
+      if (!hasCustomMotif && mStyle === 'ostinato') {
         const cycle16 = Math.floor(phraseIndex / 4);
         const ostRng = new PRNG(streamSeed(session.seed, `ost-${session.sceneId}`, epoch + (epoch === 0 ? 0 : cycle16)));
         const use16 = session.sceneId === 'solar-fields-orbit' || (density > 0.62 && movement > 0.48);
@@ -1128,19 +1131,25 @@ export class JamComposer {
       const cell = cellPool[Math.floor(mRng.next() * cellPool.length) % cellPool.length];
       let jumped = false;
       let prevOff = mRng.pick([0, 2, 4]);
-      const baseMotif: Array<{ pos: number; degreeOffset: number }> = cell.map((pos, idx) => {
-        if (idx === 0) return { pos, degreeOffset: prevOff };
-        let stepMove = mRng.pick([-2, -1, 1, 2, -1, 1]);
-        if (!jumped && mRng.chance(0.35)) {
-          stepMove = mRng.pick([-4, -3, 3, 4]);
-          jumped = true;
-        } else if (jumped && Math.abs(prevOff) > 4) {
-          stepMove = -Math.sign(prevOff);
-        }
-        const nextOff = Math.round(clamp(prevOff + stepMove, -2, 8));
-        prevOff = nextOff;
-        return { pos, degreeOffset: nextOff };
-      });
+      const baseMotif: Array<{ pos: number; degreeOffset: number }> = (session.customMotifNotes && session.customMotifNotes.length > 0)
+        ? [...session.customMotifNotes]
+            .slice(-8)
+            .sort((a, b) => a.pos - b.pos)
+            .filter((ev, idx, arr) => idx === 0 || ev.pos !== arr[idx - 1].pos)
+            .map(ev => ({ pos: Math.max(0, Math.min(15, Math.round(ev.pos))), degreeOffset: Math.round(clamp(ev.degreeOffset, -7, 14)) }))
+        : cell.map((pos, idx) => {
+            if (idx === 0) return { pos, degreeOffset: prevOff };
+            let stepMove = mRng.pick([-2, -1, 1, 2, -1, 1]);
+            if (!jumped && mRng.chance(0.35)) {
+              stepMove = mRng.pick([-4, -3, 3, 4]);
+              jumped = true;
+            } else if (jumped && Math.abs(prevOff) > 4) {
+              stepMove = -Math.sign(prevOff);
+            }
+            const nextOff = Math.round(clamp(prevOff + stepMove, -2, 8));
+            prevOff = nextOff;
+            return { pos, degreeOffset: nextOff };
+          });
 
       const chordPcs = new Set(harmony.notes.map(n => ((n % 12) + 12) % 12));
       const snapToChord = (targetMidi: number): number => {

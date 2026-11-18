@@ -143,6 +143,14 @@ export interface JamEvent extends ClipNote {
   bpm: number;
 }
 export type ChaosMode = 'manual' | 'calm' | 'pulse' | 'wild';
+export type MidiInputMode = 'off' | 'followHarmony' | 'captureMotif' | 'layerReplace';
+export interface CustomMotifNote {
+  pos: number;
+  degreeOffset: number;
+  durationBeats: number;
+  velocity: number;
+  midiNote?: number;
+}
 
 export interface JamSession {
   version: 2;
@@ -195,6 +203,11 @@ export interface JamSession {
   effectChain?: EffectChainSettings;
   workspaceModules?: string[];
   midiClockEnabled?: boolean;
+  midiInputMode?: MidiInputMode;
+  midiInputPortId?: string | null;
+  midiInputTargetLayerId?: string;
+  customMotifNotes?: CustomMotifNote[];
+  hostSyncEnabled?: boolean;
   runtime?: Record<string, unknown>;
 }
 export type ArrangementSection = 'groove' | 'chorus' | 'breakdown' | 'buildup' | 'silent';

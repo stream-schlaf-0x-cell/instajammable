@@ -607,3 +607,66 @@ test('continuous melody plays in every bar, seamless legato bass holds full dura
   for (const ds of DRONE_STYLES) hasNotesFor(() => engine.setLayerSettings('drone', { droneStyle: ds, density: 0.75 }), 'drone', `drone:${ds}`);
   for (const ra of RHYTHM_ALGORITHMS) hasNotesFor(() => engine.setLayerSettings('kick', { rhythmAlgorithm: ra, density: 0.8 }), 'kick', `drum:${ra}`);
 });
+
+test('MIDI Input follower supports followHarmony, captureMotif, and native JUCE bridge virtual ports', async () => {
+  const h = createHarness('dorian-dawn');
+  const engine = h.engine;
+
+  // 1. followHarmony with single bass note (C3 = 48)
+  engine.setMidiInputMode('followHarmony');
+  engine.handleIncomingMidiMessage(0x90, 48, 100);
+  let state = engine.getState();
+  assert.equal(state.chordLoopMode, 'A');
+  assert.equal(state.latchedHarmony?.root, 48);
+  assert.ok(state.latchedHarmony?.name.startsWith('C'), `Expected C-rooted chord name, got ${state.latchedHarmony?.name}`);
+  engine.handleIncomingMidiMessage(0x80, 48, 0);
+
+  // 2. followHarmony with 3-note Am triad (57, 60, 64)
+  engine.handleIncomingMidiMessage(0x90, 57, 100);
+  engine.handleIncomingMidiMessage(0x90, 60, 100);
+  engine.handleIncomingMidiMessage(0x90, 64, 100);
+  state = engine.getState();
+  assert.equal(state.latchedHarmony?.name, 'Am');
+
+  // 3. captureMotif accumulates up to 8 notes and clearCustomMotif resets
+  engine.setMidiInputMode('captureMotif');
+  engine.handleIncomingMidiMessage(0x90, 62, 100);
+  engine.handleIncomingMidiMessage(0x90, 65, 95);
+  engine.handleIncomingMidiMessage(0x90, 69, 105);
+  state = engine.getState();
+  assert.equal(state.customMotifNotes?.length, 3);
+  engine.clearCustomMotif();
+  assert.equal(engine.getState().customMotifNotes?.length, 0);
+
+  // 4. nativeBridge exposes virtual ports & dispatches __instajammable_midi_out
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  const emitted: Array<{ eventId: string; payload: unknown }> = [];
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+      __INSTAJAMMABLE_NATIVE__: true,
+      __JUCE__: {
+        backend: {
+          emitEvent(eventId: string, payload: unknown) {
+            emitted.push({ eventId, payload });
+          },
+        },
+      },
+    },
+  });
+  try {
+    const nativeMidi = new WebMidiManager();
+    const ok = await nativeMidi.init();
+    assert.equal(ok, true);
+    const outIds = nativeMidi.getAvailableOutputs().map(o => o.id);
+    assert.ok(outIds.includes('all-native'));
+    assert.ok(outIds.includes('vst3-host'));
+    assert.ok(outIds.includes('coremidi-bus'));
+    const res = nativeMidi.sendTestNote();
+    assert.equal(res.success, true);
+    assert.ok(emitted.some(e => e.eventId === '__instajammable_midi_out'), 'expected native MIDI out event');
+  } finally {
+    if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+    else delete (globalThis as { window?: unknown }).window;
+  }
+});

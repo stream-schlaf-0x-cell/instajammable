@@ -1,11 +1,23 @@
 // Timestamped MIDI scheduling with explicit port ownership and queue cancellation.
 import type { RecordedMidiEvent } from '../../types';
+import { isNativePlugin, onHostMidiIn, sendNativeMidi } from '../../native/nativeBridge';
 export interface MidiDeviceOption { id: string; name: string; manufacturer?: string; state: string }
 export type MidiSupportStatus = 'uninitialized' | 'requesting' | 'ready' | 'denied' | 'unsupported' | 'error';
 export interface ScheduledMidiNote {
   id: string; output: MIDIOutput; outputId: string; channel: number; note: number; velocity: number;
   onPerformanceTime: number; offPerformanceTime: number; layerId: string;
 }
+const NATIVE_OUTPUT_OPTIONS: MidiDeviceOption[] = [
+  { id: 'all-native', name: 'VST3 Host + Multichannel Bus (Ch 1–16)', manufacturer: 'Instajammable', state: 'connected' },
+  { id: 'vst3-host', name: 'Ableton VST3 Host MIDI Out', manufacturer: 'Ableton / VST3', state: 'connected' },
+  { id: 'coremidi-bus', name: 'Instajammable Multichannel Bus (CoreMIDI)', manufacturer: 'CoreMIDI', state: 'connected' },
+];
+const NATIVE_INPUT_OPTION: MidiDeviceOption = {
+  id: 'native-in',
+  name: 'Ableton VST3 Track MIDI In + CoreMIDI In',
+  manufacturer: 'Instajammable',
+  state: 'connected',
+};
 const now = () => typeof performance === 'undefined' ? 0 : performance.now();
 export class WebMidiManager {
   private midiAccess: MIDIAccess | null = null;
@@ -13,6 +25,11 @@ export class WebMidiManager {
   private outputExplicitlyOff = false;
   private preferredOutputId: string | null | undefined;
   private availableOutputs: MidiDeviceOption[] = [];
+  public availableInputs: MidiDeviceOption[] = [];
+  public selectedInputId: string | null = 'all-inputs';
+  private inputListeners = new Set<(status: number, data1: number, data2: number) => void>();
+  private boundInputs = new Map<string, MIDIInput>();
+  private nativeOutputShims = new Map<string, MIDIOutput>();
   private eventHistory: RecordedMidiEvent[] = [];
   private sentNoteCount = 0;
   private lastSentNote: { channel: number; note: number; velocity: number; portName: string; time: number } | null = null;
@@ -30,8 +47,48 @@ export class WebMidiManager {
   private onDevicesChanged?: (devices: MidiDeviceOption[]) => void;
   private onStatusChanged?: (status: MidiSupportStatus, error: string | null) => void;
   private onEventRecorded?: (event: RecordedMidiEvent) => void;
-  constructor() { this.checkSupport(); }
+  constructor() {
+    onHostMidiIn((events) => {
+      for (const ev of events) {
+        this.notifyInputListeners(ev.status, ev.data1, ev.data2);
+      }
+    });
+    this.checkSupport();
+    if (isNativePlugin()) {
+      this.status = 'ready';
+      this.errorMessage = null;
+      this.updateOutputsList();
+    }
+  }
+  private getOrCreateNativeOutputShim(opt: MidiDeviceOption): MIDIOutput {
+    const existing = this.nativeOutputShims.get(opt.id);
+    if (existing) return existing;
+    const shim = {
+      id: opt.id,
+      name: opt.name,
+      manufacturer: opt.manufacturer ?? 'Instajammable',
+      type: 'output',
+      version: '1.0',
+      state: 'connected',
+      connection: 'open',
+      onstatechange: null,
+      open: async () => shim,
+      close: async () => shim,
+      send: (data: Iterable<number>, timestamp?: number) => {
+        const bytes = Array.from(data);
+        const delayMs = timestamp !== undefined ? Math.max(0, timestamp - now()) : 0;
+        sendNativeMidi(opt.id, bytes, delayMs);
+      },
+    } as unknown as MIDIOutput;
+    this.nativeOutputShims.set(opt.id, shim);
+    return shim;
+  }
   public checkSupport(): boolean {
+    if (isNativePlugin()) {
+      this.status = 'ready';
+      this.errorMessage = null;
+      return true;
+    }
     const supported = typeof navigator !== 'undefined' && typeof navigator.requestMIDIAccess === 'function';
     if (!supported && this.status === 'uninitialized') {
       this.status = 'unsupported';
@@ -52,6 +109,13 @@ export class WebMidiManager {
     }
   }
   public init(): Promise<boolean> {
+    if (isNativePlugin()) {
+      this.status = 'ready';
+      this.errorMessage = null;
+      this.updateOutputsList();
+      this.notifyStatus();
+      return Promise.resolve(true);
+    }
     if (this.midiAccess && this.status === 'ready') return Promise.resolve(true);
     if (this.initPromise) return this.initPromise;
     if (!this.checkSupport()) { this.notifyStatus(); return Promise.resolve(false); }
@@ -73,25 +137,72 @@ export class WebMidiManager {
     return this.initPromise;
   }
   private notifyStatus(): void { this.onStatusChanged?.(this.status, this.errorMessage); }
+  private notifyInputListeners(status: number, data1: number, data2: number): void {
+    for (const cb of this.inputListeners) cb(status, data1, data2);
+  }
+  public onMidiMessage(cb: (status: number, data1: number, data2: number) => void): () => void {
+    this.inputListeners.add(cb);
+    return () => this.inputListeners.delete(cb);
+  }
+  public getAvailableInputs(): MidiDeviceOption[] { return [...this.availableInputs]; }
+  public getSelectedInputId(): string | null { return this.selectedInputId; }
+  public selectInput(id: string | null): void {
+    this.selectedInputId = id;
+    this.bindMidiInputs();
+  }
+  private bindMidiInputs(): void {
+    if (!this.midiAccess?.inputs) return;
+    for (const input of this.boundInputs.values()) {
+      input.onmidimessage = null;
+    }
+    this.boundInputs.clear();
+    if (!this.selectedInputId) return;
+    this.midiAccess.inputs.forEach((input) => {
+      if (input.state === 'disconnected') return;
+      if (this.selectedInputId === 'all-inputs' || input.id === this.selectedInputId) {
+        input.onmidimessage = (ev: MIDIMessageEvent) => {
+          const data = ev.data;
+          if (!data || data.length === 0) return;
+          this.notifyInputListeners(data[0] ?? 0, data[1] ?? 0, data[2] ?? 0);
+        };
+        this.boundInputs.set(input.id, input);
+      }
+    });
+  }
   private getOutput(id?: string | null): MIDIOutput | null {
     const actual = id === undefined ? this.selectedOutputId : id;
-    if (!actual || !this.midiAccess) return null;
+    if (!actual) return null;
+    if (isNativePlugin()) {
+      const nativeOpt = NATIVE_OUTPUT_OPTIONS.find(o => o.id === actual);
+      if (nativeOpt) return this.getOrCreateNativeOutputShim(nativeOpt);
+    }
+    if (!this.midiAccess) return null;
     let output: MIDIOutput | null = null;
     this.midiAccess.outputs.forEach(out => { if (out.id === actual && out.state !== 'disconnected') output = out; });
     return output;
   }
   public updateOutputsList(): void {
-    if (!this.midiAccess) return;
-    const list: MidiDeviceOption[] = [];
-    this.midiAccess.outputs.forEach(output => {
+    const nativeMode = isNativePlugin();
+    if (!nativeMode && !this.midiAccess) return;
+    const list: MidiDeviceOption[] = nativeMode ? [...NATIVE_OUTPUT_OPTIONS] : [];
+    const inputList: MidiDeviceOption[] = nativeMode ? [NATIVE_INPUT_OPTION] : [];
+    this.midiAccess?.outputs?.forEach(output => {
       if (output.state !== 'disconnected') list.push({ id: output.id, name: output.name || `MIDI Output (${output.id})`, manufacturer: output.manufacturer ?? '', state: output.state });
+    });
+    this.midiAccess?.inputs?.forEach(input => {
+      if (input.state !== 'disconnected') inputList.push({ id: input.id, name: input.name || `MIDI Input (${input.id})`, manufacturer: input.manufacturer ?? '', state: input.state });
     });
     for (const id of this.ownedPorts.keys()) if (!list.some(port => port.id === id)) this.releaseNotesForOutput(id);
     if (this.selectedOutputId && !list.some(port => port.id === this.selectedOutputId) && this.preferredOutputId === undefined) this.selectedOutputId = null;
     this.availableOutputs = list;
+    this.availableInputs = inputList;
+    if (nativeMode && (!this.selectedInputId || this.selectedInputId === 'all-inputs')) {
+      this.selectedInputId = 'native-in';
+    }
+    this.bindMidiInputs();
     if (this.preferredOutputId !== undefined) this.selectedOutputId = this.preferredOutputId;
     else if (!this.selectedOutputId && !this.outputExplicitlyOff && list.length) {
-      this.selectedOutputId = (list.find(port => port.name.toLowerCase().includes('iac')) ?? list[0]).id;
+      this.selectedOutputId = nativeMode ? 'all-native' : (list.find(port => port.name.toLowerCase().includes('iac')) ?? list[0]).id;
       this.preferredOutputId = this.selectedOutputId; // pin initial discovery; unplugging never redirects a live route
     }
     if (this.selectedOutputId && list.some(port => port.id === this.selectedOutputId) && (this.errorMessage?.startsWith('MIDI output ') || this.errorMessage?.includes('MIDI-Port') || this.errorMessage?.includes('MIDI-Ausgang'))) { this.errorMessage = null; this.notifyStatus(); }
@@ -167,6 +278,7 @@ export class WebMidiManager {
     return !output ? 'off' : typeof (output as MIDIOutput & {clear?: () => void}).clear === 'function' ? 'timestamped' : 'timer';
   }
   private useTimerScheduling(output: MIDIOutput): boolean {
+    if (this.nativeOutputShims.has(output.id)) return false;
     if (typeof (output as MIDIOutput & { clear?: () => void }).clear !== 'function') return true;
     return typeof window !== 'undefined';
   }

@@ -1,4 +1,15 @@
 // Master Web Audio Graph & Context Manager with Concurrency Lock & Analog Soft-Saturation
+import { isVst3Plugin, sendNativeAudioPcm } from '../../native/nativeBridge';
+
+function float32ToBase64(samples: Float32Array): string {
+  const bytes = new Uint8Array(samples.buffer, samples.byteOffset, samples.byteLength);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
 
 export class MasterAudio {
   private static instance: MasterAudio | null = null;
@@ -143,8 +154,37 @@ export class MasterAudio {
       this.masterLimiter.connect(this.outputGain);
       this.outputGain.connect(this.safetyCeiling);
       this.safetyCeiling.connect(this.analyser);
-      this.analyser.connect(this.ctx.destination);
       this.analyser.connect(this.streamDest);
+      if (isVst3Plugin() && typeof this.ctx.createScriptProcessor === 'function') {
+        const bufferFrames = 1024;
+        const pcmTap = this.ctx.createScriptProcessor(bufferFrames, 2, 2);
+        const interleaved = new Float32Array(bufferFrames * 2);
+        const silentSink = this.ctx.createGain();
+        silentSink.gain.setValueAtTime(0, this.ctx.currentTime);
+        pcmTap.onaudioprocess = (ev) => {
+          const left = ev.inputBuffer.getChannelData(0);
+          const right = ev.inputBuffer.numberOfChannels > 1 ? ev.inputBuffer.getChannelData(1) : left;
+          let peak = 0;
+          for (let i = 0; i < left.length; i++) {
+            const l = left[i];
+            const r = right[i];
+            interleaved[i * 2] = l;
+            interleaved[i * 2 + 1] = r;
+            const absL = Math.abs(l);
+            const absR = Math.abs(r);
+            if (absL > peak) peak = absL;
+            if (absR > peak) peak = absR;
+          }
+          if (peak > 0.00001) {
+            sendNativeAudioPcm(float32ToBase64(interleaved.subarray(0, left.length * 2)), left.length, this.ctx!.sampleRate);
+          }
+        };
+        this.analyser.connect(pcmTap);
+        pcmTap.connect(silentSink);
+        silentSink.connect(this.ctx.destination);
+      } else {
+        this.analyser.connect(this.ctx.destination);
+      }
 
       if (this.ctx.state === 'suspended') {
         await this.ctx.resume();

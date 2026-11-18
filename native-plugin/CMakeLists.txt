@@ -1,0 +1,67 @@
+cmake_minimum_required(VERSION 3.22)
+
+project(Instajammable VERSION 2.1.0 LANGUAGES C CXX OBJC OBJCXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_OSX_ARCHITECTURES "x86_64" CACHE STRING "macOS architecture" FORCE)
+set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum macOS deployment target" FORCE)
+
+include(FetchContent)
+
+FetchContent_Declare(
+  JUCE
+  GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
+  GIT_TAG 8.0.6
+  GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(JUCE)
+
+juce_add_plugin(Instajammable
+  COMPANY_NAME "Instajammable"
+  PLUGIN_MANUFACTURER_CODE InJm
+  PLUGIN_CODE InJ2
+  FORMATS VST3 Standalone
+  PRODUCT_NAME "Instajammable"
+  IS_SYNTH TRUE
+  NEEDS_MIDI_INPUT TRUE
+  NEEDS_MIDI_OUTPUT TRUE
+  IS_MIDI_EFFECT FALSE
+  EDITOR_WANTS_KEYBOARD_FOCUS TRUE
+  COPY_PLUGIN_AFTER_BUILD FALSE
+  HARDENED_RUNTIME_ENABLED FALSE
+)
+
+target_sources(Instajammable
+  PRIVATE
+    Source/PluginProcessor.cpp
+    Source/PluginEditor.cpp
+)
+
+target_include_directories(Instajammable
+  PRIVATE
+    Source
+)
+
+target_compile_definitions(Instajammable
+  PUBLIC
+    JUCE_WEB_BROWSER=1
+    JUCE_USE_CURL=0
+    JUCE_VST3_CAN_REPLACE_VST2=0
+    JUCE_DISPLAY_SPLASH_SCREEN=0
+)
+
+target_link_libraries(Instajammable
+  PRIVATE
+    juce::juce_audio_utils
+    juce::juce_gui_extra
+    juce::juce_dsp
+    "-framework WebKit"
+    "-framework CoreAudio"
+    "-framework CoreMIDI"
+    "-framework AudioToolbox"
+  PUBLIC
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_lto_flags
+    juce::juce_recommended_warning_flags
+)

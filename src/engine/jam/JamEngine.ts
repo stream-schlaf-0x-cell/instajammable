@@ -1,5 +1,5 @@
 import type { AmbientSynthParams, DrumVoiceParams, EffectsParams, StepContext, MusicalScale } from '../../types';
-import { TIMBRES, CHORD_PATTERNS, CHORD_PACES, CHORD_TEXTURES, DRUM_MODELS, DRONE_STYLES, MELODY_STYLES, BASS_STYLES, RHYTHM_ALGORITHMS, VOICING_FAMILIES, type ChaosMode, type DrumModel, type DroneStyle, type MelodyStyle, type BassStyle, type RhythmAlgorithm, type VoicingFamily, type ChordPattern, type ChordPace, type ChordLoopMode, type ChordTexture, type JamEvent, type JamLayer, type JamPosition, type JamSession, type LayerSettings, type MacroName, type MidiClip, type ClipTempo, type ClipRawEvent, type ArrangementSection, type DrumVoice, type SequenceBlock, type SequencerPosition, type Timbre, type CustomMacro, type CustomMacroTarget, type EffectChainMode, type EffectChainSettings, type EffectModuleId, type EffectModuleConfig, type AtmosphereKind, type JamStyle } from '../../types/jam';
+import { TIMBRES, CHORD_PATTERNS, CHORD_PACES, CHORD_TEXTURES, DRUM_MODELS, DRONE_STYLES, MELODY_STYLES, BASS_STYLES, RHYTHM_ALGORITHMS, VOICING_FAMILIES, type ChaosMode, type DrumModel, type DroneStyle, type MelodyStyle, type BassStyle, type RhythmAlgorithm, type VoicingFamily, type ChordPattern, type ChordPace, type ChordLoopMode, type ChordTexture, type MidiInputMode, type CustomMotifNote, type JamEvent, type JamLayer, type JamPosition, type JamSession, type LayerSettings, type MacroName, type MidiClip, type ClipTempo, type ClipRawEvent, type ArrangementSection, type DrumVoice, type SequenceBlock, type SequencerPosition, type Timbre, type CustomMacro, type CustomMacroTarget, type EffectChainMode, type EffectChainSettings, type EffectModuleId, type EffectModuleConfig, type AtmosphereKind, type JamStyle } from '../../types/jam';
 import { MasterAudio } from '../audio/audioContext';
 import { AmbientSynth } from '../audio/ambientSynth';
 import { DrumSynth } from '../audio/drumSynth';
@@ -9,12 +9,13 @@ import { AtmosphereBed } from '../audio/atmosphere';
 import { AudioRecorder } from '../audio/recorder';
 import { MusicalClock } from '../clock';
 import { WebMidiManager } from '../midi/webMidi';
+import { isNativePlugin, onHostLoadState, onHostTransport, registerSessionStateProvider, sendNativeSessionState, type HostTransportState } from '../../native/nativeBridge';
 import { PRNG } from '../prng';
 import { ModulationMatrix, type ModulationOffsets, type ModulationSources } from '../modulation/modMatrix';
 import { mergeAudioPatch, sanitizeAtmosphere, sanitizeAudioPatch, sanitizeDrumPatch, sanitizeEffectsPatch, sanitizeFlow, sanitizeModRoutes, sanitizePinnedParams, EFFECT_PATCH_RANGES } from './sound';
 import { createSession, getSceneEffects } from './scenes';
 import { validateClip } from './storage';
-import { JamComposer, captureNotes, clamp, clipEventsAtStep, harmonySlotAt, SCALE_INTERVALS, streamSeed, type Harmony, type PlannedNote } from './music';
+import { JamComposer, captureNotes, chordSuffix, clamp, clipEventsAtStep, harmonySlotAt, scaleNote, SCALE_INTERVALS, streamSeed, type Harmony, type PlannedNote } from './music';
 import { findRhythmPreset } from './rhythms';
 import { createDefaultSequence, createSceneSequence, findSequenceTemplate, SEQUENCE_TEMPLATES } from './sequencer';
 import { findSoundscapePreset, SOUNDSCAPE_PRESETS } from './soundscapes';
@@ -347,9 +348,33 @@ export class JamEngine {
   private chaosPhase = 0; private lastChaosNotifyAt = 0; private chaosDragging = false;
   private fxBypassSnapshot = new Set<EffectModuleId>();
   private changeCounter = 0; private transportToken = 0; private primeAtNextStep = false; private resumeNotes: PlannedNote[] = [];
+  private activeInputNotes = new Map<number, number>();
+  private lastHostPlaying: boolean | null = null;
 
   constructor(initial: JamSession = createSession()) {
-    this.state = validateSession(initial); this.composer.harmonyAt(0, this.state);
+    this.state = validateSession(initial);
+    if (this.state.midiInputMode === undefined) {
+      this.state.midiInputMode = isNativePlugin() ? 'followHarmony' : 'off';
+    }
+    if (this.state.midiInputPortId === undefined) {
+      this.state.midiInputPortId = isNativePlugin() ? 'native-in' : 'all-inputs';
+    }
+    if (this.state.midiInputTargetLayerId === undefined) {
+      this.state.midiInputTargetLayerId = 'chords';
+    }
+    if (this.state.hostSyncEnabled === undefined) {
+      this.state.hostSyncEnabled = true;
+    }
+    if (isNativePlugin()) {
+      this.midi.selectInput(this.state.midiInputPortId ?? 'native-in');
+      if (!this.state.globalOutputId) {
+        this.state.globalOutputId = 'all-native';
+        this.midi.selectOutput('all-native');
+      }
+    } else {
+      this.midi.selectInput(this.state.midiInputPortId ?? 'all-inputs');
+    }
+    this.composer.harmonyAt(0, this.state);
     this.recorder = new AudioRecorder(() => this.audio.streamDest, () => this.audio.ctx, () => this.audio.analyser);
     if (this.state.sequence && this.state.sequence.length > 0) {
       this.arrangement.sequencerBlocks = clone(this.state.sequence);
@@ -360,6 +385,16 @@ export class JamEngine {
     this.arrangement.sequencerEnabled = this.state.sequencerEnabled !== undefined ? !!this.state.sequencerEnabled : true;
     this.state.sequencerEnabled = this.arrangement.sequencerEnabled;
     this.history = [this.snapshot(false)];
+    this.midi.onMidiMessage((status, data1, data2) => this.handleIncomingMidiMessage(status, data1, data2));
+    onHostTransport((transport) => this.handleHostTransport(transport));
+    onHostLoadState((json) => {
+      try {
+        this.loadSession(JSON.parse(json));
+      } catch {
+        // Ignore invalid host state payload
+      }
+    });
+    registerSessionStateProvider(() => JSON.stringify(this.saveSession()));
   }
   getState(): JamSession { return clone(this.state); }
   subscribe(listener: (state: JamSession) => void): () => void { this.listeners.add(listener); listener(this.getState()); return () => this.listeners.delete(listener); }
@@ -370,7 +405,13 @@ export class JamEngine {
     for (const listener of this.previewListeners) listener(previewing);
   }
   onEvent(listener: (event: JamEvent) => void): () => void { this.eventListeners.add(listener); return () => this.eventListeners.delete(listener); }
-  private notify(): void { const s = this.getState(); for (const listener of this.listeners) listener(s); }
+  private notify(): void {
+    const s = this.getState();
+    for (const listener of this.listeners) listener(s);
+    if (isNativePlugin()) {
+      sendNativeSessionState(JSON.stringify(this.saveSession()));
+    }
+  }
   private addChange(label: string, beat = this.getPosition().beat): void {
     this.state.changes.push({ id: `change-${++this.changeCounter}`, beat, label });
     if (this.state.changes.length > 30) this.state.changes.shift();
@@ -835,7 +876,8 @@ export class JamEngine {
     });
     if (this.state.modRoutes?.some(route => route.enabled)) this.applySound(offsets);
     const overrideIds = new Set(this.override?.clip.tracks.map(t => t.id));
-    const notes: Array<PlannedNote & { offsetBeats?: number }> = generated.filter(n => !overrideIds.has(n.layerId));
+    const replacedLayerId = this.state.midiInputMode === 'layerReplace' ? (this.state.midiInputTargetLayerId || 'chords') : null;
+    const notes: Array<PlannedNote & { offsetBeats?: number }> = generated.filter(n => !overrideIds.has(n.layerId) && n.layerId !== replacedLayerId);
     if (this.override) notes.push(...clipEventsAtStep(this.override.clip, this.override.originBeat, baseBeat));
     if (this.primeAtNextStep) {
       this.primeAtNextStep = false;
@@ -1845,6 +1887,212 @@ export class JamEngine {
     this.notify();
   }
 
+  /** Set MIDI Input Follower mode ('off' | 'followHarmony' | 'captureMotif' | 'layerReplace'). */
+  setMidiInputMode(mode: MidiInputMode): void {
+    this.activeInputNotes.clear();
+    this.state.midiInputMode = mode;
+    const labels: Record<MidiInputMode, string> = {
+      off: 'MIDI Input Aus',
+      followHarmony: 'MIDI Input: Follow Harmony / Chords',
+      captureMotif: 'MIDI Input: Capture Melody Motif',
+      layerReplace: `MIDI Input: Live Track (${this.state.midiInputTargetLayerId || 'chords'})`,
+    };
+    this.addChange(labels[mode], this.getPosition().beat);
+    this.notify();
+  }
+
+  setMidiInputPort(portId: string | null): void {
+    this.state.midiInputPortId = portId;
+    this.midi.selectInput(portId);
+    this.notify();
+  }
+
+  setMidiInputTargetLayer(layerId: string): void {
+    if (!this.state.layers.some(l => l.id === layerId)) return;
+    this.state.midiInputTargetLayerId = layerId;
+    this.notify();
+  }
+
+  clearCustomMotif(): void {
+    this.state.customMotifNotes = [];
+    this.composer.clearPlans();
+    this.addChange('Eingefangenes MIDI-Motiv gelöscht', this.getPosition().beat);
+    this.notify();
+  }
+
+  setHostSyncEnabled(enabled: boolean): void {
+    this.state.hostSyncEnabled = enabled;
+    this.notify();
+  }
+
+  handleHostTransport(transport: HostTransportState): void {
+    if (this.state.hostSyncEnabled === false) return;
+    if (Number.isFinite(transport.bpm) && transport.bpm >= 40 && transport.bpm <= 180) {
+      if (Math.abs(transport.bpm - this.state.bpm) > 0.05) {
+        this.state.bpm = Math.round(transport.bpm * 100) / 100;
+        this.clock?.setBpm(this.state.bpm);
+        this.notify();
+      }
+    }
+    if (this.lastHostPlaying !== null && transport.playing !== this.lastHostPlaying) {
+      if (transport.playing && !this.running) {
+        if (transport.ppqPosition < 0.25) {
+          void this.restartFromBarOne();
+        } else {
+          void this.start();
+        }
+      } else if (!transport.playing && this.running) {
+        this.stop();
+      }
+    }
+    this.lastHostPlaying = transport.playing;
+  }
+
+  handleIncomingMidiMessage(status: number, data1: number, data2: number): void {
+    if (status === 0xfa && this.state.hostSyncEnabled !== false) {
+      void this.restartFromBarOne();
+      return;
+    }
+    if (status === 0xfc && this.state.hostSyncEnabled !== false) {
+      this.stop();
+      return;
+    }
+
+    const cmd = status & 0xf0;
+    const isNoteOn = cmd === 0x90 && data2 > 0;
+    const isNoteOff = cmd === 0x80 || (cmd === 0x90 && data2 === 0);
+    if (!isNoteOn && !isNoteOff) return;
+
+    const midiNote = Math.round(clamp(data1, 0, 127));
+    const velocity = Math.round(clamp(data2, 0, 127));
+    if (isNoteOn) {
+      this.activeInputNotes.set(midiNote, velocity);
+    } else {
+      this.activeInputNotes.delete(midiNote);
+    }
+
+    const mode = this.state.midiInputMode || 'off';
+    if (mode === 'off') return;
+
+    if (mode === 'followHarmony' && isNoteOn) {
+      const held = [...this.activeInputNotes.keys()].sort((a, b) => a - b);
+      const effectiveHeld = held.length ? held : [midiNote];
+      const bassNote = effectiveHeld[0];
+      const bassPc = ((bassNote % 12) + 12) % 12;
+      const rootMidi = 48 + bassPc;
+      const scale = SCALE_INTERVALS[this.state.scale] || SCALE_INTERVALS.dorian;
+
+      let matchedDeg = 0;
+      let exactInScale = false;
+      for (let d = 0; d < scale.length; d++) {
+        if (((this.state.root + scale[d]) % 12 + 12) % 12 === bassPc) {
+          matchedDeg = d;
+          exactInScale = true;
+          break;
+        }
+      }
+
+      const fitToChordReg = (n: number): number => {
+        let p = Math.round(n);
+        while (p < 50) p += 12;
+        while (p > 79) p -= 12;
+        return p;
+      };
+
+      let voicing: number[];
+      let chordName: string;
+      if (effectiveHeld.length >= 3) {
+        voicing = [...new Set(effectiveHeld.map(fitToChordReg))].sort((a, b) => a - b);
+        const intervals = effectiveHeld.slice(1).map(n => ((n - effectiveHeld[0]) % 12 + 12) % 12);
+        chordName = `${rootPitchName(effectiveHeld[0])}${chordSuffix(intervals)}`;
+      } else {
+        voicing = exactInScale
+          ? [0, 2, 4].map(off => fitToChordReg(scaleNote(this.state.root, this.state.scale, matchedDeg + off)))
+          : [0, 3, 7].map(iv => fitToChordReg(rootMidi + iv));
+        voicing = [...new Set(voicing)].sort((a, b) => a - b);
+        const intervals = voicing.slice(1).map(n => ((n - voicing[0]) % 12 + 12) % 12);
+        chordName = `${rootPitchName(bassNote)}${chordSuffix(intervals)}`;
+      }
+
+      const nextIndex = this.composer.getHarmony().index;
+      const harmonyObj: Harmony = { degree: matchedDeg, root: rootMidi, notes: voicing, index: nextIndex, name: chordName };
+      this.state.chordLoopMode = 'A';
+      this.state.manualHarmonyDegree = matchedDeg;
+      this.state.latchedHarmony = { degree: matchedDeg, root: rootMidi, notes: [...voicing], name: chordName };
+      this.composer.setLatchedHarmony(harmonyObj);
+      this.composer.clearPlans();
+      if (this.anchors.length) {
+        this.anchors[this.anchors.length - 1].harmony = harmonyObj;
+      }
+      this.nextChordCache = null;
+      if (this.running) {
+        const fadeTime = this.audio?.getTime() ?? 0;
+        for (const layerId of ['chords', 'bass', 'drone']) {
+          this.midi.releaseNotesForLayer(layerId);
+          this.pads.get(layerId)?.fadeOutAll(fadeTime, 0.14);
+          this.secondaryPads.get(layerId)?.fadeOutAll(fadeTime, 0.14);
+          (this.primeLayers ??= new Set()).add(layerId);
+        }
+        this.primeSoft = true;
+      }
+      this.addChange(`MIDI Follow: ${chordName}`, this.getPosition().beat);
+      this.notify();
+      return;
+    }
+
+    if (mode === 'captureMotif' && isNoteOn) {
+      const pos = this.running
+        ? ((Math.floor(this.getPosition().beat * 4) % 16) + 16) % 16
+        : ((this.state.customMotifNotes?.length ?? 0) * 4) % 16;
+      const baseDeg = this.composer.getHarmony().degree;
+      let bestOffset = 0;
+      let bestDist = Infinity;
+      for (let off = -7; off <= 14; off++) {
+        const candidate = scaleNote(this.state.root + 12, this.state.scale, baseDeg + off);
+        const dist = Math.abs(candidate - midiNote);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestOffset = off;
+        }
+      }
+      const nextMotif: CustomMotifNote[] = [
+        ...(this.state.customMotifNotes ?? []),
+        {
+          pos,
+          degreeOffset: bestOffset,
+          durationBeats: 0.5,
+          velocity: Math.max(0.45, Math.min(1, velocity / 127)),
+          midiNote,
+        },
+      ].slice(-8);
+      this.state.customMotifNotes = nextMotif;
+      this.composer.clearPlans();
+      this.notify();
+      return;
+    }
+
+    if (mode === 'layerReplace' && isNoteOn) {
+      const targetLayerId = this.state.midiInputTargetLayerId || 'chords';
+      const targetLayer = this.state.layers.find(l => l.id === targetLayerId);
+      if (!targetLayer || targetLayer.muted) return;
+      const planned: PlannedNote = {
+        layerId: targetLayerId,
+        note: midiNote,
+        velocity,
+        durationBeats: targetLayer.role === 'drum' ? 0.25 : 2.0,
+        microMs: 0,
+        channel: targetLayer.channel,
+      };
+      if (this.state.outputMode !== 'midi' && !this.audio.ctx) {
+        void this.init().then(() => {
+          this.playNote(planned, this.audio.getTime() + 0.005, nowPerf());
+        });
+      } else {
+        this.playNote(planned, (this.audio.getTime() || 0) + 0.005, nowPerf());
+      }
+    }
+  }
+
   /** Set companion chord texture voice ('off' | 'shimmer' | 'octave' | 'sub5th'). */
   setChordTexture(texture: ChordTexture): void {
     const chordLayer = this.state.layers.find(l => l.role === 'chords');
@@ -2387,6 +2635,7 @@ export class JamEngine {
     this.state.sequencerEnabled = this.arrangement.sequencerEnabled;
     this.lastAtmosphereKey = ''; this.lastNotifySection = -1;
     this.events = []; this.controllers = []; this.eventEnds.clear(); this.timeline = []; this.tempos = []; this.anchors = []; this.restoreClipRuntime(session.runtime); this.syncVoiceBudgets(); this.applyRouting();
+    this.midi.selectInput(this.state.midiInputPortId ?? (isNativePlugin() ? 'native-in' : 'all-inputs'));
     this.clock?.setBpm(this.state.bpm); this.clock?.setSwing(this.state.swing);
     this.resetFlow(); this.applySound(); this.remember(); this.notify();
   }
@@ -2498,6 +2747,22 @@ export function validateSession(raw: JamSession): JamSession {
     ...(raw.pinnedParams !== undefined ? { pinnedParams: sanitizePinnedParams(raw.pinnedParams, base) } : {}),
     ...(raw.globalOutputId !== undefined ? { globalOutputId: raw.globalOutputId === null ? null : typeof raw.globalOutputId === 'string' && raw.globalOutputId.length <= 512 ? raw.globalOutputId : (() => { throw new Error('Ungültiger globaler MIDI-Port.'); })() } : {}),
     ...(raw.midiClockEnabled !== undefined ? { midiClockEnabled: !!raw.midiClockEnabled } : {}),
+    ...(raw.midiInputMode !== undefined && (['off', 'followHarmony', 'captureMotif', 'layerReplace'] as const).includes(raw.midiInputMode) ? { midiInputMode: raw.midiInputMode } : base.midiInputMode !== undefined ? { midiInputMode: base.midiInputMode } : {}),
+    ...(raw.midiInputPortId !== undefined ? { midiInputPortId: raw.midiInputPortId === null ? null : typeof raw.midiInputPortId === 'string' ? raw.midiInputPortId.slice(0, 512) : null } : {}),
+    ...(typeof raw.midiInputTargetLayerId === 'string' ? { midiInputTargetLayerId: raw.midiInputTargetLayerId.slice(0, 40) } : {}),
+    ...(raw.hostSyncEnabled !== undefined ? { hostSyncEnabled: !!raw.hostSyncEnabled } : {}),
+    ...(Array.isArray(raw.customMotifNotes) ? {
+      customMotifNotes: raw.customMotifNotes
+        .filter(n => n && typeof n === 'object' && typeof n.pos === 'number' && typeof n.degreeOffset === 'number')
+        .slice(-8)
+        .map(n => ({
+          pos: Math.round(clamp(n.pos, 0, 15)),
+          degreeOffset: Math.round(clamp(n.degreeOffset, -7, 14)),
+          durationBeats: clamp(Number(n.durationBeats ?? 0.5), 0.1, 8),
+          velocity: clamp(Number(n.velocity ?? 0.7), 0.1, 1),
+          ...(typeof n.midiNote === 'number' && Number.isFinite(n.midiNote) ? { midiNote: Math.round(clamp(n.midiNote, 0, 127)) } : {}),
+        }))
+    } : {}),
     ...(raw.chordLoopMode !== undefined && (['A', 'AB', 'ABC', 'ABCD'] as const).includes(raw.chordLoopMode) ? { chordLoopMode: raw.chordLoopMode } : base.chordLoopMode ? { chordLoopMode: base.chordLoopMode } : {}),
     ...(raw.manualHarmonyDegree === null ? { manualHarmonyDegree: null } : typeof raw.manualHarmonyDegree === 'number' && Number.isFinite(raw.manualHarmonyDegree) ? { manualHarmonyDegree: Math.round(clamp(raw.manualHarmonyDegree, 0, 12)) } : {}),
     ...(raw.latchedHarmony && typeof raw.latchedHarmony === 'object' && Array.isArray(raw.latchedHarmony.notes) && raw.latchedHarmony.notes.length > 0 && raw.latchedHarmony.notes.length <= 8 && typeof raw.latchedHarmony.root === 'number' && Number.isFinite(raw.latchedHarmony.root) && typeof raw.latchedHarmony.degree === 'number' && Number.isFinite(raw.latchedHarmony.degree) && typeof raw.latchedHarmony.name === 'string'
