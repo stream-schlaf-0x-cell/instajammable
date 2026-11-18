@@ -15,7 +15,7 @@ import {
   getTimbreDisplayName,
 } from '../../engine/jam/minimalCatalog';
 import { noteName } from '../jam/PianoRoll';
-import { ChordBarStepMeter, SCALES_LIST, useSmoothBeat, TrackRhythmControls, TrackMidiControls, isMidiOnlyMode, getMacroLabelInfo } from './LayoutShared';
+import { ChordBarStepMeter, ChordLoopControls, SCALES_LIST, useSmoothBeat, TrackRhythmControls, TrackMidiControls, TrackOctaveControls, isMidiOnlyMode, getMacroLabelInfo } from './LayoutShared';
 import type { ClipNote, JamPosition, JamSession, MacroName } from '../../types/jam';
 import type { UiEdition } from '../../types/ui';
 
@@ -525,6 +525,7 @@ export function SynesthesiaLayout({
                     </select>
                   </div>
                 )}
+                {!midiMode && <TrackOctaveControls layer={layer} edition={edition} compact />}
                 <TrackRhythmControls layer={layer} edition={edition} compact />
               </div>
             </div>
@@ -583,9 +584,14 @@ export function SynesthesiaLayout({
           <button type="button" className="button quiet" onClick={() => engine.cycleChord(1)}>
             <ChevronRight size={14} />
           </button>
-          <button type="button" className="button quiet" onClick={() => engine.mutate(true)}>
+          <ChordLoopControls session={session} edition={edition} compact />
+          <button
+            type="button"
+            className={`button quiet ${position.evolvePending ? 'is-armed' : ''}`}
+            onClick={() => engine.evolve()}
+          >
             <Sparkles size={13} />
-            <span>{isMin ? 'Evolve' : 'Variieren'}</span>
+            <span>{position.evolvePending ? (isMin ? 'Next Bar…' : 'Nächst. Takt…') : (isMin ? 'Evolve' : 'Variieren')}</span>
           </button>
           <button
             type="button"

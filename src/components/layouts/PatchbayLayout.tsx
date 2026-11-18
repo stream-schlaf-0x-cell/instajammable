@@ -21,7 +21,7 @@ import {
   getInstrumentPresetDisplay,
   getTimbreDisplayName,
 } from '../../engine/jam/minimalCatalog';
-import { ChordBarStepMeter, SCALES_LIST, TrackRhythmControls, TrackMidiControls, isMidiOnlyMode, getMacroLabelInfo } from './LayoutShared';
+import { ChordBarStepMeter, ChordLoopControls, SCALES_LIST, TrackRhythmControls, TrackMidiControls, TrackOctaveControls, isMidiOnlyMode, getMacroLabelInfo } from './LayoutShared';
 import type {
   AtmosphereKind,
   ChaosMode,
@@ -306,12 +306,12 @@ export function PatchbayLayout({ session, position, edition, rollNotes }: Patchb
               </div>
               <button
                 type="button"
-                className="button quiet"
-                onClick={() => engine.mutate(true)}
-                title={isMin ? 'Evolve pattern' : 'Variieren'}
+                className={`button quiet ${position.evolvePending ? 'is-armed' : ''}`}
+                onClick={() => engine.evolve()}
+                title={isMin ? 'Evolve pattern (quantized to next bar)' : 'Variieren (zum nächsten Takt)'}
               >
                 <Sparkles size={12} />
-                <span>{isMin ? 'Evolve' : 'Var'}</span>
+                <span>{position.evolvePending ? (isMin ? 'Next Bar…' : 'Takt…') : (isMin ? 'Evolve' : 'Var')}</span>
               </button>
             </div>
 
@@ -345,6 +345,7 @@ export function PatchbayLayout({ session, position, edition, rollNotes }: Patchb
               <button type="button" className="button quiet" onClick={() => engine.cycleChord(1)}>
                 <ChevronRight size={13} />
               </button>
+              <ChordLoopControls session={session} edition={edition} compact />
             </div>
           </div>
 
@@ -574,6 +575,7 @@ export function PatchbayLayout({ session, position, edition, rollNotes }: Patchb
                 </div>
                 {!midiMode && (
                   <div className="patch-rhythm-subrow">
+                    <TrackOctaveControls layer={layer} edition={edition} compact />
                     <TrackRhythmControls layer={layer} edition={edition} compact />
                   </div>
                 )}

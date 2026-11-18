@@ -4,6 +4,7 @@ import { JamEngine, SCENES } from '../../engine/jam/JamEngine';
 import { useUiEdition } from '../../contexts/UiEditionContext';
 import { getCustomMacroDisplayName, getSceneDisplay, getSequenceBlockLabel, stripArtistRefs } from '../../engine/jam/minimalCatalog';
 import { noteName } from './PianoRoll';
+import { ChordLoopControls } from '../layouts/LayoutShared';
 import type { JamPosition, JamSession, MacroName } from '../../types/jam';
 
 interface DistanceStageHUDProps {
@@ -199,8 +200,8 @@ export function DistanceStageHUD({ session, position, onClose }: DistanceStageHU
 
           <div className="stage-chord-sub-row">
             <div className="stage-next-chord">
-              <span className="sub-label">{isMinimal ? 'NEXT:' : 'DANACH:'}</span>
-              <strong className="next-chord-name">{position.nextChord || '–'}</strong>
+              <span className="sub-label">{session.chordLoopMode === 'A' ? 'HOLD A:' : (isMinimal ? 'NEXT:' : 'DANACH:')}</span>
+              <strong className="next-chord-name">{session.chordLoopMode === 'A' ? (position.chord || '–') : (position.nextChord || '–')}</strong>
               <span className="next-countdown">
                 {position.playing
                   ? (isMinimal
@@ -209,6 +210,7 @@ export function DistanceStageHUD({ session, position, onClose }: DistanceStageHU
                   : (isMinimal ? 'Starts with jam' : 'Startet mit Jam')}
               </span>
             </div>
+            <ChordLoopControls session={session} edition={uiEdition} />
             <div className="stage-next-progress-track">
               <div
                 className="stage-next-progress-fill"
@@ -438,7 +440,7 @@ export function DistanceStageHUD({ session, position, onClose }: DistanceStageHU
         <button
           type="button"
           className={'stage-btn-play ' + (position.playing ? 'is-running' : '')}
-          onClick={() => void (position.playing ? engine.stop() : engine.start())}
+          onClick={() => void (position.playing ? engine.stop() : engine.restartFromBarOne())}
         >
           {position.playing ? <Square size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" />}
           <span>{position.playing ? 'STOP' : (isMinimal ? 'START JAM' : 'JAM STARTEN')}</span>
@@ -446,12 +448,12 @@ export function DistanceStageHUD({ session, position, onClose }: DistanceStageHU
 
         <button
           type="button"
-          className="stage-btn-action stage-btn-evolve"
-          onClick={() => engine.mutate()}
-          title={isMinimal ? 'Evolve motifs, voicings & timbres' : 'Motive, Voicings und Klangfarben spontan weiterentwickeln'}
+          className={`stage-btn-action stage-btn-evolve ${position.evolvePending ? 'is-armed' : ''}`}
+          onClick={() => engine.evolve()}
+          title={isMinimal ? 'Evolve motifs, voicings & timbres (next bar)' : 'Motive, Voicings und Klangfarben weich auf Taktwechsel entwickeln'}
         >
           <Shuffle size={20} />
-          <span>{isMinimal ? 'EVOLVE' : 'EVOLVE (Variation)'}</span>
+          <span>{position.evolvePending ? (isMinimal ? 'NEXT BAR…' : 'NÄCHST. TAKT…') : (isMinimal ? 'EVOLVE' : 'EVOLVE (Variation)')}</span>
         </button>
 
         <button

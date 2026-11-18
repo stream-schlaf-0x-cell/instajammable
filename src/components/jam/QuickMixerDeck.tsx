@@ -10,7 +10,7 @@ import {
 import type { JamPosition, JamSession, LayerRole } from '../../types/jam';
 import { useUiEdition } from '../../contexts/UiEditionContext';
 import { getInstrumentPresetDisplay, getPresetCategoryDisplay } from '../../engine/jam/minimalCatalog';
-import { TrackRhythmControls, TrackMidiControls, isMidiOnlyMode } from '../layouts/LayoutShared';
+import { TrackRhythmControls, TrackMidiControls, TrackOctaveControls, isMidiOnlyMode } from '../layouts/LayoutShared';
 
 interface QuickMixerDeckProps {
   session: JamSession;
@@ -265,6 +265,8 @@ export function QuickMixerDeck({ session }: QuickMixerDeckProps) {
                   </button>
                 </div>
               )}
+
+              {!midiMode && <TrackOctaveControls layer={layer} edition={edition} compact />}
 
               {/* Quick Rhythm Pattern & Dice (Works in both Audio & MIDI modes) */}
               <TrackRhythmControls layer={layer} edition={edition} compact />

@@ -22,11 +22,12 @@ import {
   Cable,
   Clock,
   Send,
+  RotateCcw,
 } from 'lucide-react';
 import { JamEngine, SCENES } from '../../engine/jam/JamEngine';
 import { MasterAudio } from '../../engine/audio/audioContext';
 import { noteName } from './PianoRoll';
-import type { JamPosition, JamSession, ChordPattern, ChordPace } from '../../types/jam';
+import type { JamPosition, JamSession, ChordPattern, ChordPace, ChordLoopMode } from '../../types/jam';
 import type { MusicalScale } from '../../types';
 import type { ViewDensityMode } from './WorkspaceBar';
 import type { RecorderState } from '../../engine/audio/recorder';
@@ -259,6 +260,8 @@ export function EssentialMasterBar({
     chordsLayer?.settings.chordPattern ||
     (session.style === 'techno' ? 'syncopated' : session.style === 'lofi' ? 'broken' : 'pad');
   const currentChordPace = chordsLayer?.settings.chordPace || '2-bars';
+  const currentChordLoopMode: ChordLoopMode = session.chordLoopMode || 'ABCD';
+  const evolvePending = Boolean(position.evolvePending);
   const secondaryEnabled = Boolean(chordsLayer?.settings.secondaryEnabled);
   const secondaryTimbre = chordsLayer?.settings.secondaryTimbre || 'shimmer';
 
@@ -278,7 +281,7 @@ export function EssentialMasterBar({
   const barsUntilNext = seq?.barsUntilNextBlock ?? totalBlockBars;
 
   const handleEvolve = () => {
-    engine.mutate(true);
+    engine.evolve();
   };
 
   const handleRadical = () => {
@@ -736,13 +739,24 @@ export function EssentialMasterBar({
               if (onTogglePlay) {
                 onTogglePlay();
               } else {
-                void (position.playing ? engine.stop() : engine.start());
+                void (position.playing ? engine.stop() : engine.restartFromBarOne());
               }
             }}
-            title={uiEdition === 'minimal' ? (position.playing ? 'Stop Jam (Space)' : 'Start Jam (Space)') : (position.playing ? 'Jam stoppen (Leertaste)' : 'Jam starten (Leertaste)')}
+            title={uiEdition === 'minimal' ? (position.playing ? 'Stop Jam (Space)' : 'Start from Beat 1.1 (Space)') : (position.playing ? 'Jam stoppen (Leertaste)' : 'Auf die Eins starten (1.1.1)')}
           >
             {position.playing ? <Square size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
             <span>{position.playing ? 'Stop' : (uiEdition === 'minimal' ? 'Play' : 'Start')}</span>
+          </button>
+
+          <button
+            type="button"
+            className="restart-bar-one-btn"
+            onClick={() => void engine.restartFromBarOne()}
+            title={uiEdition === 'minimal' ? 'Restart on Beat 1.1 (Ableton MIDI SPP 0 + Start sync)' : 'Sofort auf Takt 1.1.1 neu starten (Ableton Aufnahme-Sync)'}
+            aria-label={uiEdition === 'minimal' ? 'Restart from Beat 1.1' : 'Auf 1.1 neu starten'}
+          >
+            <RotateCcw size={13} />
+            <span>1.1</span>
           </button>
 
           <div className="tempo-cluster">
@@ -969,9 +983,28 @@ export function EssentialMasterBar({
                   <option value="1-bar">{uiEdition === 'minimal' ? '1B' : '1T'}</option>
                   <option value="2-bars">{uiEdition === 'minimal' ? '2B' : '2T'}</option>
                   <option value="4-bars">{uiEdition === 'minimal' ? '4B' : '4T'}</option>
+                  <option value="8-bars">{uiEdition === 'minimal' ? '8B' : '8T'}</option>
                   <option value="dynamic">Dyn</option>
                 </select>
               </label>
+
+              <div className="chord-loop-segmented" role="group" aria-label={uiEdition === 'minimal' ? 'Chord progression loop' : 'Akkord-Loop'}>
+                {(['A', 'AB', 'ABC', 'ABCD'] as ChordLoopMode[]).map(mode => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className={`chord-loop-btn ${currentChordLoopMode === mode ? 'is-active' : ''}`}
+                    onClick={() => engine.setChordLoopMode(mode)}
+                    title={
+                      mode === 'A'
+                        ? (uiEdition === 'minimal' ? 'Hold current chord endlessly (no change)' : 'Aktuellen Akkord A dauerhaft weiterspielen (kein Wechsel)')
+                        : (uiEdition === 'minimal' ? `Cycle ${mode.length} chords (${mode})` : `${mode.length}-Akkord-Loop (${mode})`)
+                    }
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
 
               {!midiMode && (
                 <button
@@ -987,8 +1020,8 @@ export function EssentialMasterBar({
           </div>
 
           <div className="master-next-chord-col">
-            <span className="cell-eyebrow">{uiEdition === 'minimal' ? 'NEXT' : 'DANACH'}</span>
-            <strong className="next-chord-text">{position.nextChord || '–'}</strong>
+            <span className="cell-eyebrow">{currentChordLoopMode === 'A' ? 'HOLD A' : (uiEdition === 'minimal' ? 'NEXT' : 'DANACH')}</span>
+            <strong className="next-chord-text">{currentChordLoopMode === 'A' ? (position.chord || '–') : (position.nextChord || '–')}</strong>
             <div className="next-chord-progress-bar">
               <div className="next-chord-fill" style={{ width: `${Math.round(progress * 100)}%` }} />
             </div>
@@ -1010,8 +1043,8 @@ export function EssentialMasterBar({
             </span>
 
             <div className="seq-header-right">
-              {/* Bar duration stepper: always editable */}
-              <div className="seq-bars-mini-stepper" title={uiEdition === 'minimal' ? 'Adjust block length in bars' : 'Block-Länge in Takten anpassen (aktiviert Sequencer sofort)'}>
+              {/* Bar duration stepper: editable without forcing sequencer ON */}
+              <div className="seq-bars-mini-stepper" title={uiEdition === 'minimal' ? 'Adjust block length in bars' : 'Block-Länge in Takten anpassen'}>
                 <button
                   type="button"
                   className="icon-button mini-bar-step-btn"
@@ -1059,64 +1092,64 @@ export function EssentialMasterBar({
           </div>
 
           <div className="seq-block-callout">
-            {/* Always-editable scene/section buttons: clicking any button activates the sequencer ASAP */}
-            <div className="seq-energy-arrow-row" role="group" aria-label={uiEdition === 'minimal' ? 'Activate section immediately' : 'Abschnitt sofort aktivieren'}>
+            {/* Energy / section buttons: work manually when Sequencer is OFF without turning it back ON */}
+            <div className="seq-energy-arrow-row" role="group" aria-label={uiEdition === 'minimal' ? 'Select section energy' : 'Abschnitt wählen'}>
               <button
                 type="button"
-                className={`seq-mini-arrow-btn high ${isSeqActive && currentSection === 'chorus' ? 'is-selected' : ''}`}
+                className={`seq-mini-arrow-btn high ${currentSection === 'chorus' ? 'is-selected' : ''}`}
                 onClick={() => {
-                  if (activeBlock) engine.setBlockSectionByEnergy(activeBlock.id, 'high');
-                  else engine.applyArrangement('chorus');
+                  if (isSeqActive && activeBlock) engine.setBlockSectionByEnergy(activeBlock.id, 'high');
+                  else engine.setManualArrangementByEnergy('high');
                 }}
-                title={uiEdition === 'minimal' ? 'Activate now: High (↑) · Chorus / Peak' : 'Sofort aktivieren: High (↑) · Chorus / Peak'}
+                title={uiEdition === 'minimal' ? 'High (↑) · Chorus / Peak' : 'High (↑) · Chorus / Peak'}
               >
                 <span className="arrow-icon">↑</span>
                 <span>High</span>
               </button>
               <button
                 type="button"
-                className={`seq-mini-arrow-btn up ${isSeqActive && currentSection === 'buildup' ? 'is-selected' : ''}`}
+                className={`seq-mini-arrow-btn up ${currentSection === 'buildup' ? 'is-selected' : ''}`}
                 onClick={() => {
-                  if (activeBlock) engine.setBlockSectionByEnergy(activeBlock.id, 'up');
-                  else engine.applyArrangement('buildup');
+                  if (isSeqActive && activeBlock) engine.setBlockSectionByEnergy(activeBlock.id, 'up');
+                  else engine.setManualArrangementByEnergy('up');
                 }}
-                title={uiEdition === 'minimal' ? 'Activate now: Up (↗) · Buildup' : 'Sofort aktivieren: Up (↗) · Buildup / Steigerung'}
+                title={uiEdition === 'minimal' ? 'Up (↗) · Buildup' : 'Up (↗) · Buildup / Steigerung'}
               >
                 <span className="arrow-icon">↗</span>
                 <span>Up</span>
               </button>
               <button
                 type="button"
-                className={`seq-mini-arrow-btn groove ${isSeqActive && currentSection === 'groove' ? 'is-selected' : ''}`}
+                className={`seq-mini-arrow-btn groove ${currentSection === 'groove' ? 'is-selected' : ''}`}
                 onClick={() => {
-                  if (activeBlock) engine.setBlockSectionByEnergy(activeBlock.id, 'groove');
-                  else engine.applyArrangement('groove');
+                  if (isSeqActive && activeBlock) engine.setBlockSectionByEnergy(activeBlock.id, 'groove');
+                  else engine.setManualArrangementByEnergy('groove');
                 }}
-                title={uiEdition === 'minimal' ? 'Activate now: Flow (➔) · Full Groove' : 'Sofort aktivieren: Flow (➔) · Voller Groove'}
+                title={uiEdition === 'minimal' ? 'Flow (➔) · Full Groove' : 'Flow (➔) · Voller Groove'}
               >
                 <span className="arrow-icon">➔</span>
                 <span>Flow</span>
               </button>
               <button
                 type="button"
-                className={`seq-mini-arrow-btn down ${isSeqActive && currentSection === 'breakdown' ? 'is-selected' : ''}`}
+                className={`seq-mini-arrow-btn down ${currentSection === 'breakdown' ? 'is-selected' : ''}`}
                 onClick={() => {
-                  if (activeBlock) engine.setBlockSectionByEnergy(activeBlock.id, 'down');
-                  else engine.applyArrangement('breakdown');
+                  if (isSeqActive && activeBlock) engine.setBlockSectionByEnergy(activeBlock.id, 'down');
+                  else engine.setManualArrangementByEnergy('down');
                 }}
-                title={uiEdition === 'minimal' ? 'Activate now: Down (↘) · Breakdown (Drums Off)' : 'Sofort aktivieren: Down (↘) · Breakdown (Drums aus)'}
+                title={uiEdition === 'minimal' ? 'Down (↘) · Breakdown (Drums Off)' : 'Down (↘) · Breakdown (Drums aus)'}
               >
                 <span className="arrow-icon">↘</span>
                 <span>Down</span>
               </button>
               <button
                 type="button"
-                className={`seq-mini-arrow-btn low ${isSeqActive && currentSection === 'silent' ? 'is-selected' : ''}`}
+                className={`seq-mini-arrow-btn low ${currentSection === 'silent' ? 'is-selected' : ''}`}
                 onClick={() => {
-                  if (activeBlock) engine.setBlockSectionByEnergy(activeBlock.id, 'low');
-                  else engine.applyArrangement('silent');
+                  if (isSeqActive && activeBlock) engine.setBlockSectionByEnergy(activeBlock.id, 'low');
+                  else engine.setManualArrangementByEnergy('low');
                 }}
-                title={uiEdition === 'minimal' ? 'Activate now: Low (↓) · Quiet Space' : 'Sofort aktivieren: Low (↓) · Stille / Intimer Raum'}
+                title={uiEdition === 'minimal' ? 'Low (↓) · Quiet Space' : 'Low (↓) · Stille / Intimer Raum'}
               >
                 <span className="arrow-icon">↓</span>
                 <span>Low</span>
@@ -1130,8 +1163,8 @@ export function EssentialMasterBar({
                     ? `Next section: ${nextLabel} (in ${barsUntilNext}B)`
                     : `Nächster Teil: ${nextLabel} (in ${barsUntilNext}T)`)
                   : (uiEdition === 'minimal'
-                    ? 'Click High / Up / Flow / Down / Low to start'
-                    : 'Klicke High / Up / Flow / Down / Low für Sofort-Start')}
+                    ? 'Manual mode · Sequencer stays OFF'
+                    : 'Manuell aktiv · Sequenzer bleibt AUS')}
               </span>
               <button
                 type="button"
@@ -1153,14 +1186,14 @@ export function EssentialMasterBar({
           <div className="evolve-button-group">
             <button
               type="button"
-              className="master-evolve-btn"
+              className={`master-evolve-btn ${evolvePending ? 'is-armed' : ''}`}
               onClick={handleEvolve}
-              title={uiEdition === 'minimal' ? 'Evolve voicings, grooves and timbres' : 'Entwickelt Voicings, Grooves und Klangfarben weiter mit automatischer Lautstärke-Stabilisierung'}
+              title={uiEdition === 'minimal' ? 'Evolve voicings, grooves and timbres cleanly on next bar' : 'Entwickelt Voicings, Grooves und Klangfarben weich auf dem nächsten Taktwechsel'}
             >
               <Shuffle size={15} />
               <div className="evolve-btn-txt">
-                <strong>Evolve</strong>
-                <span className="loudness-tag">Loudness-Safe</span>
+                <strong>{evolvePending ? (uiEdition === 'minimal' ? 'Next Bar…' : 'Nächst. Takt…') : 'Evolve'}</strong>
+                <span className="loudness-tag">{evolvePending ? (uiEdition === 'minimal' ? 'Bar-Quantized' : 'Wartet auf 1') : 'Loudness-Safe'}</span>
               </div>
             </button>
 

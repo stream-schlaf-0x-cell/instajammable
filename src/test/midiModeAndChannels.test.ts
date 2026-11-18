@@ -330,3 +330,223 @@ test('browser mode uses 1-argument output.send(bytes) without Firefox clear(), a
     else Reflect.deleteProperty(globalThis, 'window');
   }
 });
+
+test('shiftLayerOctave transposes melodic layers by +-12 semitones and releases layer notes', () => {
+  const port = createMockPort('IAC Driver Bus 1');
+  const h = createHarness('dorian-dawn');
+  const engine = h.engine;
+  engine.midi.setMockMidiAccess({ outputs: new Map([[port.id, port]]) } as unknown as MIDIAccess);
+  engine.updateSession({ outputMode: 'midi', globalOutputId: port.id });
+
+  const bassBefore = engine.getState().layers.find(l => l.id === 'bass')!;
+  const prevMin = bassBefore.settings.minNote;
+  const prevMax = bassBefore.settings.maxNote;
+
+  // Trigger a step so notes are active on MIDI channel
+  h.tick(0, 0.05);
+  port.sent.length = 0;
+
+  engine.shiftLayerOctave('bass', 1);
+  const bassAfterUp = engine.getState().layers.find(l => l.id === 'bass')!;
+  assert.equal(bassAfterUp.settings.minNote, prevMin + 12);
+  assert.equal(bassAfterUp.settings.maxNote, prevMax + 12);
+  assert.ok(port.sent.some(m => (m.bytes[0] & 0xf0) === 0x80), 'shifting octave should send Note Off for held layer notes');
+
+  engine.shiftLayerOctave('bass', -1);
+  const bassBack = engine.getState().layers.find(l => l.id === 'bass')!;
+  assert.equal(bassBack.settings.minNote, prevMin);
+  assert.equal(bassBack.settings.maxNote, prevMax);
+});
+
+test('manual arrangement section buttons, templates, and block jumps keep Sequencer OFF when disabled', () => {
+  const h = createHarness('dorian-dawn');
+  const engine = h.engine;
+  engine.toggleSequencer(false);
+  assert.equal(engine.getPosition().sequencer?.enabled, false);
+
+  engine.setManualArrangementByEnergy('high');
+  assert.equal(engine.getPosition().sequencer?.enabled, false);
+  assert.equal(engine.getPosition().arrangementSection, 'chorus');
+  assert.equal(engine.getPosition().sequencer?.currentSection, 'chorus');
+
+  engine.setManualArrangementByEnergy('down');
+  assert.equal(engine.getPosition().sequencer?.enabled, false);
+  assert.equal(engine.getPosition().arrangementSection, 'breakdown');
+  assert.equal(engine.getPosition().sequencer?.currentSection, 'breakdown');
+
+  const blockId = engine.getSequencerState().blocks[0].id;
+  engine.setBlockSectionByEnergy(blockId, 'up');
+  assert.equal(engine.getPosition().sequencer?.enabled, false);
+  assert.equal(engine.getPosition().arrangementSection, 'buildup');
+
+  engine.stepBlockBars(blockId, 1);
+  assert.equal(engine.getPosition().sequencer?.enabled, false);
+
+  // Applying a template or jumping to a block in SequencerDeck must NOT turn Sequencer ON when OFF
+  engine.applySequenceTemplate('four-bars-flow');
+  assert.equal(engine.getPosition().sequencer?.enabled, false);
+  assert.equal(engine.getState().sequencerEnabled, false);
+
+  engine.jumpToSequenceBlock(1);
+  assert.equal(engine.getPosition().sequencer?.enabled, false);
+  assert.equal(engine.getState().sequencerEnabled, false);
+});
+
+test('engine.evolve() is bar-quantized during mid-bar playback and immediate when stopped', () => {
+  const h = createHarness('dorian-dawn');
+  const engine = h.engine;
+  const internal = engine as unknown as {
+    running: boolean;
+    nextStep: number;
+    composer: { getRuntime: () => { epoch: number } };
+    processStep: (ctx: { step: number; bpm: number; swingOffset: number; time: number; beat: number }) => void;
+    pads: Map<string, { triggerNote: () => void; stopAllVoices: () => void; fadeOutAll: () => void; updateParams: () => void; getActiveVoiceCount: () => { sounding: number; releasing: number } }>;
+    secondaryPads: Map<string, { triggerNote: () => void; stopAllVoices: () => void; fadeOutAll: () => void; updateParams: () => void; getActiveVoiceCount: () => { sounding: number; releasing: number } }>;
+    drums: { triggerKick: () => void; triggerSnare: () => void; triggerHiHat: () => void; triggerPerc: () => void; stopAllVoices: () => void; stopVoiceKind: () => void };
+  };
+  for (const l of engine.getState().layers) {
+    const stub = { triggerNote() {}, stopAllVoices() {}, fadeOutAll() {}, updateParams() {}, getActiveVoiceCount: () => ({ sounding: 0, releasing: 0 }) };
+    internal.pads.set(l.id, stub);
+    internal.secondaryPads.set(l.id, stub);
+  }
+  internal.drums = { triggerKick() {}, triggerSnare() {}, triggerHiHat() {}, triggerPerc() {}, stopAllVoices() {}, stopVoiceKind() {} };
+
+  // When stopped, evolve runs immediately
+  engine.evolve();
+  assert.equal(engine.getPosition().evolvePending, false);
+  const epochAfterImmediate = internal.composer.getRuntime().epoch;
+  assert.ok(epochAfterImmediate >= 1);
+
+  // When running mid-bar (nextStep % 16 !== 0), evolve waits until bar downbeat (step 16)
+  internal.running = true;
+  internal.nextStep = 5;
+  engine.evolve();
+  assert.equal(engine.getPosition().evolvePending, true);
+  assert.equal(internal.composer.getRuntime().epoch, epochAfterImmediate);
+
+  internal.processStep({ step: 15, bpm: 120, swingOffset: 0, time: 1.0, beat: 15 / 4 });
+  assert.equal(engine.getPosition().evolvePending, true, 'still armed at step 15');
+
+  internal.processStep({ step: 16, bpm: 120, swingOffset: 0, time: 1.12, beat: 4 });
+  assert.equal(engine.getPosition().evolvePending, false, 'clears armed state at bar boundary step 16');
+  assert.ok(internal.composer.getRuntime().epoch > epochAfterImmediate, 'epoch increments at bar boundary');
+  internal.running = false;
+});
+
+test('restartFromBarOne rewinds beat to 0 and emits MIDI SPP 0 ([0xf2,0,0]) before Start (0xfa)', async () => {
+  const port = createMockPort('IAC Driver Bus 1');
+  const h = createHarness('dorian-dawn');
+  const engine = h.engine;
+  engine.midi.setMockMidiAccess({ outputs: new Map([[port.id, port]]) } as unknown as MIDIAccess);
+  engine.updateSession({ outputMode: 'midi', globalOutputId: port.id, midiClockEnabled: true });
+
+  const internal = engine as unknown as {
+    stoppedBeat: number;
+    stepOffset: number;
+    nextStep: number;
+    init: () => Promise<void>;
+    stopPreview: () => void;
+    resetFlow: () => void;
+    audio: { ctx: { currentTime: number; resume: () => Promise<void> }; getTime: () => number; setVolume: (v: number) => void };
+    clock: { reset: () => void; start: () => void; stop: () => void; setBpm: (b: number) => void; setSwing: (s: number) => void };
+    pads: Map<string, { triggerNote: () => void; stopAllVoices: () => void; fadeOutAll: () => void; updateParams: () => void; getActiveVoiceCount: () => { sounding: number; releasing: number } }>;
+    secondaryPads: Map<string, { triggerNote: () => void; stopAllVoices: () => void; fadeOutAll: () => void; updateParams: () => void; getActiveVoiceCount: () => { sounding: number; releasing: number } }>;
+    drums: { triggerKick: () => void; triggerSnare: () => void; triggerHiHat: () => void; triggerPerc: () => void; stopAllVoices: () => void; stopVoiceKind: () => void };
+  };
+  for (const l of engine.getState().layers) {
+    const stub = { triggerNote() {}, stopAllVoices() {}, fadeOutAll() {}, updateParams() {}, getActiveVoiceCount: () => ({ sounding: 0, releasing: 0 }) };
+    internal.pads.set(l.id, stub);
+    internal.secondaryPads.set(l.id, stub);
+  }
+  internal.drums = { triggerKick() {}, triggerSnare() {}, triggerHiHat() {}, triggerPerc() {}, stopAllVoices() {}, stopVoiceKind() {} };
+  internal.init = async () => {};
+  internal.stopPreview = () => {};
+  internal.resetFlow = () => {};
+  internal.audio = { ctx: { currentTime: 0, resume: async () => {} }, getTime: () => 0, setVolume() {} };
+  internal.stoppedBeat = 11.5;
+  internal.stepOffset = 46;
+  internal.nextStep = 47;
+  internal.clock = { reset() {}, start() {}, stop() {}, setBpm() {}, setSwing() {} };
+
+  port.sent.length = 0;
+  await engine.restartFromBarOne();
+
+  const pos = engine.getPosition();
+  assert.equal(pos.beat, 0);
+  assert.equal(pos.bar, 0);
+
+  const sppIndex = port.sent.findIndex(m => m.bytes[0] === 0xf2 && m.bytes[1] === 0x00 && m.bytes[2] === 0x00);
+  const startIndex = port.sent.findIndex(m => m.bytes[0] === 0xfa);
+  assert.ok(sppIndex >= 0, 'expected Song Position Pointer 0xf2 0x00 0x00');
+  assert.ok(startIndex > sppIndex, 'expected MIDI Start 0xfa right after SPP 0');
+
+  await engine.stop();
+});
+
+test('Harmony Pace (1/2/4/8-bars & dynamic) and Chord Loop Mode (A/AB/ABC/ABCD) control progression & chord triggers', () => {
+  const port = createMockPort('IAC Driver Bus 1');
+  const h = createHarness('dorian-dawn');
+  const engine = h.engine;
+  engine.midi.setMockMidiAccess({ outputs: new Map([[port.id, port]]) } as unknown as MIDIAccess);
+  engine.updateSession({ outputMode: 'midi', globalOutputId: port.id });
+
+  // 1-bar Pace should hold 1 bar and emit chord Note On at step 0 and step 16 (next chord)
+  engine.setChordPace('1-bar');
+  assert.equal(engine.getPosition().chordHoldBars, 1);
+  port.sent.length = 0;
+  h.tick(0, 0.05);
+  const chordChannel = engine.getState().layers.find(l => l.role === 'chords')!.channel;
+  assert.ok(port.sent.some(m => (m.bytes[0] & 0xf0) === 0x90 && (m.bytes[0] & 0x0f) + 1 === chordChannel), 'expected chord Note On at step 0');
+
+  port.sent.length = 0;
+  h.tick(16, 2.05);
+  assert.ok(port.sent.some(m => (m.bytes[0] & 0xf0) === 0x90 && (m.bytes[0] & 0x0f) + 1 === chordChannel), 'expected chord Note On at step 16 under 1-bar pace');
+
+  // 8-bars Pace
+  engine.setChordPace('8-bars');
+  h.tick(32, 4.05);
+  assert.equal(engine.getPosition().chordHoldBars, 8);
+
+  const composer = (engine as unknown as {
+    composer: {
+      harmonyAt: (step: number, session: ReturnType<JamEngine['getState']>) => { index: number; degree: number; name: string; root: number; notes: number[] };
+      vary: () => void;
+      planStep: (step: number, session: ReturnType<JamEngine['getState']>) => Array<{ layerId: string; note: number }>;
+    };
+  }).composer;
+
+  // Dynamic Pace [1, 2, 1, 4] across 8-bar cycle
+  engine.setChordPace('dynamic');
+  const slot0 = composer.harmonyAt(0, engine.getState());
+  const slot1 = composer.harmonyAt(16, engine.getState());
+  const slot2 = composer.harmonyAt(48, engine.getState());
+  const slot3 = composer.harmonyAt(64, engine.getState());
+  assert.equal(slot0.index, 0);
+  assert.equal(slot1.index, 1);
+  assert.equal(slot2.index, 2);
+  assert.equal(slot3.index, 3);
+
+  // Chord Loop Mode 'A' latches exact voicing/notes endlessly across bars & Flow/Evolve epochs
+  engine.setChordPace('1-bar');
+  engine.setChordLoopMode('A');
+  const held = composer.harmonyAt(0, engine.getState());
+  assert.ok(engine.getState().latchedHarmony, 'latchedHarmony stored when switching to Hold A');
+  composer.vary();
+  for (const step of [16, 32, 48, 64, 80, 128, 256]) {
+    const atStep = composer.harmonyAt(step, engine.getState());
+    assert.equal(atStep.degree, held.degree, `Loop A should hold degree ${held.degree} at step ${step}`);
+    assert.equal(atStep.name, held.name, `Loop A should hold chord ${held.name} at step ${step}`);
+    assert.deepEqual(atStep.notes, held.notes, `Loop A should freeze exact voicing notes at step ${step}`);
+  }
+  // Explicit chord step updates latched chord and holds the new one
+  engine.cycleChord(1);
+  const nextHeld = composer.harmonyAt(160, engine.getState());
+  assert.notEqual(nextHeld.degree, held.degree, 'explicit cycleChord moves held chord');
+  assert.deepEqual(composer.harmonyAt(176, engine.getState()).notes, nextHeld.notes);
+
+  // Loop Mode 'AB' unlatches and cycles at most 2 distinct degrees across bars 0..3
+  engine.setChordLoopMode('AB');
+  assert.equal(engine.getState().latchedHarmony, null);
+  const abDegrees = new Set([0, 16, 32, 48].map(s => composer.harmonyAt(s, engine.getState()).degree));
+  assert.ok(abDegrees.size <= 2, 'Loop AB should cycle at most 2 chord degrees');
+});

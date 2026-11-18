@@ -193,7 +193,7 @@ export default function App() {
   }, [session.lowResource, session.seed, session.sceneId]);
   useEffect(() => { if(session.globalOutputId!==undefined)setOutputId(session.globalOutputId||''); }, [session.globalOutputId]);
   useEffect(() => { const timer = setTimeout(() => { const error = persistSession(engine.saveSession()); if (error) message(error); }, 700); return () => clearTimeout(timer); }, [session, message]);
-  const toggle = useCallback(async () => { await act(() => engine.getPosition().playing ? engine.stop() : engine.start()); setPosition(engine.getPosition()); }, [act]);
+  const toggle = useCallback(async () => { await act(() => engine.getPosition().playing ? engine.stop() : engine.restartFromBarOne()); setPosition(engine.getPosition()); }, [act]);
   useEffect(() => {
     if (!session.chaosEnabled || (session.chaosMode || 'calm') === 'manual') return;
     const timer = setInterval(() => engine.stepChaosDrift(0.14), 140);
@@ -438,7 +438,7 @@ export default function App() {
                   icon: Activity,
                   color: '#a855f7',
                   isOn: session.sequencerEnabled ?? true,
-                  onToggle: () => engine.toggleSequencer(!session.sequencerEnabled),
+                  onToggle: () => engine.toggleSequencer(!(session.sequencerEnabled ?? true)),
                 },
                 {
                   id: 'score',

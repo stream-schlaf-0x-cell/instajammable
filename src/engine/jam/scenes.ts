@@ -679,7 +679,7 @@ export function createSession(sceneId = 'dorian-dawn', seed = 142857): JamSessio
   const macros = { movement: lofi ? 0.42 : 0.35, density: lofi ? 0.6 : 0.4, warmth: 0.62, space: lofi ? 0.32 : 0.65, ...tuning.macros };
   return {
     version: 2, id: `jam-${scene.id}`, name: scene.name, sceneId: scene.id, style: scene.style, root, scale: scene.scale,
-    bpm: scene.bpm, swing: tuning.swing ?? (lofi ? 0.36 : 0.08), seed: seed >>> 0, evolving: true, outputMode: 'internal', volume: 0.9,
+    bpm: scene.bpm, swing: tuning.swing ?? (lofi ? 0.36 : 0.08), seed: seed >>> 0, evolving: true, outputMode: 'internal', midiClockEnabled: true, chordLoopMode: 'ABCD', sequencerEnabled: true, volume: 0.9,
     lowResource: false, deepMindEnabled: false, deepMindChannel: 1, pinned: ['movement', 'density', 'warmth', 'space'],
     macros, layers, changes: [],
     ...(tuning.atmosphere ? { atmosphere: { ...tuning.atmosphere } } : {}), ...(tuning.pump ? { pump: tuning.pump } : {}),

@@ -9,7 +9,7 @@ import {
 } from '../../engine/jam/minimalCatalog';
 import { DRUM_MODELS, TIMBRES, type DrumModel, type JamPosition, type JamSession, type Timbre } from '../../types/jam';
 import type { UiEdition } from '../../types/ui';
-import { HarmonyHeroCard, MacroDeckCard, TrackRhythmControls, TrackMidiControls, isMidiOnlyMode, getLayerRhythmOptions } from './LayoutShared';
+import { HarmonyHeroCard, MacroDeckCard, TrackRhythmControls, TrackMidiControls, TrackOctaveControls, isMidiOnlyMode, getLayerRhythmOptions } from './LayoutShared';
 
 const engine = JamEngine.getInstance();
 
@@ -75,6 +75,7 @@ export function GrooveboxLayout({ session, position, edition }: GrooveboxLayoutP
                 <div className="pad-meter-bar">
                   <div className="pad-meter-fill" style={{ width: `${Math.round(l.volume * 100)}%` }} />
                 </div>
+                {!midiMode && <TrackOctaveControls layer={l} edition={edition} compact />}
                 <TrackRhythmControls layer={l} edition={edition} compact />
                 <div className="pad-quick-actions">
                   <button
@@ -175,6 +176,15 @@ export function GrooveboxLayout({ session, position, edition }: GrooveboxLayoutP
             </div>
           ) : (
             <>
+              {layer.role !== 'drum' && (
+                <div className="plugin-macro-tile">
+                  <div className="plugin-macro-top">
+                    <strong>{min ? 'Octave Register' : 'Oktave / Tonlage'}</strong>
+                  </div>
+                  <TrackOctaveControls layer={layer} edition={edition} />
+                </div>
+              )}
+
               {/* Timbre or Drum Model */}
               {layer.role !== 'drum' ? (
                 <label className="plugin-macro-tile">

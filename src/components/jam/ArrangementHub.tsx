@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Zap, VolumeX, Flame, Moon, Shuffle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Waves, RefreshCw, Music2, Sliders, Plus, Trash2, ArrowRight, X, Dice5 } from 'lucide-react';
 import { JamEngine, SOUNDSCAPE_PRESETS, SEQUENCE_TEMPLATES } from '../../engine/jam/JamEngine';
 import { RHYTHM_POOL, type RhythmPreset } from '../../engine/jam/rhythms';
-import type { ArrangementSection, JamPosition, JamSession, MacroName, SequenceBlock, Timbre, ChordPattern, ChordPace, ChordTexture } from '../../types/jam';
+import type { ArrangementSection, JamPosition, JamSession, MacroName, SequenceBlock, Timbre, ChordPattern, ChordPace, ChordLoopMode, ChordTexture } from '../../types/jam';
 import { useUiEdition } from '../../contexts/UiEditionContext';
 import {
   getSoundscapeDisplay,
@@ -13,7 +13,7 @@ import {
 
 const engine = JamEngine.getInstance();
 
-export function SoundscapeDeck({ session, onClose }: { session: JamSession; position?: JamPosition; onClose?: () => void }) {
+export function SoundscapeDeck({ session, position, onClose }: { session: JamSession; position?: JamPosition; onClose?: () => void }) {
   const edition = useUiEdition();
   const isMinimal = edition === 'minimal';
   const [matchAtmoWithChords, setMatchAtmoWithChords] = useState(true);
@@ -21,6 +21,8 @@ export function SoundscapeDeck({ session, onClose }: { session: JamSession; posi
   const currentChordTimbre = chordsLayer?.settings.timbre || 'wash';
   const currentChordPattern = chordsLayer?.settings.chordPattern || (session.style === 'techno' ? 'syncopated' : session.style === 'lofi' ? 'broken' : 'pad');
   const currentChordPace = chordsLayer?.settings.chordPace || '2-bars';
+  const currentLoopMode: ChordLoopMode = session.chordLoopMode || 'ABCD';
+  const evolvePending = Boolean(position?.evolvePending);
   const secondaryEnabled = Boolean(chordsLayer?.settings.secondaryEnabled);
   const secondaryTimbre = chordsLayer?.settings.secondaryTimbre || 'shimmer';
   const secondaryPattern = chordsLayer?.settings.secondaryPattern || 'wave';
@@ -193,8 +195,30 @@ export function SoundscapeDeck({ session, onClose }: { session: JamSession; posi
             <option value="1-bar">{isMinimal ? '⚡ Every Bar (Fast & lively)' : '⚡ Jeden Takt (Schnell & lebendig)'}</option>
             <option value="2-bars">{isMinimal ? '🌿 Every 2 Bars (Balanced pace)' : '🌿 Alle 2 Takte (Atmendes Wohlfühltempo)'}</option>
             <option value="4-bars">{isMinimal ? '🌌 Every 4 Bars (Spacious & deep)' : '🌌 Alle 4 Takte (Episch getragen)'}</option>
-            <option value="dynamic">{isMinimal ? '🌊 Dynamic Flow' : '🌊 Dynamisch fließend'}</option>
+            <option value="8-bars">{isMinimal ? '🪐 Every 8 Bars (Ultra deep arc)' : '🪐 Alle 8 Takte (Sehr weiter Bogen)'}</option>
+            <option value="dynamic">{isMinimal ? '🌊 Dynamic Flow (1·2·1·4)' : '🌊 Dynamisch fließend (1·2·1·4)'}</option>
           </select>
+        </div>
+
+        <div className="ctrl-group">
+          <label>{isMinimal ? 'Chord Progression Loop' : 'Akkord-Loop (A / AB / ABC / ABCD)'}</label>
+          <div className="chord-loop-segmented" role="group" aria-label={isMinimal ? 'Chord progression loop' : 'Akkord-Loop'}>
+            {(['A', 'AB', 'ABC', 'ABCD'] as ChordLoopMode[]).map(mode => (
+              <button
+                key={mode}
+                type="button"
+                className={`chord-loop-btn ${currentLoopMode === mode ? 'is-active' : ''}`}
+                onClick={() => engine.setChordLoopMode(mode)}
+                title={
+                  mode === 'A'
+                    ? (isMinimal ? 'Hold current chord endlessly (jam on one chord)' : 'Aktuellen Akkord A dauerhaft weiterspielen (kein Wechsel)')
+                    : (isMinimal ? `Loop ${mode.length} chords (${mode})` : `${mode.length} Akkorde loopen (${mode})`)
+                }
+              >
+                {mode === 'A' ? (isMinimal ? 'A (Hold)' : 'A (Halten)') : mode}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="ctrl-group">
@@ -230,12 +254,12 @@ export function SoundscapeDeck({ session, onClose }: { session: JamSession; posi
         <div className="ctrl-group match-toggle-group">
           <button
             type="button"
-            className="reharmonize-deck-btn"
+            className={`reharmonize-deck-btn ${evolvePending ? 'is-armed' : ''}`}
             onClick={() => engine.evolve()}
-            title={isMinimal ? 'Evolve chord progression and voicings' : 'Akkordfolge und Voicings generativ weiterentwickeln'}
+            title={isMinimal ? 'Evolve chord progression and voicings cleanly on next bar' : 'Akkordfolge und Voicings generativ auf dem nächsten Takt weiterentwickeln'}
           >
             <Dice5 size={14} />
-            <span>{isMinimal ? 'Re-Harmonize' : '🎲 Re-Harmonisieren'}</span>
+            <span>{evolvePending ? (isMinimal ? 'Next Bar…' : 'Nächst. Takt…') : (isMinimal ? 'Re-Harmonize' : '🎲 Re-Harmonisieren')}</span>
           </button>
           <label className="checkbox-label" title={isMinimal ? 'Automatically match background atmosphere (max 10%) to selected chord sound' : 'Passe Hintergrund-Atmosphäre (Air, Tape, Rain, Vinyl, max 10%) automatisch dem gewählten Akkord-Klang an'}>
             <input
@@ -283,13 +307,15 @@ export function SequencerDeck({ session, position, onClose }: { session: JamSess
         <div>
           <span className="eyebrow">{isMinimal ? 'ARRANGEMENT SEQUENCER' : 'ARRANGEMENT-SEQUENCER & MAKRO-AUTOMATION'}</span>
           <h2>{isMinimal ? 'Section Timeline & Macro Morphs.' : 'Der Ablauf: 4 Takte dies, 4 Takte jenes.'}</h2>
-          {!isMinimal && (
-            <p className="helper">
-              {isSequencerActive
-                ? 'Sequencer läuft aktiv. Die Abschnitte wechseln automatisch und lassen die Makros organisch morphen.'
-                : 'Sequencer ist aktuell AUS. Klicke auf den Schalter oder direkt auf einen beliebigen Block/Pfeil unten, um ihn sofort zu aktivieren.'}
-            </p>
-          )}
+          <p className="helper">
+            {isSequencerActive
+              ? (isMinimal
+                  ? 'Sequencer ON · Blocks advance automatically bar-by-bar.'
+                  : 'Sequencer läuft aktiv. Die Abschnitte wechseln automatisch und lassen die Makros organisch morphen.')
+              : (isMinimal
+                  ? 'Sequencer is OFF · Pick Manual Modes directly below without turning Sequencer back ON.'
+                  : 'Sequencer ist AUS · Wähle unten direkt eine manuelle Energie-Stufe — der Sequencer bleibt dabei AUS.')}
+          </p>
         </div>
 
         <div className="sequencer-master-actions">
@@ -311,6 +337,32 @@ export function SequencerDeck({ session, position, onClose }: { session: JamSess
           )}
         </div>
       </header>
+
+      {/* Manual Direct Energy Bar (Stays OFF if Sequencer is OFF) */}
+      <div className="seq-manual-bar">
+        <span className="templates-label">
+          {isMinimal ? 'Manual Mode (keeps OFF):' : 'Direktwahl (lässt Sequencer AUS):'}
+        </span>
+        <div className="seq-manual-bar-row" role="group" aria-label={isMinimal ? 'Manual Arrangement Energy' : 'Manuelle Arrangement-Energie'}>
+          {([
+            { id: 'high', section: 'chorus', label: '↑ High' },
+            { id: 'up', section: 'buildup', label: '↗ Up' },
+            { id: 'groove', section: 'groove', label: '➔ Flow' },
+            { id: 'down', section: 'breakdown', label: '↘ Down' },
+            { id: 'low', section: 'silent', label: '↓ Low' },
+          ] as const).map(item => (
+            <button
+              key={item.id}
+              type="button"
+              className={`energy-arrow-btn ${item.id} ${position.arrangementSection === item.section ? 'is-selected' : ''}`}
+              onClick={() => engine.setManualArrangementByEnergy(item.id)}
+              title={isMinimal ? `Apply ${item.label} manually (keeps Sequencer OFF/unchanged)` : `${item.label} direkt anwenden (lässt Sequencer auf ${isSequencerActive ? 'ON' : 'OFF'})`}
+            >
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Templates Bar */}
       <div className="sequencer-templates-row">

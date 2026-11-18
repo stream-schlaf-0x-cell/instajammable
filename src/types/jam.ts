@@ -16,8 +16,10 @@ export interface FlowSettings { enabled: boolean; bars: 4 | 8 | 16 | 32 | number
 export type MacroName = 'movement' | 'density' | 'warmth' | 'space';
 export type ChordPattern = 'pad' | 'pulse' | 'broken' | 'syncopated' | 'euclidean' | 'wave' | 'cluster';
 export const CHORD_PATTERNS: readonly ChordPattern[] = ['pad', 'pulse', 'broken', 'syncopated', 'euclidean', 'wave', 'cluster'] as const;
-export type ChordPace = '1-bar' | '2-bars' | '4-bars' | 'dynamic';
-export const CHORD_PACES: readonly ChordPace[] = ['1-bar', '2-bars', '4-bars', 'dynamic'] as const;
+export type ChordPace = '1-bar' | '2-bars' | '4-bars' | '8-bars' | 'dynamic';
+export const CHORD_PACES: readonly ChordPace[] = ['1-bar', '2-bars', '4-bars', '8-bars', 'dynamic'] as const;
+export type ChordLoopMode = 'A' | 'AB' | 'ABC' | 'ABCD';
+export const CHORD_LOOP_MODES: readonly ChordLoopMode[] = ['A', 'AB', 'ABC', 'ABCD'] as const;
 export type ChordTexture = 'off' | 'shimmer' | 'octave' | 'sub5th';
 export const CHORD_TEXTURES: readonly ChordTexture[] = ['off', 'shimmer', 'octave', 'sub5th'] as const;
 
@@ -155,6 +157,12 @@ export interface JamSession {
   progressions?: number[][];
   /** Per-scene chord voicing family. */
   voicingFamily?: VoicingFamily;
+  /** Number of chords to loop: A (hold 1 chord), AB (2), ABC (3), ABCD (4). */
+  chordLoopMode?: ChordLoopMode;
+  /** Locked manual scale degree (used in A-hold mode or when stepping chords). */
+  manualHarmonyDegree?: number | null;
+  /** Exact latched chord voicing when holding a single chord ('A' mode). */
+  latchedHarmony?: { degree: number; root: number; notes: number[]; name: string } | null;
   flow?: FlowSettings;
   macros: Record<MacroName, number>;
   layers: JamLayer[];
@@ -277,6 +285,8 @@ export interface JamPosition {
   /** Bars (fractional) until the harmony changes. */
   chordBarsLeft: number;
   nextChord: string;
+  chordLoopMode?: ChordLoopMode;
+  evolvePending?: boolean;
   arrangementSection?: ArrangementSection;
   buildupCountdown?: number;
   autoArrangement?: boolean;

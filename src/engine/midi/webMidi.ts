@@ -290,6 +290,17 @@ export class WebMidiManager {
     const success = sent.some(Boolean);
     return { success, portName: output.name ?? 'MIDI Port', error: success ? undefined : this.errorMessage ?? 'Senden fehlgeschlagen.' };
   }
+  public sendSongPositionZero(outputId?: string | null): void {
+    const output = this.getOutput(outputId);
+    if (!output) return;
+    try {
+      this.dispatch(output, [0xf2, 0x00, 0x00]);
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : 'MIDI SPP send failed.';
+      this.notifyStatus();
+    }
+  }
+
   public sendRealtime(statusByte: 0xfa | 0xfb | 0xfc, outputId?: string | null): void {
     const output = this.getOutput(outputId);
     if (!output) return;

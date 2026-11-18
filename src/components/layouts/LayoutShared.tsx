@@ -16,7 +16,7 @@ import { ChaosModulatorDeck } from '../jam/ChaosModulatorDeck';
 import { AtmosphereFlow } from '../jam/AtmosphereFlow';
 import { CustomMacroDeck } from '../jam/CustomMacroDeck';
 import { noteName } from '../jam/PianoRoll';
-import type { JamLayer, JamPosition, JamSession, LayerSettings, MacroName } from '../../types/jam';
+import type { ChordLoopMode, ChordPace, JamLayer, JamPosition, JamSession, LayerSettings, MacroName } from '../../types/jam';
 import type { MusicalScale } from '../../types';
 import type { UiEdition } from '../../types/ui';
 
@@ -167,6 +167,105 @@ export function TrackRhythmControls({
   );
 }
 
+export function ChordLoopControls({
+  session,
+  edition,
+  compact = false,
+}: {
+  session: JamSession;
+  edition: UiEdition;
+  compact?: boolean;
+}) {
+  const min = edition === 'minimal';
+  const loopMode: ChordLoopMode = session.chordLoopMode || 'ABCD';
+  return (
+    <div
+      className={`chord-loop-segmented chord-loop-controls ${compact ? 'is-compact' : ''}`}
+      role="group"
+      aria-label={min ? 'Chord loop / hold A' : 'Akkord-Loop / Akkord halten'}
+      onClick={e => e.stopPropagation()}
+    >
+      {(['A', 'AB', 'ABC', 'ABCD'] as ChordLoopMode[]).map(mode => {
+        const isHold = mode === 'A';
+        const active = loopMode === mode;
+        return (
+          <button
+            key={mode}
+            type="button"
+            className={`chord-loop-btn ${active ? 'is-active' : ''} ${isHold && active ? 'is-hold-active' : ''}`}
+            onClick={() => engine.setChordLoopMode(mode)}
+            title={
+              isHold
+                ? (min ? 'Hold A: Freeze current chord endlessly (jam on 1 chord)' : 'Hold A: Aktuellen Akkord einfrieren & dauerhaft darauf jammen')
+                : (min ? `Loop ${mode.length} chords (${mode})` : `${mode.length}-Akkord-Loop (${mode})`)
+            }
+          >
+            {isHold ? (active ? (min ? 'Hold A' : 'Hold A') : 'A') : mode}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export function TrackOctaveControls({
+  layer,
+  edition,
+  compact = false,
+  includeDrums = false,
+  bare = false,
+}: {
+  layer: JamLayer;
+  edition: UiEdition;
+  compact?: boolean;
+  includeDrums?: boolean;
+  bare?: boolean;
+}) {
+  const min = edition === 'minimal';
+  const isDrum = layer.role === 'drum';
+  if (isDrum && !includeDrums) return null;
+  const rangeLabel = isDrum
+    ? `${noteName(layer.settings.minNote)} (${layer.settings.minNote})`
+    : `${noteName(layer.settings.minNote)}–${noteName(layer.settings.maxNote)}`;
+
+  const group = (
+    <div
+      className="track-midi-oct-group"
+      title={isDrum ? (min ? 'Drum trigger note −/+1' : 'Drum MIDI-Note −/+1') : (min ? 'Shift register −/+1 octave' : 'Oktave −/+1 verschieben')}
+    >
+      <button
+        type="button"
+        className="mini-toggle mini-oct-btn"
+        onClick={e => { e.stopPropagation(); engine.shiftLayerOctave(layer.id, -1); }}
+        aria-label={`${layer.name} ${isDrum ? 'note down' : 'octave down'}`}
+      >
+        −
+      </button>
+      <span className="track-midi-range-tag">{rangeLabel}</span>
+      <button
+        type="button"
+        className="mini-toggle mini-oct-btn"
+        onClick={e => { e.stopPropagation(); engine.shiftLayerOctave(layer.id, 1); }}
+        aria-label={`${layer.name} ${isDrum ? 'note up' : 'octave up'}`}
+      >
+        +
+      </button>
+    </div>
+  );
+
+  if (bare) return group;
+
+  return (
+    <div
+      className={`track-octave-controls ${compact ? 'is-compact' : ''}`}
+      onClick={e => e.stopPropagation()}
+    >
+      <span className="track-oct-tag">{min ? 'Oct' : 'Okt'}</span>
+      {group}
+    </div>
+  );
+}
+
 export function TrackMidiControls({
   layer,
   edition,
@@ -177,10 +276,6 @@ export function TrackMidiControls({
   compact?: boolean;
 }) {
   const min = edition === 'minimal';
-  const isDrum = layer.role === 'drum';
-  const rangeLabel = isDrum
-    ? `${noteName(layer.settings.minNote)} (${layer.settings.minNote})`
-    : `${noteName(layer.settings.minNote)}–${noteName(layer.settings.maxNote)}`;
 
   return (
     <div
@@ -199,25 +294,7 @@ export function TrackMidiControls({
           ))}
         </select>
       </label>
-      <div className="track-midi-oct-group" title={isDrum ? (min ? 'Drum trigger note −/+1' : 'Drum MIDI-Note −/+1') : (min ? 'Transpose −/+1 octave' : 'Register −/+1 Oktave verschieben')}>
-        <button
-          type="button"
-          className="mini-toggle mini-oct-btn"
-          onClick={e => { e.stopPropagation(); engine.shiftLayerOctave(layer.id, -1); }}
-          aria-label={`${layer.name} ${isDrum ? 'note down' : 'octave down'}`}
-        >
-          −
-        </button>
-        <span className="track-midi-range-tag">{rangeLabel}</span>
-        <button
-          type="button"
-          className="mini-toggle mini-oct-btn"
-          onClick={e => { e.stopPropagation(); engine.shiftLayerOctave(layer.id, 1); }}
-          aria-label={`${layer.name} ${isDrum ? 'note up' : 'octave up'}`}
-        >
-          +
-        </button>
-      </div>
+      <TrackOctaveControls layer={layer} edition={edition} compact={compact} includeDrums bare />
     </div>
   );
 }
@@ -364,6 +441,10 @@ export function HarmonyHeroCard({
   const min = edition === 'minimal';
   const scene = SCENES.find(s => s.id === session.sceneId) || SCENES[0];
   const sceneMeta = getSceneDisplay(scene, edition);
+  const chordLayer = session.layers.find(l => l.role === 'chords');
+  const currentPace: ChordPace = chordLayer?.settings?.chordPace ?? '4-bars';
+  const loopMode: ChordLoopMode = session.chordLoopMode || 'ABCD';
+  const evolvePending = !!position.evolvePending;
 
   return (
     <section className={`plugin-card harmony-hero-card ${compact ? 'is-compact' : ''}`} aria-label={min ? 'Harmony & Tempo' : 'Harmonie & Tempo'}>
@@ -375,12 +456,12 @@ export function HarmonyHeroCard({
         <div className="hero-actions-inline">
           <button
             type="button"
-            className="plugin-chip-btn is-accent"
-            onClick={() => engine.mutate(true)}
-            title={min ? 'Evolve harmony & phrasing' : 'Harmonie & Phrasierung sanft entwickeln'}
+            className={`plugin-chip-btn is-accent ${evolvePending ? 'is-armed' : ''}`}
+            onClick={() => engine.evolve()}
+            title={min ? 'Evolve harmony & phrasing (quantized to next bar)' : 'Harmonie & Phrasierung sanft entwickeln (zum nächsten Takt)'}
           >
             <Sparkles size={13} />
-            <span>{min ? 'Evolve' : 'Variieren'}</span>
+            <span>{evolvePending ? (min ? 'Next Bar…' : 'Nächst. Takt…') : (min ? 'Evolve' : 'Variieren')}</span>
           </button>
           <button
             type="button"
@@ -396,14 +477,14 @@ export function HarmonyHeroCard({
 
       <div className="harmony-stage-display">
         <div className="harmony-now-block">
-          <span className="harmony-tag">{min ? 'CURRENT CHORD' : 'AKTUELLER AKKORD'}</span>
+          <span className="harmony-tag">{loopMode === 'A' ? (min ? 'HOLDING A' : 'AKKORD GEHALTEN (A)') : (min ? 'CURRENT CHORD' : 'AKTUELLER AKKORD')}</span>
           <strong className="harmony-chord-big">{position.chord || `${pitch(session.root)} ${session.scale}`}</strong>
           <ChordBarStepMeter position={position} edition={edition} />
         </div>
 
         <div className="harmony-next-block">
-          <span className="harmony-tag">{min ? 'NEXT' : 'NÄCHSTER'}</span>
-          <strong className="harmony-chord-next">{position.nextChord || '—'}</strong>
+          <span className="harmony-tag">{loopMode === 'A' ? 'HOLD A' : (min ? 'NEXT' : 'NÄCHSTER')}</span>
+          <strong className="harmony-chord-next">{loopMode === 'A' ? (position.chord || '—') : (position.nextChord || '—')}</strong>
           <button
             type="button"
             className="plugin-chip-btn"
@@ -442,6 +523,26 @@ export function HarmonyHeroCard({
             ))}
           </select>
         </label>
+
+        <label className="plugin-inline-field">
+          <span>{min ? 'Pace' : 'Taktart'}</span>
+          <select
+            aria-label={min ? 'Harmony Pace' : 'Harmoniewechsel'}
+            value={currentPace}
+            onChange={e => engine.setChordPace(e.target.value as ChordPace)}
+          >
+            <option value="1-bar">{min ? '1 Bar' : '1 Takt'}</option>
+            <option value="2-bars">{min ? '2 Bars' : '2 Takte'}</option>
+            <option value="4-bars">{min ? '4 Bars' : '4 Takte'}</option>
+            <option value="8-bars">{min ? '8 Bars' : '8 Takte'}</option>
+            <option value="dynamic">{min ? 'Dynamic (1·2·1·4)' : 'Dynamisch'}</option>
+          </select>
+        </label>
+
+        <div className="plugin-inline-field" role="group" aria-label={min ? 'Chord Loop' : 'Akkord-Loop'}>
+          <span>{min ? 'Loop' : 'Loop'}</span>
+          <ChordLoopControls session={session} edition={edition} />
+        </div>
 
         <label className="plugin-inline-field">
           <span>BPM</span>
@@ -597,6 +698,7 @@ export function CompactTrackMatrix({
                 </select>
               </div>
             )}
+            {!midiMode && <TrackOctaveControls layer={layer} edition={edition} compact />}
             <TrackRhythmControls layer={layer} edition={edition} compact />
             <div className="compact-track-vol">
               {midiMode ? <SlidersHorizontal size={12} /> : <Volume2 size={12} />}

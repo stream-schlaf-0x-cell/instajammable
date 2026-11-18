@@ -1,5 +1,5 @@
 import type { AmbientSynthParams, DrumVoiceParams, EffectsParams, StepContext, MusicalScale } from '../../types';
-import { TIMBRES, CHORD_PATTERNS, CHORD_PACES, CHORD_TEXTURES, DRUM_MODELS, DRONE_STYLES, MELODY_STYLES, BASS_STYLES, VOICING_FAMILIES, type ChaosMode, type DrumModel, type DroneStyle, type MelodyStyle, type BassStyle, type VoicingFamily, type ChordPattern, type ChordPace, type ChordTexture, type JamEvent, type JamLayer, type JamPosition, type JamSession, type LayerSettings, type MacroName, type MidiClip, type ClipTempo, type ClipRawEvent, type ArrangementSection, type DrumVoice, type SequenceBlock, type SequencerPosition, type Timbre, type CustomMacro, type CustomMacroTarget, type EffectChainMode, type EffectChainSettings, type EffectModuleId, type EffectModuleConfig, type AtmosphereKind, type JamStyle } from '../../types/jam';
+import { TIMBRES, CHORD_PATTERNS, CHORD_PACES, CHORD_TEXTURES, DRUM_MODELS, DRONE_STYLES, MELODY_STYLES, BASS_STYLES, VOICING_FAMILIES, type ChaosMode, type DrumModel, type DroneStyle, type MelodyStyle, type BassStyle, type VoicingFamily, type ChordPattern, type ChordPace, type ChordLoopMode, type ChordTexture, type JamEvent, type JamLayer, type JamPosition, type JamSession, type LayerSettings, type MacroName, type MidiClip, type ClipTempo, type ClipRawEvent, type ArrangementSection, type DrumVoice, type SequenceBlock, type SequencerPosition, type Timbre, type CustomMacro, type CustomMacroTarget, type EffectChainMode, type EffectChainSettings, type EffectModuleId, type EffectModuleConfig, type AtmosphereKind, type JamStyle } from '../../types/jam';
 import { MasterAudio } from '../audio/audioContext';
 import { AmbientSynth } from '../audio/ambientSynth';
 import { DrumSynth } from '../audio/drumSynth';
@@ -14,7 +14,7 @@ import { ModulationMatrix, type ModulationOffsets, type ModulationSources } from
 import { mergeAudioPatch, sanitizeAtmosphere, sanitizeAudioPatch, sanitizeDrumPatch, sanitizeEffectsPatch, sanitizeFlow, sanitizeModRoutes, sanitizePinnedParams, EFFECT_PATCH_RANGES } from './sound';
 import { createSession, getSceneEffects } from './scenes';
 import { validateClip } from './storage';
-import { JamComposer, captureNotes, clamp, clipEventsAtStep, holdBarsFor, SCALE_INTERVALS, streamSeed, type Harmony, type PlannedNote } from './music';
+import { JamComposer, captureNotes, clamp, clipEventsAtStep, harmonySlotAt, SCALE_INTERVALS, streamSeed, type Harmony, type PlannedNote } from './music';
 import { findRhythmPreset } from './rhythms';
 import { createDefaultSequence, createSceneSequence, findSequenceTemplate, SEQUENCE_TEMPLATES } from './sequencer';
 import { findSoundscapePreset, SOUNDSCAPE_PRESETS } from './soundscapes';
@@ -301,7 +301,7 @@ export class JamEngine {
   private rack: EffectsRack | null = null;
   private drums: DrumSynth | null = null;
   private padBus: GainNode | null = null; private ensemble: StereoEnsemble | null = null; private bed: AtmosphereBed | null = null; private lastAtmosphereKey = '';
-  private pendingEvolve = false; private primeLayers: Set<string> | null = null; private primeSoft = false;
+  private pendingEvolve = false; private pendingBarEvolve = false; private primeLayers: Set<string> | null = null; private primeSoft = false;
   private nextChordCache: { key: string; name: string } | null = null;
   // Flow: runtime-only, never persisted. Offsets are added on top of whatever the user set, then relaxed back.
   private flow = { offset: { movement: 0, density: 0, warmth: 0, space: 0 } as Record<MacroName, number>, target: { movement: 0, density: 0, warmth: 0, space: 0 } as Record<MacroName, number>, drums: 1, drumsTarget: 1, section: -1 };
@@ -394,9 +394,13 @@ export class JamEngine {
     for (const synth of this.pads.values()) { const v = synth.getActiveVoiceCount(); voices += v.sounding + v.releasing; }
     for (const synth of this.secondaryPads.values()) { const v = synth.getActiveVoiceCount(); voices += v.sounding + v.releasing; }
     const chordLayer = this.state.layers.find(l => l.role === 'chords');
-    const hold = holdBarsFor(this.state.style, chordLayer?.settings?.chordPace);
-    const key = `${h.index}:${this.state.root}:${this.state.scale}:${this.state.style}:${this.state.seed}:${chordLayer?.settings?.chordPace || 'def'}`;
-    if (this.nextChordCache?.key !== key) this.nextChordCache = { key, name: this.composer.peekNext(h.index * hold * 16, this.state).name };
+    const slot = harmonySlotAt(beat, this.state.style, chordLayer?.settings?.chordPace, true);
+    const hold = slot.holdBars;
+    const loopMode: ChordLoopMode = this.state.chordLoopMode || 'ABCD';
+    const manualDeg = this.state.manualHarmonyDegree ?? 'auto';
+    const stepOffset = this.composer.getRuntime().chordStepOffset ?? 0;
+    const key = `${slot.index}:${h.degree}:${this.state.root}:${this.state.scale}:${this.state.style}:${this.state.seed}:${chordLayer?.settings?.chordPace || 'def'}:${loopMode}:${manualDeg}:${stepOffset}`;
+    if (this.nextChordCache?.key !== key) this.nextChordCache = { key, name: this.composer.peekNext(slot.slotStartStep, this.state).name };
 
     const blocks = this.arrangement.sequencerBlocks.length > 0 ? this.arrangement.sequencerBlocks : (this.state.sequence && this.state.sequence.length > 0 ? this.state.sequence : []);
     const activeBlock = blocks[this.arrangement.sequencerIndex] || blocks[0];
@@ -408,8 +412,8 @@ export class JamEngine {
       totalBlocks: blocks.length,
       blockBarProgress: this.arrangement.sequencerBarInBlock,
       totalBlockBars: activeBlock ? activeBlock.bars : 4,
-      currentSection: activeBlock ? activeBlock.section : this.arrangement.current,
-      currentBlockLabel: activeBlock?.label,
+      currentSection: this.arrangement.sequencerEnabled && activeBlock ? activeBlock.section : this.arrangement.current,
+      currentBlockLabel: this.arrangement.sequencerEnabled ? activeBlock?.label : undefined,
       nextSection: nextBlock?.section,
       nextBlockLabel: nextBlock?.label,
       barsUntilNextBlock,
@@ -417,7 +421,8 @@ export class JamEngine {
 
     return { beat, bar: Math.floor(beat / 4), playing: this.running, chord: h.name, chordNotes: [...h.notes], voices,
       capturedBars: Number.isFinite(firstPerformed) ? Math.min(128, Math.max(0, beat - Math.max(0, firstPerformed)) / 4) : 0, clipOverride: this.override !== null || this.pendingOverride !== null,
-      chordRoot: h.root, chordHoldBars: hold, chordBarsLeft: clamp(((h.index + 1) * hold * 4 - beat) / 4, 0, hold), nextChord: this.nextChordCache.name,
+      chordRoot: h.root, chordHoldBars: hold, chordBarsLeft: slot.barsLeft, nextChord: this.nextChordCache.name,
+      chordLoopMode: loopMode, evolvePending: this.pendingBarEvolve,
       arrangementSection: this.arrangement.current,
       buildupCountdown: this.arrangement.buildupBarsLeft > 0 ? this.arrangement.buildupBarsLeft : undefined,
       autoArrangement: this.arrangement.auto,
@@ -529,6 +534,7 @@ export class JamEngine {
       this.anchors = []; this.clock!.reset(); this.clock!.setBpm(this.state.bpm); this.clock!.setSwing(this.state.swing);
       this.running = true; this.primeAtNextStep = true; this.resetFlow(); this.applySound(); this.clock!.start();
       if ((this.state.outputMode === 'midi' || this.state.outputMode === 'both') && this.state.midiClockEnabled) {
+        if (this.stepOffset === 0) this.midi.sendSongPositionZero(this.state.globalOutputId);
         this.midi.sendRealtime(0xfa, this.state.globalOutputId);
       }
       this.notify();
@@ -720,10 +726,33 @@ export class JamEngine {
     }
     this.addChange(`Übergang · ${label}`, beat); this.notify();
   }
+  /** Rewind playback cleanly to Beat 1.1.1 (bar 0), preserving all sound/rhythm/octave settings, and emit SPP 0 + MIDI Start for Ableton sync. */
+  async restartFromBarOne(): Promise<void> {
+    if (this.running) {
+      await this.stop();
+    }
+    this.stoppedBeat = 0;
+    this.stepOffset = 0;
+    this.nextStep = 0;
+    this.pendingBarEvolve = false;
+    this.pendingEvolve = false;
+    this.composer.clearPlans();
+    this.composer.harmonyAt(0, this.state);
+    this.nextChordCache = null;
+    this.arrangement.sequencerIndex = 0;
+    this.arrangement.sequencerBarInBlock = 0;
+    this.arrangement.lastSequencerBar = -1;
+    await this.start();
+  }
+
   private processStep(context: StepContext): void {
     if (!this.running) return;
     const step = context.step + this.stepOffset; this.nextStep = step + 1;
     const baseBeat = step / 4; const bpm = context.bpm; const actualBeat = baseBeat + context.swingOffset * bpm / 60;
+    if (step % 16 === 0 && this.pendingBarEvolve) {
+      this.pendingBarEvolve = false;
+      this.mutate(true);
+    }
     if (step % 16 === 0 && this.pendingOverride) { for (const track of this.pendingOverride.tracks) { this.midi.releaseNotesForLayer(track.id); this.pads.get(track.id)?.stopAllVoices(); } this.override = { clip: this.pendingOverride, originBeat: baseBeat }; this.pendingOverride = null; this.addChange('Bearbeitete Phrase übernommen', baseBeat); this.notify(); }
     const harmony = this.composer.harmonyAt(step, this.state);
     this.flowTick(step, baseBeat);
@@ -863,11 +892,22 @@ export class JamEngine {
     const old = this.state; const rootDelta = patch.root !== undefined ? Math.round(patch.root) - old.root : 0;
     const layers = patch.layers || (rootDelta ? old.layers.map(l => l.role === 'drum' || l.locked || l.frozen ? l : { ...l, settings: { ...l.settings, minNote: l.settings.minNote + rootDelta, maxNote: l.settings.maxNote + rootDelta } }) : old.layers);
     this.state = validateSession({ ...old, ...patch, layers, macros: { ...old.macros, ...patch.macros } });
-    if (patch.seed !== undefined && patch.seed !== old.seed) this.composer.reset();
+    if (patch.seed !== undefined && patch.seed !== old.seed) {
+      this.state.latchedHarmony = null;
+      this.composer.reset();
+    }
     if (patch.root !== undefined || patch.scale !== undefined || patch.seed !== undefined) {
       this.resumeNotes = [];
+      if (this.state.chordLoopMode === 'A') {
+        this.state.latchedHarmony = null;
+        this.composer.setLatchedHarmony(null);
+      }
       const currentStep = Math.floor(this.getPosition().beat * 4);
       const updatedHarmony = this.composer.harmonyAt(currentStep, this.state);
+      if (this.state.chordLoopMode === 'A') {
+        this.state.latchedHarmony = { degree: updatedHarmony.degree, root: updatedHarmony.root, notes: [...updatedHarmony.notes], name: updatedHarmony.name };
+        this.composer.setLatchedHarmony(updatedHarmony);
+      }
       if (this.anchors.length) {
         this.anchors[this.anchors.length - 1].harmony = updatedHarmony;
       }
@@ -1045,6 +1085,9 @@ export class JamEngine {
     const layer = this.state.layers.find(l => l.id === layerId);
     if (!layer) return;
     this.midi.releaseNotesForLayer(layerId);
+    const fadeTime = this.audio?.getTime() ?? 0;
+    this.pads.get(layerId)?.fadeOutAll(fadeTime, 0.12);
+    this.secondaryPads.get(layerId)?.fadeOutAll(fadeTime, 0.12);
     if (layer.role === 'drum') {
       const current = clamp(layer.settings.minNote, 24, 96);
       const nextNote = clamp(current + delta, 24, 96);
@@ -1056,6 +1099,20 @@ export class JamEngine {
     const minNote = clamp(layer.settings.minNote + delta * 12, 12, Math.max(12, 108 - span));
     const maxNote = clamp(minNote + span, minNote, 108);
     this.setLayerSettings(layerId, { minNote, maxNote });
+    if (layer.role === 'chords' && this.state.chordLoopMode === 'A') {
+      this.state.latchedHarmony = null;
+      this.composer.setLatchedHarmony(null);
+      const updated = this.composer.harmonyAt(Math.floor(this.getPosition().beat * 4), this.state);
+      this.state.latchedHarmony = { degree: updated.degree, root: updated.root, notes: [...updated.notes], name: updated.name };
+      this.composer.setLatchedHarmony(updated);
+      this.nextChordCache = null;
+    } else {
+      this.composer.clearPlans();
+    }
+    if (this.running) {
+      (this.primeLayers ??= new Set()).add(layerId);
+      this.primeSoft = true;
+    }
     this.addChange(`${layer.name} Register · ${delta > 0 ? '+1 Oktave' : '-1 Oktave'}`);
   }
   setMacro(name: MacroName, value: number): void {
@@ -1123,9 +1180,21 @@ export class JamEngine {
     this.addChange('Variation · Motive und Groove' + (notes.length ? ` · ${notes.join(', ')}` : '')); this.remember(); this.applySound(); this.notify();
   }
 
-  /** Evolve alias for loud-safe musical mutation. */
-  evolve(): void {
+  /** Queue Evolve cleanly for the next bar downbeat when mid-bar, or apply immediately when stopped / at bar 1. */
+  triggerEvolve(immediate = false): void {
+    if (!immediate && this.running && this.nextStep % 16 !== 0) {
+      this.pendingBarEvolve = true;
+      this.addChange('Evolve zum nächsten Takt vorgemerkt', this.getPosition().beat);
+      this.notify();
+      return;
+    }
+    this.pendingBarEvolve = false;
     this.mutate(true);
+  }
+
+  /** Evolve alias for loud-safe musical mutation (bar-quantized during mid-bar playback). */
+  evolve(): void {
+    this.triggerEvolve(false);
   }
 
   /**
@@ -1326,8 +1395,8 @@ export class JamEngine {
     const affected = new Set(this.state.layers.filter(l => l.role !== 'drum' && l.role !== 'drone' && !l.locked && !l.frozen && !l.muted && !clipTracks.has(l.id)).map(l => l.id));
     if (!affected.size) return;
     for (const id of affected) {
-      this.pads.get(id)?.fadeOutAll(time, 0.28);
-      this.secondaryPads.get(id)?.fadeOutAll(time, 0.28);
+      this.pads.get(id)?.fadeOutAll(time, 0.42);
+      this.secondaryPads.get(id)?.fadeOutAll(time, 0.42);
       this.midi.releaseNotesForLayer(id);
     }
     for (const e of this.events) {
@@ -1553,6 +1622,7 @@ export class JamEngine {
     if (!blocks.length) return;
     this.arrangement.sequencerBlocks = clone(blocks);
     this.state.sequence = clone(blocks);
+    this.state.sequencerEnabled = this.arrangement.sequencerEnabled;
     if (this.arrangement.sequencerIndex >= blocks.length) {
       this.arrangement.sequencerIndex = 0;
       this.arrangement.sequencerBarInBlock = 0;
@@ -1564,6 +1634,7 @@ export class JamEngine {
   updateSequenceBlock(blockId: string, patch: Partial<SequenceBlock>): void {
     this.arrangement.sequencerBlocks = this.arrangement.sequencerBlocks.map(b => b.id === blockId ? { ...b, ...patch } : b);
     this.state.sequence = clone(this.arrangement.sequencerBlocks);
+    this.state.sequencerEnabled = this.arrangement.sequencerEnabled;
     const active = this.arrangement.sequencerBlocks[this.arrangement.sequencerIndex];
     if (active && this.arrangement.sequencerBarInBlock >= active.bars) {
       this.arrangement.sequencerBarInBlock = Math.max(0, active.bars - 1);
@@ -1606,12 +1677,11 @@ export class JamEngine {
   jumpToSequenceBlock(index: number): void {
     const blocks = this.arrangement.sequencerBlocks;
     if (index < 0 || index >= blocks.length) return;
-    this.arrangement.sequencerEnabled = true;
-    this.state.sequencerEnabled = true;
+    const wasEnabled = this.arrangement.sequencerEnabled;
     this.arrangement.auto = false;
     this.arrangement.sequencerIndex = index;
     this.arrangement.sequencerBarInBlock = 0;
-    this.arrangement.lastSequencerBar = this.running ? Math.floor(this.getPosition().beat / 4) : -1;
+    this.arrangement.lastSequencerBar = wasEnabled && this.running ? Math.floor(this.getPosition().beat / 4) : -1;
     const block = blocks[index];
     this.applyArrangement(block.section, false);
     if (block.macroTargets) {
@@ -1631,10 +1701,9 @@ export class JamEngine {
       id: `block-${Date.now()}-${i + 1}`,
       ...b,
     }));
-    this.arrangement.sequencerEnabled = true;
-    this.state.sequencerEnabled = true;
+    const wasEnabled = this.arrangement.sequencerEnabled;
     this.arrangement.auto = false;
-    this.arrangement.lastSequencerBar = this.running ? Math.floor(this.getPosition().beat / 4) : -1;
+    this.arrangement.lastSequencerBar = wasEnabled && this.running ? Math.floor(this.getPosition().beat / 4) : -1;
     this.setSequence(blocks);
     if (blocks[0]) {
       this.arrangement.sequencerIndex = 0;
@@ -1661,6 +1730,13 @@ export class JamEngine {
   /** Nudge an individual sounding chord tone up or down by semitones on the fly. */
   nudgeChordNote(index: number, semitones: number): void {
     const h = this.composer.nudgeChordNote(index, semitones);
+    if (this.state.chordLoopMode === 'A') {
+      this.state.latchedHarmony = { degree: h.degree, root: h.root, notes: [...h.notes], name: h.name };
+      this.composer.setLatchedHarmony(h);
+    }
+    if (this.anchors.length) {
+      this.anchors[this.anchors.length - 1].harmony = h;
+    }
     const nudged = h.notes[index];
     if (nudged !== undefined) {
       void this.auditionNote(nudged);
@@ -1671,8 +1747,27 @@ export class JamEngine {
 
   /** Cycle current chord degree backward (-1) or forward (+1) on the fly. */
   cycleChord(direction: 1 | -1): void {
-    const currentDeg = this.composer.getHarmony().degree;
-    const h = this.composer.setHarmonyDegree(currentDeg + direction, this.state);
+    const step = Math.floor(this.getPosition().beat * 4);
+    const h = this.composer.stepChord(direction, step, this.state);
+    if (this.state.chordLoopMode === 'A') {
+      this.state.manualHarmonyDegree = h.degree;
+      this.state.latchedHarmony = { degree: h.degree, root: h.root, notes: [...h.notes], name: h.name };
+      this.composer.setLatchedHarmony(h);
+    }
+    if (this.anchors.length) {
+      this.anchors[this.anchors.length - 1].harmony = h;
+    }
+    this.nextChordCache = null;
+    if (this.running) {
+      const fadeTime = this.audio?.getTime() ?? 0;
+      for (const layerId of ['chords', 'bass', 'drone']) {
+        this.midi.releaseNotesForLayer(layerId);
+        this.pads.get(layerId)?.fadeOutAll(fadeTime, 0.14);
+        this.secondaryPads.get(layerId)?.fadeOutAll(fadeTime, 0.14);
+        (this.primeLayers ??= new Set()).add(layerId);
+      }
+      this.primeSoft = true;
+    }
     void this.auditionNote(h.root + 12);
     this.addChange(`Akkord gewechselt: ${h.name}`, this.getPosition().beat);
     this.notify();
@@ -1693,10 +1788,61 @@ export class JamEngine {
     const chordLayer = this.state.layers.find(l => l.role === 'chords');
     if (!chordLayer) return;
     this.setLayerSettings(chordLayer.id, { chordPace: pace });
-    this.composer.reset();
+    this.composer.clearPlans();
     this.composer.harmonyAt(Math.floor(this.getPosition().beat * 4), this.state);
+    this.nextChordCache = null;
+    if (this.running) {
+      const fadeTime = this.audio?.getTime() ?? 0;
+      this.midi.releaseNotesForLayer(chordLayer.id);
+      this.pads.get(chordLayer.id)?.fadeOutAll(fadeTime, 0.16);
+      this.secondaryPads.get(chordLayer.id)?.fadeOutAll(fadeTime, 0.16);
+      (this.primeLayers ??= new Set()).add(chordLayer.id);
+      this.primeSoft = true;
+    }
     this.addChange(`Harmoniewechsel: ${pace}`, this.getPosition().beat);
     this.remember('chordPace');
+    this.notify();
+  }
+
+  /** Choose how many chords cycle in the progression: 'A' (hold single chord), 'AB', 'ABC', or 'ABCD'. */
+  setChordLoopMode(mode: ChordLoopMode): void {
+    const step = Math.floor(this.getPosition().beat * 4);
+    const current = this.currentAnchor()?.harmony || this.composer.getHarmony();
+    this.state.chordLoopMode = mode;
+    if (mode === 'A') {
+      const latched = { degree: current.degree, root: current.root, notes: [...current.notes], name: current.name };
+      this.state.manualHarmonyDegree = latched.degree;
+      this.state.latchedHarmony = latched;
+      this.composer.setLatchedHarmony(current);
+    } else {
+      this.state.manualHarmonyDegree = null;
+      this.state.latchedHarmony = null;
+      this.composer.setLatchedHarmony(null);
+    }
+    this.composer.clearPlans();
+    const h = this.composer.harmonyAt(step, this.state);
+    if (this.anchors.length) {
+      this.anchors[this.anchors.length - 1].harmony = h;
+    }
+    this.nextChordCache = null;
+    if (this.running) {
+      const fadeTime = this.audio?.getTime() ?? 0;
+      for (const layerId of ['chords', 'bass']) {
+        this.midi.releaseNotesForLayer(layerId);
+        this.pads.get(layerId)?.fadeOutAll(fadeTime, 0.16);
+        this.secondaryPads.get(layerId)?.fadeOutAll(fadeTime, 0.16);
+        (this.primeLayers ??= new Set()).add(layerId);
+      }
+      this.primeSoft = true;
+    }
+    const labelMap: Record<ChordLoopMode, string> = {
+      A: `Hold A (${h.name})`,
+      AB: 'Loop A–B (2 Akkorde)',
+      ABC: 'Loop A–B–C (3 Akkorde)',
+      ABCD: 'Loop A–B–C–D (4 Akkorde)',
+    };
+    this.addChange(`Akkord-Loop: ${labelMap[mode]}`, this.getPosition().beat);
+    this.remember('chordLoopMode');
     this.notify();
   }
 
@@ -1738,12 +1884,10 @@ export class JamEngine {
     this.addChange(`Sequenz: Block #${idx + 1} verschoben nach #${targetIdx + 1}`, this.getPosition().beat);
   }
 
-  /** Step duration of a sequence block like tempo settings (2, 4, 8, 16, 32 bars). */
+  /** Step duration of a sequence block like tempo settings (2, 4, 8, 16, 32 bars) without forcing sequencer ON when OFF. */
   stepBlockBars(blockId: string, delta: number): void {
     const block = this.arrangement.sequencerBlocks.find(b => b.id === blockId);
     if (!block) return;
-    this.arrangement.sequencerEnabled = true;
-    this.state.sequencerEnabled = true;
     const BARS = [2, 4, 8, 16, 32];
     const curIdx = BARS.indexOf(block.bars);
     let nextBars = block.bars;
@@ -1757,8 +1901,7 @@ export class JamEngine {
     this.addChange(`Sequenz: Block-Dauer auf ${nextBars} Takte geändert`, this.getPosition().beat);
   }
 
-  /** Set a sequence block's arrangement energy and macro profile referencing arrows (High, Up, Flow, Down, Low). Immediately activates the sequencer and applies the section ASAP! */
-  setBlockSectionByEnergy(blockId: string, energy: 'high' | 'up' | 'groove' | 'down' | 'low'): void {
+  private getArrangementEnergyProfile(energy: 'high' | 'up' | 'groove' | 'down' | 'low') {
     const map: Record<'high' | 'up' | 'groove' | 'down' | 'low', { section: ArrangementSection; label: string; space: number; density: number; movement: number }> = {
       high: { section: 'chorus', label: 'Chorus (Peak)', space: 0.72, density: 0.85, movement: 0.55 },
       up: { section: 'buildup', label: 'Buildup (Spannung)', space: 0.60, density: 0.75, movement: 0.70 },
@@ -1766,13 +1909,31 @@ export class JamEngine {
       down: { section: 'breakdown', label: 'Breakdown (Drums aus)', space: 0.86, density: 0.30, movement: 0.25 },
       low: { section: 'silent', label: 'Stille (Minimal)', space: 0.90, density: 0.20, movement: 0.20 },
     };
-    const target = map[energy];
+    return map[energy];
+  }
+
+  /** Set arrangement section & macro profile directly without re-enabling sequencer/auto when user switched sequencer OFF. */
+  setManualArrangementByEnergy(energy: 'high' | 'up' | 'groove' | 'down' | 'low'): void {
+    const target = this.getArrangementEnergyProfile(energy);
+    if (!target) return;
+    this.arrangement.auto = false;
+    this.state.macros.space = target.space;
+    this.state.macros.warmth = 0.68;
+    this.state.macros.density = target.density;
+    this.state.macros.movement = target.movement;
+    this.applyArrangement(target.section, false);
+    this.addChange(`Arrangement: ${target.label} (manuell)`, this.getPosition().beat);
+    this.notify();
+  }
+
+  /** Set a sequence block's arrangement energy and macro profile while preserving whether Sequencer is ON or OFF. */
+  setBlockSectionByEnergy(blockId: string, energy: 'high' | 'up' | 'groove' | 'down' | 'low'): void {
+    const target = this.getArrangementEnergyProfile(energy);
     if (!target) return;
     const blockIdx = this.arrangement.sequencerBlocks.findIndex(b => b.id === blockId);
     const block = blockIdx >= 0 ? this.arrangement.sequencerBlocks[blockIdx] : undefined;
     const bars = block?.bars || 4;
-    this.arrangement.sequencerEnabled = true;
-    this.state.sequencerEnabled = true;
+    const wasEnabled = this.arrangement.sequencerEnabled;
     this.arrangement.auto = false;
     this.updateSequenceBlock(blockId, {
       section: target.section,
@@ -1787,10 +1948,16 @@ export class JamEngine {
     if (blockIdx >= 0) {
       this.arrangement.sequencerIndex = blockIdx;
       this.arrangement.sequencerBarInBlock = 0;
-      this.arrangement.lastSequencerBar = this.running ? Math.floor(this.getPosition().beat / 4) : -1;
+      this.arrangement.lastSequencerBar = wasEnabled && this.running ? Math.floor(this.getPosition().beat / 4) : -1;
+    }
+    if (!wasEnabled) {
+      this.state.macros.space = target.space;
+      this.state.macros.warmth = 0.68;
+      this.state.macros.density = target.density;
+      this.state.macros.movement = target.movement;
     }
     this.applyArrangement(target.section, false);
-    this.addChange(`Sequenz: Block auf [${target.label}] (${energy.toUpperCase()}) gesetzt & aktiviert`, this.getPosition().beat);
+    this.addChange(`Sequenz: Block auf [${target.label}] (${energy.toUpperCase()}) gesetzt`, this.getPosition().beat);
   }
 
   applySoundscapePreset(presetId: string): void {
@@ -2218,6 +2385,7 @@ export class JamEngine {
     this.resetArrangementRuntime(session.arrangement || 'groove');
     this.arrangement.sequencerBlocks = session.sequence && session.sequence.length > 0 ? clone(session.sequence) : createDefaultSequence();
     this.arrangement.sequencerEnabled = session.sequencerEnabled !== undefined ? !!session.sequencerEnabled : true;
+    this.state.sequencerEnabled = this.arrangement.sequencerEnabled;
     this.lastAtmosphereKey = ''; this.lastNotifySection = -1;
     this.events = []; this.controllers = []; this.eventEnds.clear(); this.timeline = []; this.tempos = []; this.anchors = []; this.restoreClipRuntime(session.runtime); this.syncVoiceBudgets(); this.applyRouting();
     this.clock?.setBpm(this.state.bpm); this.clock?.setSwing(this.state.swing);
@@ -2331,11 +2499,16 @@ export function validateSession(raw: JamSession): JamSession {
     ...(raw.pinnedParams !== undefined ? { pinnedParams: sanitizePinnedParams(raw.pinnedParams, base) } : {}),
     ...(raw.globalOutputId !== undefined ? { globalOutputId: raw.globalOutputId === null ? null : typeof raw.globalOutputId === 'string' && raw.globalOutputId.length <= 512 ? raw.globalOutputId : (() => { throw new Error('Ungültiger globaler MIDI-Port.'); })() } : {}),
     ...(raw.midiClockEnabled !== undefined ? { midiClockEnabled: !!raw.midiClockEnabled } : {}),
+    ...(raw.chordLoopMode !== undefined && (['A', 'AB', 'ABC', 'ABCD'] as const).includes(raw.chordLoopMode) ? { chordLoopMode: raw.chordLoopMode } : base.chordLoopMode ? { chordLoopMode: base.chordLoopMode } : {}),
+    ...(raw.manualHarmonyDegree === null ? { manualHarmonyDegree: null } : typeof raw.manualHarmonyDegree === 'number' && Number.isFinite(raw.manualHarmonyDegree) ? { manualHarmonyDegree: Math.round(clamp(raw.manualHarmonyDegree, 0, 12)) } : {}),
+    ...(raw.latchedHarmony && typeof raw.latchedHarmony === 'object' && Array.isArray(raw.latchedHarmony.notes) && raw.latchedHarmony.notes.length > 0 && raw.latchedHarmony.notes.length <= 8 && typeof raw.latchedHarmony.root === 'number' && Number.isFinite(raw.latchedHarmony.root) && typeof raw.latchedHarmony.degree === 'number' && Number.isFinite(raw.latchedHarmony.degree) && typeof raw.latchedHarmony.name === 'string'
+      ? { latchedHarmony: { degree: Math.round(clamp(raw.latchedHarmony.degree, 0, 12)), root: Math.round(clamp(raw.latchedHarmony.root, 0, 127)), notes: raw.latchedHarmony.notes.map(n => Math.round(clamp(Number(n) || 0, 0, 127))), name: raw.latchedHarmony.name.slice(0, 30) } }
+      : { latchedHarmony: null }),
     volume: clamp(raw.volume ?? base.volume, 0, 1), outputMode: ['internal', 'midi', 'both'].includes(raw.outputMode) ? raw.outputMode : 'internal',
     pinned: Array.isArray(raw.pinned) ? [...new Set(raw.pinned.filter(p => ['movement', 'density', 'warmth', 'space'].includes(p)))] : base.pinned,
     ...(raw.arrangement !== undefined && ['groove', 'chorus', 'breakdown', 'buildup', 'silent'].includes(raw.arrangement) ? { arrangement: raw.arrangement } : {}),
     ...(Array.isArray(raw.sequence) ? { sequence: raw.sequence.map((b, i) => ({ id: typeof b.id === 'string' ? b.id : `seq-${i}`, section: ['groove', 'chorus', 'breakdown', 'buildup', 'silent'].includes(b.section) ? b.section : 'groove', bars: Math.round(clamp(b.bars ?? 4, 1, 64)), label: typeof b.label === 'string' ? b.label.slice(0, 80) : undefined, ...(b.macroTargets && typeof b.macroTargets === 'object' ? { macroTargets: b.macroTargets } : {}) })) } : {}),
-    ...(raw.sequencerEnabled !== undefined ? { sequencerEnabled: !!raw.sequencerEnabled } : {}),
+    sequencerEnabled: raw.sequencerEnabled !== undefined ? !!raw.sequencerEnabled : (base.sequencerEnabled ?? true),
     ...(raw.customMacrosEnabled !== undefined ? { customMacrosEnabled: !!raw.customMacrosEnabled } : {}),
     ...(raw.chaosEnabled !== undefined ? { chaosEnabled: !!raw.chaosEnabled } : {}),
     ...(raw.chaosMode !== undefined && (['manual', 'calm', 'pulse', 'wild'] as const).includes(raw.chaosMode) ? { chaosMode: raw.chaosMode } : {}),

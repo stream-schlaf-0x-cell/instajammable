@@ -18,7 +18,7 @@ import {
   getTimbreDisplayName,
 } from '../../engine/jam/minimalCatalog';
 import { noteName } from '../jam/PianoRoll';
-import { ChordBarStepMeter, SCALES_LIST, useSmoothBeat, TrackRhythmControls, TrackMidiControls, isMidiOnlyMode, getMacroLabelInfo } from './LayoutShared';
+import { ChordBarStepMeter, ChordLoopControls, SCALES_LIST, useSmoothBeat, TrackRhythmControls, TrackMidiControls, TrackOctaveControls, isMidiOnlyMode, getMacroLabelInfo } from './LayoutShared';
 import type { ArrangementSection, ClipNote, JamLayer, JamPosition, JamSession, MacroName } from '../../types/jam';
 import type { UiEdition } from '../../types/ui';
 
@@ -451,12 +451,12 @@ export function OrbitLayout({
             <div className="orbit-side-actions">
               <button
                 type="button"
-                className="button quiet"
-                onClick={() => engine.mutate(true)}
-                title={isMin ? 'Evolve pattern & motifs' : 'Variation erzeugen'}
+                className={`button quiet ${position.evolvePending ? 'is-armed' : ''}`}
+                onClick={() => engine.evolve()}
+                title={isMin ? 'Evolve pattern & motifs (at next bar)' : 'Variation erzeugen (zum nächsten Takt)'}
               >
                 <Sparkles size={13} />
-                <span>{isMin ? 'Evolve' : 'Variieren'}</span>
+                <span>{position.evolvePending ? (isMin ? 'Next Bar…' : 'Nächst. Takt…') : (isMin ? 'Evolve' : 'Variieren')}</span>
               </button>
               <button
                 type="button"
@@ -518,6 +518,7 @@ export function OrbitLayout({
                 }}
               />
             </label>
+            <ChordLoopControls session={session} edition={edition} compact />
           </div>
         </section>
 
@@ -619,6 +620,13 @@ export function OrbitLayout({
                     </option>
                   ))}
                 </select>
+              </div>
+            )}
+
+            {!midiMode && selectedLayer.role !== 'drum' && (
+              <div className="orbit-rhythm-bar">
+                <span className="orbit-sub-label">{isMin ? 'Octave Register' : 'Oktav-Register'}</span>
+                <TrackOctaveControls layer={selectedLayer} edition={edition} />
               </div>
             )}
 
